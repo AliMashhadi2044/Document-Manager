@@ -1,0 +1,59 @@
+name: document-manager-dev
+
+# سرویس پایه (postgres) با `docker compose up -d` بالا می‌آید.
+#
+# توجه: پورت میزبان عمداً 5433 است، نه 5432. روی این ماشین یک PostgreSQL محلی از قبل
+# روی 5432 در حال اجراست و اگر از همان پورت استفاده کنیم، برنامه بی‌صدا به دیتابیس
+# اشتباه وصل می‌شود.
+# object storage عمداً پشت profile است و تا فاز ۵ لازم نیست:
+#     docker compose --profile storage up -d
+# دلیل: کشیدن ایمیج MinIO روی شبکه این محیط ممکن نشد. جزئیات و راهکارها در
+# docs/16-local-development.md آمده است.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dm_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-document_manager}
+      # ترتیب مرتب‌سازی پایدار و مستقل از locale سیستم میزبان
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    ports:
+      - '${POSTGRES_PORT:-5433}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-dm} -d ${POSTGRES_DB:-document_manager}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    profiles: ['storage']
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    container_name: dm-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dm_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dm_minio_dev_password}
+    ports:
+      - '${MINIO_PORT:-9000}:9000'
+      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:9000/minio/health/live || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+# bucket توسط خود سرویس API در زمان بالا آمدن ساخته می‌شود (ensureBucket)، نه با یک
+# container جداگانه؛ یک وابستگی ایمیج کمتر و یک نقطه شکست کمتر.
+
+volumes:
+  postgres-data:
+  minio-data:
