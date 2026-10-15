@@ -1,5 +1,5 @@
 import { ArgumentMetadata, Injectable, PipeTransform } from '@nestjs/common';
-import type { ZodSchema } from 'zod';
+import type { ZodType, ZodTypeDef } from 'zod';
 
 import { AppError } from '../errors/app-error';
 
@@ -10,10 +10,14 @@ import { AppError } from '../errors/app-error';
  * پس قاعده اعتبارسنجی و پیام خطا در دو جا واگرا نمی‌شوند.
  */
 @Injectable()
-export class ZodBody<T> implements PipeTransform<unknown, T> {
-  constructor(private readonly schema: ZodSchema<T>) {}
+export class ZodBody<TOut, TIn = unknown> implements PipeTransform<unknown, TOut> {
+  /**
+   * نوع ورودی و خروجی جدا هستند: schemaهایی که `default` یا `transform` دارند،
+   * ورودی و خروجی متفاوتی دارند و یکی گرفتنشان تایپ را می‌شکند.
+   */
+  constructor(private readonly schema: ZodType<TOut, ZodTypeDef, TIn>) {}
 
-  transform(value: unknown, _metadata: ArgumentMetadata): T {
+  transform(value: unknown, _metadata: ArgumentMetadata): TOut {
     const result = this.schema.safeParse(value);
 
     if (!result.success) {

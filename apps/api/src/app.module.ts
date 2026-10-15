@@ -9,6 +9,8 @@ import { BigIntSerializerInterceptor } from './common/interceptors/bigint-serial
 import { SessionGuard } from './common/auth/session.guard';
 import { PermissionGuard } from './common/auth/permission.guard';
 import { AuthModule } from './modules/auth/auth.module';
+import { BaseDataModule } from './modules/base-data/base-data.module';
+import { VendorsModule } from './modules/vendors/vendors.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -20,6 +22,8 @@ import { HealthController } from './modules/health/health.controller';
     }),
     PrismaModule,
     AuthModule,
+    BaseDataModule,
+    VendorsModule,
   ],
   controllers: [HealthController],
   providers: [

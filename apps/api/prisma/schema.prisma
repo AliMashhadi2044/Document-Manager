@@ -208,3 +208,445 @@ model IdempotencyKey {
   @@index([expiresAt])
   @@map("idempotency_keys")
 }
+
+// ═══════════════════════════ فاز ۲ — اطلاعات پایه ═══════════════════════════
+// مرجع طراحی: docs/03-erd.md §۲
+//
+// قاعده مشترک همه این جداول: حذف نمی‌شوند، غیرفعال می‌شوند. رکورد غیرفعال سوابق
+// تاریخی را خراب نمی‌کند، چون مقادیر نمایشی در فاکتور snapshot می‌شوند (فاز ۳).
+
+enum PersonType {
+  NATURAL // حقیقی
+  LEGAL // حقوقی
+
+  @@map("person_type")
+}
+
+enum BudgetCategoryKey {
+  CURRENT // جاری
+  CAPITAL // عمرانی
+
+  @@map("budget_category_key")
+}
+
+enum InvoiceKind {
+  NORMAL
+  STAD
+  UTILITY
+  FUEL
+
+  @@map("invoice_kind")
+}
+
+enum PaymentMethodKind {
+  BENEFICIARY_ACCOUNT // حساب ذی‌نفع
+  PETTY_CASH // کارپرداز یا تنخواه
+  BILL // قبض
+
+  @@map("payment_method_kind")
+}
+
+// ─────────────────────── سازمان و امضاکنندگان ───────────────────────
+
+model OrganizationSettings {
+  id Int @id @default(1)
+
+  name        String  @db.VarChar(300)
+  addressLine String? @map("address_line") @db.Text
+  postalCode  String? @map("postal_code") @db.VarChar(10)
+  phone       String? @db.VarChar(30)
+  fax         String? @db.VarChar(30)
+  logoPath    String? @map("logo_path") @db.VarChar(500)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  // تک‌ردیفی بودن در migration با CHECK تضمین می‌شود.
+  @@map("organization_settings")
+}
+
+model Signatory {
+  id            String @id @default(uuid()) @db.Uuid
+  fullName      String @map("full_name") @db.VarChar(200)
+  positionTitle String @map("position_title") @db.VarChar(200)
+
+  /// نقش در خروجی: GENERAL_MANAGER | PROCUREMENT_LEAD | OTHER
+  roleKey   String  @map("role_key") @db.VarChar(50)
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([isActive, sortOrder])
+  @@map("signatories")
+}
+
+// ─────────────────────── خریدار ───────────────────────
+
+model BuyerEntity {
+  id         String     @id @default(uuid()) @db.Uuid
+  personType PersonType @map("person_type")
+  name       String     @db.VarChar(300)
+
+  economicCode       String? @map("economic_code") @db.VarChar(30)
+  registrationNumber String? @map("registration_number") @db.VarChar(30)
+  nationalId         String? @map("national_id") @db.VarChar(20)
+
+  addressLine String? @map("address_line") @db.Text
+  postalCode  String? @map("postal_code") @db.VarChar(10)
+  phone       String? @db.VarChar(30)
+  fax         String? @db.VarChar(30)
+
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([isActive, sortOrder])
+  @@map("buyer_entities")
+}
+
+// ─────────────────────── فروشنده ───────────────────────
+
+model Vendor {
+  id         String     @id @default(uuid()) @db.Uuid
+  personType PersonType @map("person_type")
+  name       String     @db.VarChar(300)
+
+  /// نام نماینده — برای شخص حقوقی و اختیاری. همین مقدار در ستون «نام فروشنده»
+  /// گزارش مالیات می‌نشیند (تصمیم Q15).
+  representativeName String? @map("representative_name") @db.VarChar(200)
+
+  economicCode       String? @map("economic_code") @db.VarChar(30)
+  registrationNumber String? @map("registration_number") @db.VarChar(30)
+  nationalId         String? @map("national_id") @db.VarChar(20)
+
+  addressLine String? @map("address_line") @db.Text
+  postalCode  String? @map("postal_code") @db.VarChar(10)
+  phone       String? @db.VarChar(30)
+  fax         String? @db.VarChar(30)
+
+  isActive Boolean @default(true) @map("is_active")
+  notes    String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  bankAccounts VendorBankAccount[]
+
+  @@index([isActive])
+  @@index([name])
+  @@map("vendors")
+}
+
+model Bank {
+  /// کد سه‌رقمی بانک در شبا
+  code     String  @id @db.VarChar(3)
+  titleFa  String  @map("title_fa") @db.VarChar(100)
+  isActive Boolean @default(true) @map("is_active")
+
+  accounts VendorBankAccount[]
+
+  @@map("banks")
+}
+
+model VendorBankAccount {
+  id       String @id @default(uuid()) @db.Uuid
+  vendorId String @map("vendor_id") @db.Uuid
+
+  /// مقدار واردشده کاربر، برای نمایش
+  iban String @db.VarChar(34)
+
+  /// IR و ۲۴ رقم ASCII — مبنای مقایسه و یکتایی
+  ibanNormalized String  @unique @map("iban_normalized") @db.VarChar(26)
+  bankCode       String? @map("bank_code") @db.VarChar(3)
+
+  accountTitle String? @map("account_title") @db.VarChar(200)
+  isDefault    Boolean @default(false) @map("is_default")
+  isActive     Boolean @default(true) @map("is_active")
+  notes        String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  bank   Bank?  @relation(fields: [bankCode], references: [code], onDelete: SetNull)
+
+  @@index([vendorId, isActive])
+  @@map("vendor_bank_accounts")
+}
+
+// ─────────────────────── بودجه و انواع فاکتور ───────────────────────
+
+model BudgetCategory {
+  id        String            @id @default(uuid()) @db.Uuid
+  key       BudgetCategoryKey @unique
+  titleFa   String            @map("title_fa") @db.VarChar(100)
+  sortOrder Int               @default(0) @map("sort_order")
+
+  chapters BudgetChapter[]
+
+  @@map("budget_categories")
+}
+
+model BudgetChapter {
+  id         String @id @default(uuid()) @db.Uuid
+  categoryId String @map("category_id") @db.Uuid
+  title      String @db.VarChar(200)
+
+  /// کد فصل؛ ممکن است وجود نداشته باشد (مثل سوخت خودرو در گروه جاری)
+  code        String? @db.VarChar(50)
+  description String? @db.Text
+  isActive    Boolean @default(true) @map("is_active")
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  category     BudgetCategory       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  invoiceTypes ChapterInvoiceType[]
+
+  @@unique([categoryId, title])
+  @@index([categoryId, isActive, sortOrder])
+  @@map("budget_chapters")
+}
+
+model InvoiceType {
+  id  String @id @default(uuid()) @db.Uuid
+  key String @unique @db.VarChar(50)
+
+  /// خانواده ساختاری — تعیین می‌کند کدام فرم، schema و محاسبه‌گر به کار می‌رود.
+  /// افزودن مقدار جدید نیاز به کد دارد؛ ساخت نوع فاکتور جدید نیاز ندارد.
+  kind    InvoiceKind
+  titleFa String      @map("title_fa") @db.VarChar(150)
+
+  description            String? @db.Text
+  defaultPaymentMethodId String? @map("default_payment_method_id") @db.Uuid
+
+  /// توصیف محدود فیلدهای توسعه‌پذیر — نه کد و نه Zod دلخواه.
+  customFieldSchema        Json? @map("custom_field_schema")
+  customFieldSchemaVersion Int   @default(1) @map("custom_field_schema_version")
+
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  defaultPaymentMethod PaymentMethod?       @relation(fields: [defaultPaymentMethodId], references: [id], onDelete: SetNull)
+  chapters             ChapterInvoiceType[]
+  taxRates             TaxRate[]
+
+  @@index([isActive, sortOrder])
+  @@map("invoice_types")
+}
+
+model ChapterInvoiceType {
+  chapterId     String  @map("chapter_id") @db.Uuid
+  invoiceTypeId String  @map("invoice_type_id") @db.Uuid
+  isDefault     Boolean @default(false) @map("is_default")
+  sortOrder     Int     @default(0) @map("sort_order")
+
+  chapter     BudgetChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  invoiceType InvoiceType   @relation(fields: [invoiceTypeId], references: [id], onDelete: Restrict)
+
+  @@id([chapterId, invoiceTypeId])
+  @@index([invoiceTypeId])
+  @@map("chapter_invoice_types")
+}
+
+// ─────────────────────── روش پرداخت و نرخ مالیات ───────────────────────
+
+model PaymentMethod {
+  id      String            @id @default(uuid()) @db.Uuid
+  key     String            @unique @db.VarChar(50)
+  kind    PaymentMethodKind
+  titleFa String            @map("title_fa") @db.VarChar(100)
+
+  /// شناسه پرداخت در این روش الزامی است؟
+  requiresPaymentIdentifier Boolean @default(false) @map("requires_payment_identifier")
+  requiresBillIdentifier    Boolean @default(false) @map("requires_bill_identifier")
+
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  invoiceTypes InvoiceType[]
+
+  @@index([isActive, sortOrder])
+  @@map("payment_methods")
+}
+
+model TaxRate {
+  id         String @id @default(uuid()) @db.Uuid
+  fiscalYear Int    @map("fiscal_year")
+
+  /// در صورت خالی بودن، نرخ پیش‌فرض همان سال است.
+  invoiceTypeId String? @map("invoice_type_id") @db.Uuid
+
+  /// نرخ به‌صورت basis point صحیح: ۱۰ درصد ⇒ 1000 (ADR-0003)
+  rateBp Int     @map("rate_bp")
+  notes  String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  invoiceType InvoiceType? @relation(fields: [invoiceTypeId], references: [id], onDelete: Cascade)
+
+  // یکتایی با ایندکس جزئی در migration اعمال می‌شود، نه اینجا:
+  // در PostgreSQL مقدار NULL در unique مرکب «متمایز» است، پس UNIQUE(fiscalYear,
+  // invoiceTypeId) جلوی دو نرخ پیش‌فرض برای یک سال را نمی‌گیرد.
+  @@index([fiscalYear])
+  @@map("tax_rates")
+}
+
+model FiscalYear {
+  year     Int     @id
+  isActive Boolean @default(true) @map("is_active")
+
+  /// سال بسته برای سند جدید قابل انتخاب نیست، ولی سوابق آن دست‌نخورده می‌ماند.
+  isClosed Boolean @default(false) @map("is_closed")
+
+  @@map("fiscal_years")
+}
+
+// ─────────────────────── نواحی، مدارس، انشعاب ───────────────────────
+
+model District {
+  id        String  @id @default(uuid()) @db.Uuid
+  title     String  @unique @db.VarChar(200)
+  code      String? @db.VarChar(50)
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  schools School[]
+
+  @@index([isActive, sortOrder])
+  @@map("districts")
+}
+
+model School {
+  id         String  @id @default(uuid()) @db.Uuid
+  districtId String  @map("district_id") @db.Uuid
+  title      String  @db.VarChar(200)
+  code       String? @db.VarChar(50)
+  isActive   Boolean @default(true) @map("is_active")
+  sortOrder  Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  district District @relation(fields: [districtId], references: [id], onDelete: Restrict)
+
+  @@unique([districtId, title])
+  @@index([isActive])
+  @@map("schools")
+}
+
+model UtilityType {
+  id        String  @id @default(uuid()) @db.Uuid
+  title     String  @unique @db.VarChar(150)
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([isActive, sortOrder])
+  @@map("utility_types")
+}
+
+// ─────────────────────── خودرو و سوخت ───────────────────────
+
+model VehicleType {
+  id        String  @id @default(uuid()) @db.Uuid
+  title     String  @unique @db.VarChar(150)
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  vehicles Vehicle[]
+
+  @@index([isActive, sortOrder])
+  @@map("vehicle_types")
+}
+
+model Vehicle {
+  id            String @id @default(uuid()) @db.Uuid
+  vehicleTypeId String @map("vehicle_type_id") @db.Uuid
+
+  /// پلاک به‌صورت واردشده، برای نمایش
+  plateNumber String @map("plate_number") @db.VarChar(50)
+
+  /// صورت نرمال‌شده بدون فاصله و جداکننده — مبنای یکتایی
+  plateNormalized String  @unique @map("plate_normalized") @db.VarChar(50)
+  isActive        Boolean @default(true) @map("is_active")
+  notes           String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  vehicleType VehicleType @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+
+  @@index([vehicleTypeId, isActive])
+  @@map("vehicles")
+}
+
+model FuelType {
+  id        String  @id @default(uuid()) @db.Uuid
+  title     String  @unique @db.VarChar(100)
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([isActive, sortOrder])
+  @@map("fuel_types")
+}
+
+// ─────────────────────── ستاد، کالا، واحد ───────────────────────
+
+model StadRequestType {
+  id        String  @id @default(uuid()) @db.Uuid
+  title     String  @unique @db.VarChar(150)
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([isActive, sortOrder])
+  @@map("stad_request_types")
+}
+
+model ProductType {
+  id        String  @id @default(uuid()) @db.Uuid
+  title     String  @unique @db.VarChar(200)
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([isActive, sortOrder])
+  @@map("product_types")
+}
+
+model MeasurementUnit {
+  id        String  @id @default(uuid()) @db.Uuid
+  title     String  @unique @db.VarChar(50)
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([isActive, sortOrder])
+  @@map("measurement_units")
+}

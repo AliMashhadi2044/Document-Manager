@@ -19,6 +19,16 @@ import {
 } from '@dm/shared';
 import * as argon2 from 'argon2';
 
+import {
+  seedBanks,
+  seedBudgetStructure,
+  seedFiscalYearsAndTaxRates,
+  seedInvoiceTypes,
+  seedLookups,
+  seedOrganization,
+  seedPaymentMethods,
+} from './base-data';
+
 const prisma = new PrismaClient();
 
 /** گروه مجوز از پیشوند کلید آن مشتق می‌شود. */
@@ -163,6 +173,17 @@ async function main(): Promise<void> {
   const permissionIds = await seedPermissions();
   const roleIds = await seedRoles(permissionIds);
   await seedSettings();
+
+  // فاز ۲ — اطلاعات پایه ساختاری. ترتیب مهم است: روش پرداخت پیش از نوع فاکتور،
+  // و نوع فاکتور پیش از فصل‌ها (چون فصل به آن‌ها متصل می‌شود).
+  await seedOrganization(prisma);
+  await seedBanks(prisma);
+  await seedPaymentMethods(prisma);
+  await seedInvoiceTypes(prisma);
+  await seedBudgetStructure(prisma);
+  await seedLookups(prisma);
+  await seedFiscalYearsAndTaxRates(prisma);
+
   await seedInitialUser(roleIds);
   console.log('— پایان —');
 }
