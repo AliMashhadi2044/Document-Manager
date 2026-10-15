@@ -12,8 +12,8 @@ import {
   RATE_SCALE,
   type Money,
   type Qty,
-} from '../money/money';
-import { allocateProportionally, roundDiv, type RoundingPolicy } from '../money/rounding';
+} from '../money/money.js';
+import { allocateProportionally, roundDiv, type RoundingPolicy } from '../money/rounding.js';
 
 export const TAX_MODES = ['PERCENT', 'AMOUNT'] as const;
 export type TaxMode = (typeof TAX_MODES)[number];

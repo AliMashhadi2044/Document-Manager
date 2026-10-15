@@ -1,11 +1,11 @@
 /** هسته مشترک کلاینت و سرور. */
 
-export * from './money/money';
-export * from './money/rounding';
-export * from './financial/calculate';
-export * from './financial/vendor-aggregate';
-export * from './jalali/jalali';
-export * from './iban/iban';
-export * from './enums/enums';
-export * from './enums/permissions';
-export * from './workflow/document-workflow';
+export * from './money/money.js';
+export * from './money/rounding.js';
+export * from './financial/calculate.js';
+export * from './financial/vendor-aggregate.js';
+export * from './jalali/jalali.js';
+export * from './iban/iban.js';
+export * from './enums/enums.js';
+export * from './enums/permissions.js';
+export * from './workflow/document-workflow.js';

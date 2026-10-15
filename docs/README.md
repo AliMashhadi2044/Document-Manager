@@ -23,6 +23,7 @@
 | 13 | [phasing](13-phasing.md) | فازبندی با معیار پذیرش قابل اثبات |
 | 14 | [risks-and-open-questions](14-risks-and-open-questions.md) | ریسک‌ها و تصمیم‌های باز |
 | 15 | [tax-report-reference](15-tax-report-reference.md) | تحلیل تصویر مرجع گزارش مالیات |
+| 16 | [local-development](16-local-development.md) | راهنمای اجرای محلی و عیب‌یابی |
 | — | [adr/](adr/) | تصمیم‌های معماری (Architecture Decision Records) |
 
 ## مستندات فازهای بعدی — هنوز ایجاد نشده‌اند
@@ -32,7 +33,6 @@
 
 | سند | فاز ایجاد |
 |---|---|
-| `15-local-development.md` (راهنمای اجرای محلی) | فاز ۱ |
 | `16-api.md` + Swagger منتشرشده | فاز ۱ و به‌روزرسانی در هر فاز |
 | `17-report-template-authoring.md` (راهنمای ساخت قالب) | فاز ۷ |
 | `18-production-runbook.md` (راهنمای محیط Production) | فاز ۹ |

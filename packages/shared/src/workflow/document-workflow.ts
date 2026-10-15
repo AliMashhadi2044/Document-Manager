@@ -5,8 +5,8 @@
  * می‌سازد، و تست‌ها از همین منبع می‌خوانند. بنابراین سه‌جا هرگز واگرا نمی‌شوند.
  */
 
-import type { DocumentStatus } from '../enums/enums';
-import type { Permission } from '../enums/permissions';
+import type { DocumentStatus } from '../enums/enums.js';
+import type { Permission } from '../enums/permissions.js';
 
 export const WORKFLOW_ACTIONS = [
   'FINALIZE',

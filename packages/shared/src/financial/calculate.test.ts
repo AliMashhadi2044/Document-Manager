@@ -9,9 +9,9 @@ import {
   FinancialError,
   sumInvoiceTotals,
   type LineInput,
-} from './calculate';
-import { DEFAULT_ROUNDING_POLICY, type RoundingPolicy } from '../money/rounding';
-import type { Money, Qty } from '../money/money';
+} from './calculate.js';
+import { DEFAULT_ROUNDING_POLICY, type RoundingPolicy } from '../money/rounding.js';
+import type { Money, Qty } from '../money/money.js';
 
 const LINE_HALF_UP = DEFAULT_ROUNDING_POLICY;
 const INVOICE_HALF_UP: RoundingPolicy = { scope: 'INVOICE', mode: 'HALF_UP' };

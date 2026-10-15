@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 
-import { allocateProportionally, roundDiv } from './rounding';
+import { allocateProportionally, roundDiv } from './rounding.js';
 
 describe('roundDiv — HALF_UP', () => {
   it('نیم را به بالا می‌برد', () => {

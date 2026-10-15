@@ -1,0 +1,16 @@
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+
+import { App } from './app/app';
+import './shared/styles/globals.css';
+
+const container = document.getElementById('root');
+if (!container) {
+  throw new Error('عنصر ریشه پیدا نشد');
+}
+
+createRoot(container).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);

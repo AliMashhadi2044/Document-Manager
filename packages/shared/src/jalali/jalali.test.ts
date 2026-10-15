@@ -11,7 +11,7 @@ import {
   JalaliError,
   parseJalali,
   toPersianDigits,
-} from './jalali';
+} from './jalali.js';
 
 describe('تبدیل شمسی و میلادی', () => {
   it('تاریخ امروز مرجع را درست تبدیل می‌کند', () => {

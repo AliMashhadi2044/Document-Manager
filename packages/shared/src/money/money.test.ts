@@ -9,7 +9,7 @@ import {
   sumMoney,
   MoneyError,
   type Money,
-} from './money';
+} from './money.js';
 
 describe('نرمال‌سازی ارقام', () => {
   it('ارقام فارسی را به ASCII تبدیل می‌کند', () => {

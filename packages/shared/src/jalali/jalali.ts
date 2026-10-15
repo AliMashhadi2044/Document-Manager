@@ -16,7 +16,7 @@ import {
   toJalaali,
 } from 'jalaali-js';
 
-import { normalizeDigits } from '../money/money';
+import { normalizeDigits } from '../money/money.js';
 
 export interface JalaliDate {
   readonly year: number;

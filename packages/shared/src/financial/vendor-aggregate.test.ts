@@ -4,8 +4,8 @@ import {
   aggregateByVendor,
   sumVendorAggregates,
   type AggregatableInvoice,
-} from './vendor-aggregate';
-import type { Money } from '../money/money';
+} from './vendor-aggregate.js';
+import type { Money } from '../money/money.js';
 
 function invoice(partial: Partial<AggregatableInvoice> & { id: string }): AggregatableInvoice {
   return {

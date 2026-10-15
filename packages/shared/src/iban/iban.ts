@@ -5,7 +5,7 @@
  * نباید در UI این‌گونه معرفی شود.
  */
 
-import { normalizeDigits } from '../money/money';
+import { normalizeDigits } from '../money/money.js';
 
 /** طول شبای ایران: IR + ۲۴ رقم. */
 export const IRAN_IBAN_LENGTH = 26;

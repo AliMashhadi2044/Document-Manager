@@ -7,7 +7,7 @@
  *  - تاریخ صورتحساب: تاریخ **اولین** فاکتور پس از مرتب‌سازی صعودی، با ترتیب ثانویه پایدار.
  */
 
-import type { Money } from '../money/money';
+import type { Money } from '../money/money.js';
 
 /** یک فاکتور، در حدی که گزارش مالیات به آن نیاز دارد. */
 export interface AggregatableInvoice {

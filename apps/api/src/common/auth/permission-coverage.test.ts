@@ -30,7 +30,7 @@ function collectRoutes(): RouteInfo[] {
   const routes: RouteInfo[] = [];
 
   for (const controller of CONTROLLERS) {
-    const prototype = controller.prototype as Record<string, unknown>;
+    const prototype = controller.prototype as unknown as Record<string, unknown>;
     const methodNames = Object.getOwnPropertyNames(prototype).filter(
       (name) => name !== 'constructor' && typeof prototype[name] === 'function',
     );

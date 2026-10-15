@@ -7,9 +7,9 @@ import {
   isCorrectableField,
   isEditableStatus,
   TRANSITIONS,
-} from './document-workflow';
-import { DOCUMENT_STATUSES, type DocumentStatus } from '../enums/enums';
-import { DEFAULT_ROLE_PERMISSIONS } from '../enums/permissions';
+} from './document-workflow.js';
+import { DOCUMENT_STATUSES, type DocumentStatus } from '../enums/enums.js';
+import { DEFAULT_ROLE_PERMISSIONS } from '../enums/permissions.js';
 
 describe('انتقال‌های مجاز', () => {
   it('ثبت نهایی از پیش‌نویس مجاز است', () => {

@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * توکن‌های سیستم طراحی.
+ *
+ * رنگ‌بندی خنثی و حرفه‌ای برای استفاده طولانی‌مدت روزانه، نه پنل شلوغ رنگی.
+ * هر رنگ به‌صورت HSL بدون alpha تعریف می‌شود تا Tailwind بتواند شفافیت اضافه کند.
+ */
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 20% 16%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 20% 16%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 44%;
+
+    --border: 220 13% 88%;
+    --input: 220 13% 86%;
+    --ring: var(--primary);
+
+    --primary: 212 80% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 46%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 58% 34%;
+    --warning: 36 92% 42%;
+
+    --radius: 0.5rem;
+  }
+
+  /* رنگ اصلی سازمانی، قابل انتخاب کاربر از میان گزینه‌های مجاز. */
+  :root[data-primary='teal'] { --primary: 184 70% 32%; }
+  :root[data-primary='indigo'] { --primary: 243 60% 52%; }
+  :root[data-primary='slate'] { --primary: 215 25% 35%; }
+
+  :root[data-theme='dark'] {
+    --background: 222 24% 11%;
+    --foreground: 210 20% 92%;
+
+    --card: 222 22% 14%;
+    --card-foreground: 210 20% 92%;
+
+    --muted: 220 16% 20%;
+    --muted-foreground: 215 15% 65%;
+
+    --border: 220 14% 24%;
+    --input: 220 14% 28%;
+
+    --primary: 212 82% 58%;
+    --primary-foreground: 222 30% 10%;
+
+    --destructive: 0 70% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 48% 48%;
+    --warning: 36 86% 58%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    /* اعداد لاتین در رابط با فونت فارسی هم‌تراز بمانند. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'ss01';
+  }
+
+  /* حلقه فوکوس واضح برای پیمایش با صفحه‌کلید (دسترس‌پذیری). */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer components {
+  /*
+   * ارقام فارسی فقط برای نمایش. مقدار واقعی در DOM و در state همیشه ASCII می‌ماند،
+   * وگرنه کپی‌کردن و پردازش عدد خراب می‌شود.
+   */
+  .num-fa {
+    font-feature-settings: 'ss02';
+  }
+}

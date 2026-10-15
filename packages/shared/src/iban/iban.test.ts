@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatIban, isValidIban, normalizeIban, validateIban } from './iban';
+import { formatIban, isValidIban, normalizeIban, validateIban } from './iban.js';
 
 /** شباهای معتبر، با checksum واقعی MOD-97 ساخته شده‌اند. */
 const VALID = [
