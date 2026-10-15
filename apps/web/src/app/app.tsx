@@ -5,7 +5,7 @@ import { ThemeProvider } from '../shared/theme/theme';
 import { LoadingState, ErrorState } from '../shared/ui/states';
 import { useCurrentUser } from '../features/auth/auth.api';
 import { LoginPage } from '../features/auth/login-page';
-import { DashboardPlaceholder } from './dashboard-placeholder';
+import { AppShell } from './app-shell';
 
 function Shell(): JSX.Element {
   const { data: user, isPending, isError, refetch } = useCurrentUser();
@@ -32,7 +32,7 @@ function Shell(): JSX.Element {
     );
   }
 
-  return user ? <DashboardPlaceholder user={user} /> : <LoginPage />;
+  return user ? <AppShell user={user} /> : <LoginPage />;
 }
 
 export function App(): JSX.Element {
