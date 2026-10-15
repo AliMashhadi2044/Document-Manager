@@ -1,0 +1,27 @@
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+.vite/
+
+# تنظیمات محیطی — هرگز commit نمی‌شوند
+.env
+.env.*
+!.env.example
+
+# خروجی تست و گزارش
+test-results/
+playwright-report/
+blob-report/
+*.log
+
+# فایل‌های محلی سیستم‌عامل و ادیتور
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# داده محلی سرویس‌های Docker
+infrastructure/.data/
