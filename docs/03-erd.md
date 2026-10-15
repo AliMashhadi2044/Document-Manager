@@ -314,8 +314,6 @@ CREATE UNIQUE INDEX invoices_one_per_stad_document_uk
 | **سیاست گرد کردن** (Q3) | ستون `financial_documents.rounding_policy jsonb NOT NULL` — snapshot از تنظیمات سازمان در لحظه ایجاد سند، قفل‌شده پس از ثبت نهایی. [ADR-0012](adr/ADR-0012-rounding-policy-snapshot.md) |
 | **نرخ مالیات ۱۰٪** (Q4) | ردیف seed در `tax_rates` با `rate_bp = 1000`؛ بدون hardcode در کد. |
 | **کارپرداز تنخواه** (Q9) | `invoice_payments.petty_cash_holder_id` به فهرست افراد/کاربران + `notes`. |
-| **ایران کد** (Q14) | ستون پیشنهادی `invoice_items.iran_code varchar(20)` + مقدار پیش‌فرض روی `product_types` — **منتظر تأیید**. |
-| **فصل سال** (B16) | ستون ذخیره نمی‌شود؛ از `EXTRACT` ماه شمسی `invoice_date` مشتق و با یک ایندکس بیانی (expression index) پشتیبانی می‌شود. |
 
 ### ۳.۵ ستون‌های جمع ذخیره‌شده
 
