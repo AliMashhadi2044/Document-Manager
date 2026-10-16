@@ -161,6 +161,14 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
     ).map((route) => `${route.controller}.${route.method}`);
 
     expect(allowed.sort()).toEqual([
+      // مسیرهای گزارش‌گیری عمومی (فاز ۸) POST و DELETE‌اند و واقعاً می‌نویسند — ولی
+      // آنچه می‌نویسند **نمای شخصی خودِ کاربر** و **کار خروجی خودش** است، به‌علاوه یک
+      // ردیف حسابرسی. هیچ‌کدام داده سند را لمس نمی‌کنند. نشان «فقط خواندنی» روی
+      // این‌ها دروغ می‌بود.
+      'AnalyticsController.deleteView',
+      'AnalyticsController.exportNow',
+      'AnalyticsController.queueExport',
+      'AnalyticsController.saveView',
       // خروج از نشست‌های خود کاربر و خواندن اعلان‌های خودش، کار هر کاربر واردشده است.
       'AuthController.logoutAll',
       'DocumentsController.sendBack',
@@ -193,6 +201,14 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
     ).map((route) => `${route.controller}.${route.method}`);
 
     expect(allowed.sort()).toEqual([
+      // مسیرهای گزارش‌گیری عمومی (فاز ۸) POST و DELETE‌اند و واقعاً می‌نویسند — ولی
+      // آنچه می‌نویسند **نمای شخصی خودِ کاربر** و **کار خروجی خودش** است، به‌علاوه یک
+      // ردیف حسابرسی. هیچ‌کدام داده سند را لمس نمی‌کنند. نشان «فقط خواندنی» روی
+      // این‌ها دروغ می‌بود.
+      'AnalyticsController.deleteView',
+      'AnalyticsController.exportNow',
+      'AnalyticsController.queueExport',
+      'AnalyticsController.saveView',
       'ArchiveController.complete',
       'ArchiveController.saveInfo',
       'AttachmentsController.remove',
@@ -277,6 +293,10 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       .sort();
 
     expect(readOnly).toEqual([
+      // اجرای گزارش عمومی و برآورد تعداد ردیف خروجی: بدنه‌شان (درخت فیلتر و فهرست
+      // ستون‌ها) در URL جا نمی‌شود، ولی هیچ‌کدام چیزی نمی‌نویسند.
+      'AnalyticsController.exportPlan',
+      'AnalyticsController.query',
       // دو مسیر گزارش هم POSTِ فقط-خواننده‌اند: شناسه سند و فروشنده در مسیر می‌آیند و
       // بدنه متد هیچ نوشتنی ندارد.
       'ReportsController.amountDetails',

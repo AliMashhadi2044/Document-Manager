@@ -13,3 +13,4 @@ export * from './invoices/invoice-kind.js';
 export * from './invoices/fuel.js';
 export * from './vehicles/plate.js';
 export * from './files/file-types.js';
+export * from './analytics/filter.js';

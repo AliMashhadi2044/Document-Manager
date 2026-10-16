@@ -32,6 +32,27 @@ export const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+
+  /**
+   * مرز «خروجی حجیم»: بیشتر از این تعداد ردیف به صف می‌رود.
+   *
+   * قابل تنظیم است چون روی ماشین توسعه باید **هر دو مسیر** (هم‌زمان و صف‌شده) قابل
+   * آزمون باشند، و داده توسعه هیچ‌وقت به هزاران ردیف نمی‌رسد.
+   */
+  EXPORT_SYNC_ROW_LIMIT: z.coerce.number().int().min(1).max(100_000).default(2_000),
+
+  /** عمر لینک دانلود خروجی صف‌شده (ساعت). */
+  EXPORT_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
+
+  /**
+   * شمارنده کوئری هر درخواست (هدر `X-Query-Count`) — ابزار تشخیصی برای اثبات نبودِ
+   * N+1. در production حتی با `true` روشن نمی‌شود؛ بررسی‌اش در `query-counter.ts`
+   * است و این فقط اعلام متغیر است تا تنظیم ناشناخته بی‌صدا نماند.
+   */
+  EXPOSE_QUERY_COUNT: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -44,6 +65,12 @@ export function validateEnv(raw: Record<string, unknown>): Env {
       .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
       .join('\n');
     throw new Error(`تنظیمات محیطی نامعتبر است:\n${problems}`);
+  }
+
+  // شمارنده کوئری در production هرگز روشن نمی‌شود؛ تنظیم اشتباه باید **صدا** کند،
+  // نه اینکه بی‌صدا نادیده گرفته شود.
+  if (result.data.NODE_ENV === 'production' && result.data.EXPOSE_QUERY_COUNT) {
+    throw new Error('EXPOSE_QUERY_COUNT در محیط production مجاز نیست');
   }
 
   // در production، کلید نشست نمونه به‌هیچ‌وجه پذیرفته نیست.

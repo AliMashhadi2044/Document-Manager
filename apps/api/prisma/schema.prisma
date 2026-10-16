@@ -37,6 +37,8 @@ model User {
   preferences       UserPreferences?
 
   archivedDocuments    ArchiveMetadata[]             @relation("ArchiveCompletedBy")
+  reportViews          ReportView[]                  @relation("ReportViewOwner")
+  exportJobs           ExportJob[]                   @relation("ExportJobRequestedBy")
   uploadedAttachments  Attachment[]                  @relation("AttachmentUploadedBy")
   deletedAttachments   Attachment[]                  @relation("AttachmentDeletedBy")
   createdFeedbacks     ReviewFeedback[]              @relation("FeedbackCreatedBy")
@@ -1559,4 +1561,81 @@ model VendorProductTypeSuggestion {
   @@id([vendorId, productTypeId])
   @@index([vendorId, useCount])
   @@map("vendor_product_type_suggestions")
+}
+
+// ═══════════════════════ فاز ۸ — گزارش‌گیری عمومی ═══════════════════════
+// مرجع: docs/13-phasing.md فاز ۸.
+
+enum ExportJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+}
+
+/// نمای ذخیره‌شده یک گزارش: ستون‌ها، فیلتر، مرتب‌سازی و اندازه صفحه.
+///
+/// چرا جدول و نه `user_preferences.column_visibility`: نما به **یک مجموعه‌داده**
+/// تعلق دارد و کاربر چند نما از یک گزارش می‌سازد («فاکتورهای بی‌فروشنده»، «اسناد
+/// نیازمند اصلاح»). ریختن همه‌شان در یک JSON، هم یکتایی نام را از دست می‌داد و هم
+/// اشتراک‌گذاری را.
+model ReportView {
+  id         String @id @default(uuid()) @db.Uuid
+  ownerId    String @map("owner_id") @db.Uuid
+  datasetKey String @map("dataset_key") @db.VarChar(40)
+  name       String @db.VarChar(120)
+
+  /// فهرست کلید ستون‌ها، درخت فیلتر و ترتیب — همان قراردادی که API می‌گیرد.
+  columns Json
+  filter  Json
+  sort    Json
+  pageSize Int @default(25) @map("page_size")
+
+  /// نمای اشتراکی را همه کاربرانِ دارای مجوز آن مجموعه‌داده می‌بینند، ولی تنها
+  /// سازنده‌اش می‌تواند تغییرش دهد یا حذفش کند.
+  isShared Boolean @default(false) @map("is_shared")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner User @relation("ReportViewOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, datasetKey, name])
+  @@index([datasetKey, isShared])
+  @@map("report_views")
+}
+
+/// کار خروجی‌گیری حجیم.
+///
+/// خروجی کوچک هم‌زمان ساخته و فرستاده می‌شود؛ خروجی بزرگ به این صف می‌رود تا
+/// درخواست HTTP منتظر یک کوئری چندده‌هزار‌ردیفی نماند. فایل در object storage
+/// می‌نشیند و `expires_at` دارد: لینک دانلود موقت است و فایل پس از انقضا پاک می‌شود.
+model ExportJob {
+  id         String          @id @default(uuid()) @db.Uuid
+  datasetKey String          @map("dataset_key") @db.VarChar(40)
+  status     ExportJobStatus @default(PENDING)
+
+  /// همان درخواست گزارش (ستون‌ها، فیلتر، مرتب‌سازی) — تا خروجی **دقیقاً** همان
+  /// چیزی باشد که کاربر روی صفحه می‌دید، و تا بشود دوباره ساختش.
+  params Json
+
+  rowCount   Int?    @map("row_count")
+  storageKey String? @map("storage_key") @db.VarChar(500)
+  sizeBytes  BigInt? @map("size_bytes") @db.BigInt
+
+  /// پیام خطای کاربرپسند؛ هیچ stack trace یا جزئیات داخلی اینجا نمی‌نشیند.
+  errorMessage String? @map("error_message") @db.Text
+
+  requestedById String   @map("requested_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  startedAt     DateTime? @map("started_at") @db.Timestamptz(3)
+  finishedAt    DateTime? @map("finished_at") @db.Timestamptz(3)
+  expiresAt     DateTime? @map("expires_at") @db.Timestamptz(3)
+
+  requestedBy User @relation("ExportJobRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@index([requestedById, createdAt])
+  @@index([status, createdAt])
+  @@map("export_jobs")
 }

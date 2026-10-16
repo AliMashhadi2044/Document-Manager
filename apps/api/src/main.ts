@@ -10,6 +10,7 @@ import helmet from 'helmet';
 
 import { AppModule } from './app.module';
 import type { Env } from './common/config/env';
+import { isQueryCountEnabled, queryCountMiddleware } from './common/prisma/query-counter';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: false });
@@ -20,6 +21,11 @@ async function bootstrap(): Promise<void> {
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   app.use(cookieParser());
+
+  // شمارنده کوئری: ابزار تشخیصی، فقط در محیط توسعه و فقط با متغیر محیطی صریح.
+  if (isQueryCountEnabled()) {
+    app.use(queryCountMiddleware);
+  }
 
   // هدرهای امنیتی (docs/10-security-plan.md §۴)
   app.use(

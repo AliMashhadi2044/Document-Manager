@@ -9,12 +9,16 @@ import { VendorsPage } from '../features/vendors/vendors-page';
 import { DocumentsPage } from '../features/documents/documents-page';
 import { ArchivePage } from '../features/archive/archive-page';
 import { ReportTemplatesPage } from '../features/report-designer/templates-page';
+import { ReportsPage } from '../features/analytics/reports-page';
+import { DashboardPage } from '../features/analytics/dashboard-page';
 import { NotificationBell } from '../features/notifications/notification-bell';
 import { ThemeControls } from './theme-controls';
 
 type SectionKey =
+  | 'dashboard'
   | 'documents'
   | 'archive'
+  | 'reports'
   | 'report-templates'
   | 'overview'
   | 'lookups'
@@ -30,8 +34,10 @@ interface Section {
 }
 
 const SECTIONS: readonly Section[] = [
+  { key: 'dashboard', titleFa: 'داشبورد', permission: 'report:run' },
   { key: 'documents', titleFa: 'اسناد', permission: 'document:read' },
   { key: 'archive', titleFa: 'بایگانی', permission: 'archive:read' },
+  { key: 'reports', titleFa: 'گزارش‌گیری', permission: 'report:run' },
   { key: 'report-templates', titleFa: 'طراح گزارش', permission: 'report_template:read' },
   { key: 'overview', titleFa: 'وضعیت پروژه' },
   { key: 'lookups', titleFa: 'اطلاعات پایه', permission: 'base_data:read' },
@@ -101,7 +107,14 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
         </nav>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      {/* گزارش‌گیری و طراح گزارش ستون‌های زیادی دارند و در عرض ۶xl خفه می‌شوند. */}
+      <main
+        className={
+          section === 'reports' || section === 'report-templates' || section === 'dashboard'
+            ? 'mx-auto max-w-[110rem] px-6 py-8'
+            : 'mx-auto max-w-6xl px-6 py-8'
+        }
+      >
         {section === 'documents' ? (
           <DocumentsPage
             openDocumentId={documentFromNotification}
@@ -109,7 +122,9 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
           />
         ) : null}
         {section === 'archive' ? <ArchivePage user={user} /> : null}
+        {section === 'reports' ? <ReportsPage user={user} /> : null}
         {section === 'report-templates' ? <ReportTemplatesPage user={user} /> : null}
+        {section === 'dashboard' ? <DashboardPage /> : null}
         {section === 'overview' ? <Overview user={user} /> : null}
         {section === 'lookups' ? <LookupManager /> : null}
         {section === 'chapters' ? <ChaptersView /> : null}
@@ -126,12 +141,13 @@ function Overview({ user }: { user: CurrentUser }): JSX.Element {
       <section className="rounded-lg border border-border bg-card p-6">
         <h2 className="text-sm font-semibold">وضعیت پروژه</h2>
         <p className="mt-2 text-sm leading-7 text-muted-foreground">
-          فازهای ۱ تا ۷ تکمیل شده‌اند: زیرساخت و سیستم طراحی، اطلاعات پایه و فروشندگان،
+          فازهای ۱ تا ۸ تکمیل شده‌اند: زیرساخت و سیستم طراحی، اطلاعات پایه و فروشندگان،
           اسناد و فاکتورهای اصلی با محاسبات مالی و snapshot و ثبت نهایی تراکنشی،
           فاکتورهای اختصاصی انشعابات و سوخت با اتصال پویای فصل به نوع فاکتور، بایگانی
           با فایل امن و بازخورد ناظر و اعلان، گزارش مالیات با موتور قالب و خروجی چاپ و
-          Excel و PDF، و طراح بصری قالب گزارش با نسخه‌گذاری و انتشار. گزارش‌گیری عمومی
-          در فازهای بعدی اضافه می‌شود. هیچ بخشی از این سامانه داده ساختگی نمایش نمی‌دهد؛
+          Excel و PDF، طراح بصری قالب گزارش با نسخه‌گذاری و انتشار، و گزارش‌گیری عمومی
+          با فیلترساز و نمای ذخیره‌شده و خروجی صف‌شده و داشبورد. فاز ۹ (سخت‌سازی و
+          انتشار) باقی مانده است. هیچ بخشی از این سامانه داده ساختگی نمایش نمی‌دهد؛
           همه اعداد از پایگاه داده واقعی می‌آیند.
         </p>
       </section>

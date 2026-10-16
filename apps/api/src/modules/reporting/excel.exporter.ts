@@ -2,6 +2,15 @@ import { Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import type { LaidOutReport, LaidOutTable } from '@dm/report-engine';
 
+import {
+  MAX_SAFE_EXCEL_INTEGER,
+  columnLetter,
+  safeSheetName,
+  thinBorder,
+  writeMoney,
+  writeText,
+} from './excel-safety';
+
 /**
  * خروجی Excel از سند چیدمان (docs/09 §۸).
  *
@@ -10,21 +19,11 @@ import type { LaidOutReport, LaidOutTable } from '@dm/report-engine';
  * سند چیدمانی است که HTML از آن ساخته می‌شود، پس جدول Excel و جدول چاپی از یک منبع
  * می‌آیند و نمی‌توانند از هم جدا بیفتند.
  *
- * سه قاعده‌ای که این فایل را از یک «نوشتن سلول‌ها» جدا می‌کند:
- *
- *  ۱. **سلول مالی عدد واقعی است**، نه متنِ فارسی‌شده؛ وگرنه کاربر نمی‌تواند در Excel
- *     جمع بزند یا فیلتر کند.
- *  ۲. **مبلغ بزرگ‌تر از محدوده امن Excel متن می‌شود، با هشدار.** Excel اعداد را با
- *     دقت ۱۵ رقم اعشاری نگه می‌دارد؛ مبلغ ریالی بزرگ‌تر از آن بی‌صدا گرد می‌شود و
- *     گرد شدن بی‌صدا در یک سامانه مالی، بدترین حالت ممکن است.
- *  ۳. **ضد Formula Injection:** متنی که با `= + - @` یا tab/CR شروع شود، با پیشوند
- *     `'` نوشته می‌شود تا Excel آن را فرمول نشمارد.
+ * قواعد نوشتن سلول (سلول مالی عدد واقعی، مبلغ خارج از محدوده امن به‌صورت متن، ضد
+ * Formula Injection) در `excel-safety.ts` است و با خروجی‌گیر جدول‌های گزارش‌گیری
+ * عمومی مشترک: این‌ها کنترل امنیتی و درستی مالی‌اند و دو نسخه‌شان روزی از هم جدا
+ * می‌افتاد.
  */
-
-/** سقف امنِ عدد در Excel (همان `Number.MAX_SAFE_INTEGER`). */
-const MAX_SAFE_EXCEL_INTEGER = 9_007_199_254_740_991n;
-
-const FORMULA_TRIGGERS = ['=', '+', '-', '@', '\t', '\r'];
 
 @Injectable()
 export class ExcelExporter {
@@ -144,58 +143,6 @@ export class ExcelExporter {
   }
 }
 
-/**
- * نوشتن مبلغ.
- *
- * بالاتر از محدوده امن، مقدار **متن** می‌شود و یک هشدار در یادداشت سلول می‌نشیند؛
- * عدد ناقص بدتر از متن درست است.
- */
-function writeMoney(cell: ExcelJS.Cell, value: bigint): void {
-  if (value <= MAX_SAFE_EXCEL_INTEGER && value >= -MAX_SAFE_EXCEL_INTEGER) {
-    cell.value = Number(value);
-    cell.numFmt = '#,##0';
-    cell.alignment = { horizontal: 'right' };
-    return;
-  }
-
-  cell.value = value.toString();
-  cell.alignment = { horizontal: 'right' };
-  cell.note = 'این مبلغ از محدوده دقت عددی Excel بزرگ‌تر است و به‌صورت متن نوشته شده تا گرد نشود.';
-}
-
-/** نوشتن متن با خنثی‌سازی Formula Injection. */
-function writeText(cell: ExcelJS.Cell, value: string): void {
-  if (value === '') {
-    cell.value = null;
-    return;
-  }
-  cell.value = FORMULA_TRIGGERS.some((trigger) => value.startsWith(trigger)) ? `'${value}` : value;
-}
-
-function thinBorder(): Partial<ExcelJS.Borders> {
-  const style = { style: 'thin' as const, color: { argb: 'FF333333' } };
-  return { top: style, bottom: style, left: style, right: style };
-}
-
-/** نام شیت: حداکثر ۳۱ نویسه، بدون نویسه‌های ممنوع Excel. */
-export function safeSheetName(title: string): string {
-  const cleaned = title.replace(/[:\\/?*[\]]/gu, ' ').trim();
-  const limited = cleaned.slice(0, 31);
-  return limited === '' ? 'گزارش' : limited;
-}
-
-export function columnLetter(index: number): string {
-  let out = '';
-  let value = index;
-  while (value > 0) {
-    const remainder = (value - 1) % 26;
-    out = String.fromCharCode(65 + remainder) + out;
-    value = Math.floor((value - 1) / 26);
-  }
-  return out;
-}
-
-/** صادر شده برای تست: آیا این متن در Excel فرمول می‌شد؟ */
-export function wouldBeFormula(value: string): boolean {
-  return FORMULA_TRIGGERS.some((trigger) => value.startsWith(trigger));
-}
+// `safeSheetName`، `columnLetter` و `wouldBeFormula` از `excel-safety.ts` دوباره صادر
+// می‌شوند تا مسیرهای واردکننده فعلی (کنترلر و آزمون‌ها) تغییر نکنند.
+export { columnLetter, safeSheetName, wouldBeFormula } from './excel-safety';

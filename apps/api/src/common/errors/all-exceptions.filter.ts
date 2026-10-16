@@ -125,6 +125,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
           code: 'NOT_FOUND',
           message: 'موردی یافت نشد',
         };
+      /*
+       * شناسه بدشکل در مسیر (مثل `/exports/undefined`).
+       *
+       * تا پیش از فاز ۸ این حالت به ۵۰۰ تبدیل می‌شد: Prisma روی مقداری که UUID نیست
+       * خطا می‌دهد و خطای خام به دسته «خطای دیتابیس» می‌افتاد. ولی این یک **خطای
+       * ورودی** است، نه خطای سرور؛ ۵۰۰ هم کاربر را گمراه می‌کند و هم در log سرور
+       * به‌عنوان نقص سرویس شمرده می‌شود.
+       */
+      case 'P2023':
+        return {
+          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          code: 'INVALID_ID',
+          message: 'شناسه فرستاده‌شده معتبر نیست',
+        };
       default:
         return {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
