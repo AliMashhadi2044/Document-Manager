@@ -25,3 +25,6 @@ Thumbs.db
 
 # داده محلی سرویس‌های Docker
 infrastructure/.data/
+
+# خروجی ساخت TypeScript
+*.tsbuildinfo
