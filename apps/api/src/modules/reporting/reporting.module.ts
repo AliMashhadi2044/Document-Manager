@@ -8,6 +8,7 @@ import { DatasetService } from './dataset.service';
 import { ProductTypesService } from './product-types.service';
 import { ExcelExporter } from './excel.exporter';
 import { PdfRenderer } from './pdf.renderer';
+import { TemplatesService } from './templates.service';
 
 /**
  * ماژول گزارش‌گیری.
@@ -24,6 +25,7 @@ import { PdfRenderer } from './pdf.renderer';
     ProductTypesService,
     ExcelExporter,
     PdfRenderer,
+    TemplatesService,
     AuditService,
   ],
   exports: [ReportsService, DatasetService],

@@ -26,7 +26,7 @@ export interface ReportTableBlock {
     readonly isNumeric: boolean;
   }[];
   readonly rows: readonly (readonly ReportCell[])[];
-  readonly fildlerRowCount: number;
+  readonly fillerRowCount: number;
   readonly totals: readonly ReportCell[] | null;
   readonly totalsLabel: string | null;
 }

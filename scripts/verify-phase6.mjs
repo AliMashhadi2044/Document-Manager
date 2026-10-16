@@ -155,7 +155,7 @@ async function buildInjectionProbe() {
         id: 't',
         columns: [{ key: 'name', titleFa: 'نام', width: { unit: 'auto' }, align: 'start', isNumeric: false }],
         rows: [[{ text: '=HYPERLINK("http://evil","برنده شدید")', raw: null, align: 'start', extraLines: [] }]],
-        fildlerRowCount: 0,
+        fillerRowCount: 0,
         totals: null,
         totalsLabel: null,
         repeatHeaderOnNewPage: true,
@@ -560,7 +560,7 @@ async function main() {
   );
 
   // ── حداقل ردیف چاپی
-  check('جدول چاپی حداقل ۴ ردیف دارد', table.fildlerRowCount === 2, `filler=${table.fildlerRowCount}`);
+  check('جدول چاپی حداقل ۴ ردیف دارد', table.fillerRowCount === 2, `filler=${table.fillerRowCount}`);
 
   // ── امضاها از اطلاعات پایه
   const signatureRow = (preview.data?.report?.footer ?? []).find(

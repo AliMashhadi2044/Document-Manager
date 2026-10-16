@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PrismaClient } from '@prisma/client';
-import { templateV1Schema } from '@dm/report-engine';
+import { templateV1Schema, validateTemplate } from '@dm/report-engine';
+
+import { allowedValuePaths, collectionFields } from '../../src/modules/reporting/data-dictionary';
 
 /**
  * گزارش مالیات به‌صورت **داده**، نه کد (docs/09 §۹).
@@ -32,6 +34,25 @@ export async function seedReports(prisma: PrismaClient): Promise<void> {
   }
   const template = parsed.data;
 
+  /**
+   * اعتبارسنجی در برابر Data Dictionary، نه فقط schema.
+   *
+   * schema می‌گوید «ساختار درست است»؛ این بررسی می‌گوید «به داده‌ای اشاره می‌کند که
+   * وجود دارد». قالب seed‌شده‌ای که به ستون ناموجود اشاره کند، باید همین‌جا خطا بدهد،
+   * نه وقتی کاربر گزارش می‌گیرد و سلول خالی می‌بیند.
+   */
+  const problems = validateTemplate(template, {
+    allowedValuePaths: allowedValuePaths(),
+    collections: collectionFields(),
+  });
+  if (problems.length > 0) {
+    throw new Error(
+      `قالب گزارش مالیات با فهرست داده نمی‌خواند: ${problems
+        .map((problem) => `${problem.path}: ${problem.message}`)
+        .join(' | ')}`,
+    );
+  }
+
   const reportType = await prisma.reportType.upsert({
     where: { key: 'TAX_REPORT' },
     update: { titleFa: 'گزارش مالیات بر ارزش افزوده', dataScopeKey: 'document', isSystem: true },
@@ -54,6 +75,14 @@ export async function seedReports(prisma: PrismaClient): Promise<void> {
     const unchanged =
       JSON.stringify(existing.currentVersion.template) === JSON.stringify(template);
     if (unchanged) {
+      if (reportType.activeDefinitionId === null) {
+        await prisma.reportType.update({
+          where: { id: reportType.id },
+          data: { activeDefinitionId: existing.id },
+        });
+        console.log('✓ قالب سیستمی گزارش مالیات به‌عنوان قالب فعال انتخاب شد');
+        return;
+      }
       console.log('• قالب گزارش مالیات بدون تغییر است');
       return;
     }
@@ -78,6 +107,13 @@ export async function seedReports(prisma: PrismaClient): Promise<void> {
       where: { id: existing.id },
       data: { currentVersionId: version.id },
     });
+
+    if (reportType.activeDefinitionId === null) {
+      await prisma.reportType.update({
+        where: { id: reportType.id },
+        data: { activeDefinitionId: existing.id },
+      });
+    }
 
     console.log(`✓ نسخه ${nextNo} قالب گزارش مالیات منتشر شد`);
     return;
@@ -108,6 +144,12 @@ export async function seedReports(prisma: PrismaClient): Promise<void> {
   await prisma.reportDefinition.update({
     where: { id: definition.id },
     data: { currentVersionId: version.id, status: 'PUBLISHED' },
+  });
+
+  // قالب فعال این نوع گزارش: تا وقتی کاربر قالب دیگری را فعال نکند، همین اجرا می‌شود.
+  await prisma.reportType.update({
+    where: { id: reportType.id },
+    data: { activeDefinitionId: definition.id },
   });
 
   console.log('✓ قالب گزارش مالیات (نسخه ۱) ثبت و منتشر شد');

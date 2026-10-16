@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { z } from 'zod';
@@ -11,15 +22,29 @@ import {
   type AuthenticatedUser,
 } from '../../common/auth/auth.decorators';
 import { ZodBody } from '../../common/validation/zod.pipe';
+import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { ReportsService } from './reports.service';
 import { DatasetService } from './dataset.service';
 import { ProductTypesService } from './product-types.service';
 import { ExcelExporter, safeSheetName } from './excel.exporter';
 import { PdfRenderer } from './pdf.renderer';
+import { TemplatesService } from './templates.service';
 
 const setProductTypeSchema = z.object({
   productTypeId: z.string().uuid('نوع کالا را انتخاب کنید'),
 });
+
+const copyTemplateSchema = z.object({
+  name: z.string().trim().min(1, 'نام قالب الزامی است').max(200),
+});
+
+/**
+ * بدنه ذخیره پیش‌نویس، عمداً `unknown` است.
+ *
+ * اعتبارسنجی واقعی با `templateV1Schema` در سرویس انجام می‌شود تا **یک** تعریف از
+ * ساختار قالب وجود داشته باشد، نه یکی اینجا و یکی آنجا که روزی از هم جدا بیفتند.
+ */
+const saveDraftSchema = z.object({ template: z.unknown() });
 
 /**
  * گزارش‌ها.
@@ -38,6 +63,7 @@ export class ReportsController {
     private readonly productTypes: ProductTypesService,
     private readonly excel: ExcelExporter,
     private readonly pdf: PdfRenderer,
+    private readonly templates: TemplatesService,
   ) {}
 
   @RequirePermission('report:run')
@@ -53,8 +79,15 @@ export class ReportsController {
    * POST است چون **اجرای گزارش رکورد می‌سازد** (یک ردیف `report_runs` و یک ردیف
    * حسابرسی)؛ GET نباید عارضه داشته باشد.
    */
+  /*
+   * `200` و نه `201`: این مسیرها یک **نمایش** برمی‌گردانند (چیدمان، فایل Excel، فایل
+   * PDF)، نه ارجاع به منبعی که تازه ساخته شده. ردیف `report_runs` یک عارضه ثبت‌کننده
+   * است، نه چیزی که کلاینت نشانی‌اش را بگیرد؛ پاسخ `201 Created` بدون هدر `Location`
+   * فقط ابزارها را گمراه می‌کند.
+   */
   @RequirePermission('report:run')
   @Post(':reportTypeKey/documents/:documentId/preview')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'اجرای گزارش و بازگرداندن چیدمان برای پیش‌نمایش' })
   async preview(
     @Param('reportTypeKey') reportTypeKey: string,
@@ -74,6 +107,7 @@ export class ReportsController {
 
   @RequirePermission('report:export')
   @Post(':reportTypeKey/documents/:documentId/html')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'خروجی HTML چاپی' })
   async html(
     @Param('reportTypeKey') reportTypeKey: string,
@@ -91,6 +125,7 @@ export class ReportsController {
 
   @RequirePermission('report:export')
   @Post(':reportTypeKey/documents/:documentId/excel')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'خروجی Excel با سلول عددی واقعی و ردیف جمع فرمولی' })
   async excelExport(
     @Param('reportTypeKey') reportTypeKey: string,
@@ -116,6 +151,7 @@ export class ReportsController {
 
   @RequirePermission('report:export')
   @Post(':reportTypeKey/documents/:documentId/pdf')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'خروجی PDF با رندر Chromium بدون شبکه و بدون JavaScript' })
   async pdfExport(
     @Param('reportTypeKey') reportTypeKey: string,
@@ -167,6 +203,7 @@ export class ReportsController {
   @RequirePermission('report:run')
   @ReadOnlyRoute()
   @Post('documents/:documentId/vendors/:vendorId/product-type/suggestions')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'پیشنهاد نوع کالا و خریدهای قبلی همان فروشنده' })
   async productTypeSuggestions(
     @Param('documentId') documentId: string,
@@ -180,6 +217,7 @@ export class ReportsController {
   @RequirePermission('report:run')
   @ReadOnlyRoute()
   @Post('documents/:documentId/vendors/:vendorId/amount-details')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'فاکتورهای تشکیل‌دهنده یک ردیف گزارش' })
   async amountDetails(
     @Param('documentId') documentId: string,
@@ -199,6 +237,164 @@ export class ReportsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.productTypes.set(documentId, vendorId, body.productTypeId, user);
+  }
+
+  // ───────────────────────── طراح گزارش (فاز ۷) ─────────────────────────
+
+  @RequirePermission('report_template:read')
+  @Get('definitions')
+  @ApiOperation({ summary: 'فهرست قالب‌های گزارش' })
+  async definitions(@Query('includeArchived') includeArchived?: string) {
+    return this.templates.list(includeArchived === 'true');
+  }
+
+  @RequirePermission('report_template:read')
+  @Get('definitions/:definitionId')
+  @ApiOperation({ summary: 'جزئیات یک قالب و نسخه‌هایش' })
+  async definitionDetail(@Param('definitionId') definitionId: string) {
+    return this.templates.detail(definitionId);
+  }
+
+  @RequirePermission('report_template:read')
+  @Get('signatories')
+  @ApiOperation({ summary: 'نقش‌های امضاکننده فعال، برای تنظیم بلوک امضا' })
+  async signatories() {
+    return this.templates.signatories();
+  }
+
+  @RequirePermission('report_template:read')
+  @Get('versions/:versionId')
+  @ApiOperation({ summary: 'محتوای JSON یک نسخه قالب' })
+  async templateVersion(@Param('versionId') versionId: string) {
+    return this.templates.version(versionId);
+  }
+
+  @RequirePermission('report_template:write')
+  @Post('definitions/:definitionId/copy')
+  @ApiOperation({ summary: 'کپی یک قالب (قالب سیستمی فقط از این راه ویرایش می‌شود)' })
+  async copyTemplate(
+    @Param('definitionId') definitionId: string,
+    @Body(new ZodBody(copyTemplateSchema)) body: z.infer<typeof copyTemplateSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.templates.copy(definitionId, body.name, user);
+  }
+
+  @RequirePermission('report_template:write')
+  @Post('definitions/:definitionId/draft')
+  @ApiOperation({ summary: 'ذخیره پیش‌نویس قالب — نسخه منتشرشده دست‌نخورده می‌ماند' })
+  async saveDraft(
+    @Param('definitionId') definitionId: string,
+    @Body(new ZodBody(saveDraftSchema)) body: { template: unknown },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.templates.saveDraft(definitionId, body.template, user);
+  }
+
+  /** اعتبارسنجی بدون ذخیره — تا طراح همان لحظه خطا را نشان دهد. */
+  @RequirePermission('report_template:write')
+  @ReadOnlyRoute()
+  @Post('templates/check')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'اعتبارسنجی ساختار قالب بدون ذخیره' })
+  async checkTemplate(@Body(new ZodBody(saveDraftSchema)) body: { template: unknown }) {
+    return this.templates.check(body.template);
+  }
+
+  @RequirePermission('report_template:write')
+  @Patch('definitions/:definitionId')
+  @ApiOperation({ summary: 'تغییر نام قالب' })
+  async renameTemplate(
+    @Param('definitionId') definitionId: string,
+    @Body(new ZodBody(copyTemplateSchema)) body: z.infer<typeof copyTemplateSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.templates.rename(definitionId, body.name, user);
+  }
+
+  /**
+   * فعال‌کردن یک قالب برای نوع گزارشش.
+   *
+   * مسیر جداگانه و با مجوز انتشار: این اقدام تعیین می‌کند خروجی **رسمی** سازمان از
+   * کدام قالب ساخته شود، پس نباید عارضه جانبی ذخیره یا انتشار باشد.
+   */
+  @RequirePermission('report_template:write')
+  @Post('definitions/:definitionId/archive')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'بایگانی قالب — از فهرست پیش‌فرض بیرون می‌رود، پاک نمی‌شود' })
+  async archiveTemplate(
+    @Param('definitionId') definitionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.templates.archive(definitionId, user);
+  }
+
+  @RequirePermission('report_template:publish')
+  @Idempotent()
+  @Post('definitions/:definitionId/activate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'انتخاب این قالب به‌عنوان قالب فعال نوع گزارش' })
+  async activateTemplate(
+    @Param('definitionId') definitionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.templates.activate(definitionId, user);
+  }
+
+  @RequirePermission('report_template:publish')
+  @Idempotent()
+  @Post('versions/:versionId/publish')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'انتشار نسخه؛ پس از آن تغییرناپذیر است' })
+  async publishVersion(
+    @Param('versionId') versionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.templates.publish(versionId, user);
+  }
+
+  /** پیش‌نمایش طراح روی یک نسخه مشخص (پیش‌نویس یا منتشرشده) با داده واقعی. */
+  @RequirePermission('report:run', 'report_template:read')
+  @Post('versions/:versionId/documents/:documentId/preview')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'اجرای یک نسخه مشخص قالب روی یک سند' })
+  async previewVersion(
+    @Param('versionId') versionId: string,
+    @Param('documentId') documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const result = await this.reports.runVersion(versionId, documentId, 'HTML', user);
+    return {
+      runId: result.runId,
+      rowCount: result.rowCount,
+      skippedInvoiceCount: result.skippedInvoiceCount,
+      rowVendorIds: result.rowVendorIds,
+      report: serializeReport(result.report),
+    };
+  }
+
+  /**
+   * بازتولید یک خروجی تاریخی با همان نسخه قالبِ آن اجرا.
+   *
+   * این مسیر چیزی است که ادعای «انتشار نسخه ۲ خروجی نسخه ۱ را عوض نمی‌کند» را قابل
+   * **اثبات** می‌کند، نه فقط قابل ادعا.
+   */
+  @RequirePermission('report:run', 'report:read_history')
+  @Post('runs/:runId/reproduce')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'بازتولید خروجی یک اجرای قبلی با همان نسخه قالب' })
+  async reproduceRun(
+    @Param('runId') runId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const result = await this.reports.reproduce(runId, user);
+    return {
+      runId: result.runId,
+      rowCount: result.rowCount,
+      skippedInvoiceCount: result.skippedInvoiceCount,
+      rowVendorIds: result.rowVendorIds,
+      report: serializeReport(result.report),
+    };
   }
 
   @RequirePermission('report:run')

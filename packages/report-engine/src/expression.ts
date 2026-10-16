@@ -172,6 +172,123 @@ export function conditionDepth(condition: Condition): number {
   }
 }
 
+/**
+ * تعداد گره‌های یک عبارت.
+ *
+ * سقف عمق تنها **بلندی** درخت را می‌بندد، نه پهنایش: عبارتی با عمق سه ولی بیست آرگومان
+ * در هر سطح، هنوز می‌تواند بزرگ باشد. شمارش گره، همان چیزی است که سقف
+ * `MAX_TEMPLATE_NODES` را معنادار می‌کند؛ بدون آن، سقف فقط بلوک‌ها و ستون‌ها را
+ * می‌شمرد و عبارت‌ها — که بخش بزرگ هر قالب واقعی‌اند — بی‌حساب می‌ماندند.
+ */
+export function expressionNodes(expression: Expression): number {
+  switch (expression.k) {
+    case 'const':
+    case 'var':
+      return 1;
+    case 'agg':
+      return 1 + (expression.of ? expressionNodes(expression.of) : 0);
+    case 'arith':
+      return 1 + expressionNodes(expression.args[0]) + expressionNodes(expression.args[1]);
+    case 'concat':
+      return 1 + expression.args.reduce((sum, argument) => sum + expressionNodes(argument), 0);
+    case 'if':
+      return (
+        1 +
+        conditionNodes(expression.cond) +
+        expressionNodes(expression.then) +
+        expressionNodes(expression.else)
+      );
+    case 'fmt':
+      return 1 + expressionNodes(expression.of);
+  }
+}
+
+export function conditionNodes(condition: Condition): number {
+  switch (condition.k) {
+    case 'cmp':
+      return 1 + expressionNodes(condition.args[0]) + expressionNodes(condition.args[1]);
+    case 'in':
+    case 'empty':
+      return 1 + expressionNodes(condition.of);
+    case 'and':
+    case 'or':
+      return 1 + condition.args.reduce((sum, argument) => sum + conditionNodes(argument), 0);
+    case 'not':
+      return 1 + conditionNodes(condition.of);
+  }
+}
+
+/**
+ * پیمایش **ساختاری** مسیرهای داده‌ای یک عبارت، همراه با دامنه ردیف.
+ *
+ * چرا یک مجموعه تختِ مسیرها کافی نیست: گره `agg` دامنه `row.*` را عوض می‌کند. داخل
+ * `sum(over: document.invoices, of: row.taxAmount)` مسیر `row.taxAmount` به ردیف
+ * **فاکتورها** اشاره دارد، نه به ردیف جدولی که این عبارت در آن نشسته — و این عبارت
+ * می‌تواند حتی بیرون از هر جدولی باشد. ارزیاب هم دقیقاً همین کار را می‌کند
+ * (`aggregate` یک scope تازه می‌سازد)، پس اعتبارسنجی و بررسی مجوز هم باید همین را
+ * ببینند، وگرنه یکی از این دو با واقعیت اجرا اختلاف پیدا می‌کند.
+ *
+ * `rowSource` کلید مجموعه‌ای است که `row.*` در این نقطه به آن اشاره دارد، یا `null`
+ * وقتی هیچ ردیفی در دامنه نیست.
+ */
+export function walkExpressionPaths(
+  expression: Expression,
+  rowSource: string | null,
+  visit: (path: string, rowSource: string | null) => void,
+): void {
+  switch (expression.k) {
+    case 'var':
+      visit(expression.path, rowSource);
+      break;
+    case 'agg':
+      visit(expression.over, rowSource);
+      // از این‌جا به پایین، `row.*` به مجموعه‌ای که روی آن تجمیع می‌شود اشاره دارد.
+      if (expression.of) walkExpressionPaths(expression.of, expression.over, visit);
+      break;
+    case 'arith':
+      walkExpressionPaths(expression.args[0], rowSource, visit);
+      walkExpressionPaths(expression.args[1], rowSource, visit);
+      break;
+    case 'concat':
+      for (const argument of expression.args) walkExpressionPaths(argument, rowSource, visit);
+      break;
+    case 'if':
+      walkConditionPaths(expression.cond, rowSource, visit);
+      walkExpressionPaths(expression.then, rowSource, visit);
+      walkExpressionPaths(expression.else, rowSource, visit);
+      break;
+    case 'fmt':
+      walkExpressionPaths(expression.of, rowSource, visit);
+      break;
+    case 'const':
+      break;
+  }
+}
+
+export function walkConditionPaths(
+  condition: Condition,
+  rowSource: string | null,
+  visit: (path: string, rowSource: string | null) => void,
+): void {
+  switch (condition.k) {
+    case 'cmp':
+      walkExpressionPaths(condition.args[0], rowSource, visit);
+      walkExpressionPaths(condition.args[1], rowSource, visit);
+      break;
+    case 'in':
+    case 'empty':
+      walkExpressionPaths(condition.of, rowSource, visit);
+      break;
+    case 'and':
+    case 'or':
+      for (const argument of condition.args) walkConditionPaths(argument, rowSource, visit);
+      break;
+    case 'not':
+      walkConditionPaths(condition.of, rowSource, visit);
+      break;
+  }
+}
+
 /** همه مسیرهای متغیری که یک عبارت به آن‌ها اشاره می‌کند — برای بررسی مجوز. */
 export function collectVariablePaths(expression: Expression, into = new Set<string>()): Set<string> {
   switch (expression.k) {

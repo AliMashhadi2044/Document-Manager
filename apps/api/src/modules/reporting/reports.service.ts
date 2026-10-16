@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import {
-  collectConditionPaths,
-  collectVariablePaths,
   layoutReport,
   renderReportHtml,
   templateV1Schema,
   textPlaceholders,
   validateTemplate,
+  walkConditionPaths,
+  walkExpressionPaths,
   allBlocks,
   type LaidOutReport,
   type TemplateV1,
@@ -18,7 +18,7 @@ import { AppError } from '../../common/errors/app-error';
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
 import { DatasetService } from './dataset.service';
 import { DocumentAccessService } from '../documents/document-access.service';
-import { allowedCollectionKeys, allowedValuePaths } from './data-dictionary';
+import { allowedValuePaths, collectionFields } from './data-dictionary';
 
 export interface ReportRunResult {
   readonly runId: string;
@@ -54,24 +54,35 @@ export class ReportsService {
     private readonly access: DocumentAccessService,
   ) {}
 
-  /** قالب منتشرشده یک نوع گزارش. */
+  /**
+   * قالب فعالِ یک نوع گزارش.
+   *
+   * قالب از `report_types.active_definition_id` خوانده می‌شود، یعنی از یک **انتخاب
+   * صریح**. نسخه اول این متد `findFirst` با ترتیب `createdAt` بود و این یک نقص واقعی
+   * داشت: کاربری که قالب سیستمی را کپی، ویرایش و منتشر می‌کرد، همچنان خروجی قالب
+   * قدیمی را می‌گرفت و هیچ پیامی هم نمی‌دید — کل کار طراح بی‌اثر و بی‌صدا.
+   */
   async publishedTemplate(reportTypeKey: string): Promise<{
     definitionId: string;
     versionId: string;
     template: TemplateV1;
   }> {
-    const definition = await this.prisma.reportDefinition.findFirst({
-      where: {
-        reportType: { key: reportTypeKey, isActive: true },
-        status: 'PUBLISHED',
-        currentVersionId: { not: null },
-      },
-      include: { currentVersion: true },
-      orderBy: { createdAt: 'asc' },
+    const reportType = await this.prisma.reportType.findFirst({
+      where: { key: reportTypeKey, isActive: true },
+      include: { activeDefinition: { include: { currentVersion: true } } },
     });
 
-    if (!definition?.currentVersion) {
-      throw AppError.notFound('قالب منتشرشده‌ای برای این گزارش وجود ندارد');
+    if (!reportType) throw AppError.notFound('این نوع گزارش فعال نیست');
+
+    const definition = reportType.activeDefinition;
+    if (!definition) {
+      throw AppError.notFound('برای این نوع گزارش هیچ قالب فعالی انتخاب نشده است');
+    }
+    if (definition.status !== 'PUBLISHED' || !definition.currentVersion) {
+      throw AppError.conflict(
+        'REPORT_TEMPLATE_NOT_PUBLISHED',
+        'قالب فعال این گزارش نسخه منتشرشده‌ای ندارد',
+      );
     }
 
     const parsed = templateV1Schema.safeParse(definition.currentVersion.template);
@@ -95,28 +106,48 @@ export class ReportsService {
     };
   }
 
-  /** همه مسیرهای داده‌ای که یک قالب لمس می‌کند. */
+  /**
+   * همه مسیرهای داده‌ای که یک قالب لمس می‌کند.
+   *
+   * مسیرهای `row.*` **کامل** می‌شوند: ستونی از جدولی با منبع `document.invoices` که
+   * `row.taxAmount` را می‌خواند، به `document.invoices.taxAmount` تبدیل می‌شود. بدون
+   * این کامل‌سازی نمی‌شد فهمید `row.taxAmount` به کدام مجموعه است، و مجوزِ **فیلد**
+   * (مثل «جزئیات محاسبه فاکتور») هیچ‌وقت سنجیده نمی‌شد.
+   */
   templatePaths(template: TemplateV1): Set<string> {
     const paths = new Set<string>();
 
+    /** مسیر ردیف با کلید مجموعه‌اش کامل می‌شود؛ بقیه همان‌طور می‌مانند. */
+    const add = (path: string, rowSource: string | null): void => {
+      if (!path.startsWith('row.')) {
+        paths.add(path);
+        return;
+      }
+      // بدون دامنه ردیف، مسیر نامعتبر است و همان‌طور خام ثبت می‌شود تا
+      // `assertPathsAllowed` آن را به‌عنوان مسیر ناشناخته رد کند (fail-closed).
+      paths.add(rowSource === null ? path : `${rowSource}.${path.slice('row.'.length)}`);
+    };
+
     for (const block of allBlocks(template)) {
-      if (block.visibleWhen) collectConditionPaths(block.visibleWhen, paths);
+      if (block.visibleWhen) walkConditionPaths(block.visibleWhen, null, add);
 
       switch (block.type) {
         case 'text':
           for (const placeholder of textPlaceholders(block.text)) paths.add(placeholder);
           break;
         case 'variable':
-          collectVariablePaths(block.value, paths);
+          walkExpressionPaths(block.value, null, add);
           break;
         case 'table':
           paths.add(block.dataSource);
           for (const column of block.columns) {
-            collectVariablePaths(column.value, paths);
+            walkExpressionPaths(column.value, block.dataSource, add);
             for (const line of column.multiline?.lines ?? []) {
-              collectVariablePaths(line.value, paths);
+              walkExpressionPaths(line.value, block.dataSource, add);
             }
-            if (column.visibleWhen) collectConditionPaths(column.visibleWhen, paths);
+            if (column.visibleWhen) {
+              walkConditionPaths(column.visibleWhen, block.dataSource, add);
+            }
           }
           break;
         default:
@@ -140,23 +171,107 @@ export class ReportsService {
     user: AuthenticatedUser,
     generatedAt = new Date(),
   ): Promise<ReportRunResult> {
-    const started = Date.now();
     const { definitionId, versionId, template } = await this.publishedTemplate(reportTypeKey);
+    return this.execute(
+      { definitionId, versionId, template, label: reportTypeKey },
+      documentId,
+      outputFormat,
+      user,
+      generatedAt,
+    );
+  }
 
-    // اعتبارسنجی ساختاری دوباره، این‌بار در برابر Data Dictionary امروز.
-    const problems = validateTemplate(template, {
-      allowedValuePaths: allowedValuePaths(),
-      allowedCollections: allowedCollectionKeys(),
+  /**
+   * اجرای یک **نسخه مشخص** قالب — پیش‌نویس یا منتشرشده.
+   *
+   * دو کاربرد دارد و هر دو در فاز ۷ لازم شدند:
+   *  - پیش‌نمایش طراح روی نسخه پیش‌نویس، پیش از انتشار.
+   *  - بازتولید یک خروجی تاریخی با **همان نسخه‌ای** که آن روز اجرا شده بود.
+   *
+   * قالب همچنان از دیتابیس می‌آید، نه از بدنه درخواست: طراح اول پیش‌نویس را ذخیره
+   * می‌کند و بعد با شناسه‌اش پیش‌نمایش می‌گیرد. پس قاعده «قالب هرگز از بدنه درخواست
+   * نمی‌آید» دست‌نخورده می‌ماند.
+   */
+  async runVersion(
+    versionId: string,
+    documentId: string,
+    outputFormat: 'HTML' | 'EXCEL' | 'PDF',
+    user: AuthenticatedUser,
+    generatedAt = new Date(),
+  ): Promise<ReportRunResult> {
+    const version = await this.prisma.reportVersion.findUnique({
+      where: { id: versionId },
+      include: { definition: { select: { id: true, reportType: { select: { key: true } } } } },
     });
-    if (problems.length > 0) {
-      throw new AppError('REPORT_TEMPLATE_INVALID', 'قالب این گزارش معتبر نیست', 500, problems);
+    if (!version) throw AppError.notFound('نسخه قالب یافت نشد');
+
+    const parsed = templateV1Schema.safeParse(version.template);
+    if (!parsed.success) {
+      throw new AppError(
+        'REPORT_TEMPLATE_INVALID',
+        'قالب این نسخه معتبر نیست',
+        422,
+        parsed.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+      );
     }
 
-    const paths = this.templatePaths(template);
+    return this.execute(
+      {
+        definitionId: version.definitionId,
+        versionId: version.id,
+        template: parsed.data,
+        label: version.definition.reportType.key,
+      },
+      documentId,
+      outputFormat,
+      user,
+      generatedAt,
+    );
+  }
+
+  /**
+   * بازتولید یک خروجی تاریخی.
+   *
+   * همان نسخه قالبی که آن اجرا استفاده کرده بود دوباره اجرا می‌شود — نه نسخه جاری.
+   * پس انتشار نسخه تازه، خروجی تاریخی را عوض نمی‌کند (معیار پذیرش ۵ فاز ۷).
+   *
+   * محدودیت صادقانه: **داده سند** از امروز خوانده می‌شود، نه از نسخه ثبت‌شده سند.
+   * `report_runs.document_revision_id` برای همین در مدل هست ولی بازپخش نسخه سند هنوز
+   * ساخته نشده است؛ پس بازتولید، «همان قالب» را تضمین می‌کند، نه «همان داده».
+   */
+  async reproduce(runId: string, user: AuthenticatedUser): Promise<ReportRunResult> {
+    const run = await this.prisma.reportRun.findUnique({ where: { id: runId } });
+    if (!run) throw AppError.notFound('اجرای گزارش یافت نشد');
+
+    return this.runVersion(run.versionId, run.documentId, run.outputFormat, user);
+  }
+
+  private async execute(
+    source: { definitionId: string; versionId: string; template: TemplateV1; label: string },
+    documentId: string,
+    outputFormat: 'HTML' | 'EXCEL' | 'PDF',
+    user: AuthenticatedUser,
+    generatedAt: Date,
+  ): Promise<ReportRunResult> {
+    const started = Date.now();
+
+    // اعتبارسنجی ساختاری دوباره، این‌بار در برابر Data Dictionary امروز.
+    const problems = validateTemplate(source.template, {
+      allowedValuePaths: allowedValuePaths(),
+      collections: collectionFields(),
+    });
+    if (problems.length > 0) {
+      throw new AppError('REPORT_TEMPLATE_INVALID', 'قالب این گزارش معتبر نیست', 422, problems);
+    }
+
+    const paths = this.templatePaths(source.template);
     this.datasets.assertPathsAllowed(paths, user);
 
     const dataset = await this.datasets.buildDocumentDataset(documentId, user, generatedAt);
-    const report = layoutReport(template, dataset);
+    const report = layoutReport(source.template, dataset);
 
     const aggregateRows = dataset.collections['document.vendorAggregates'] ?? [];
     const rowCount = aggregateRows.length;
@@ -164,10 +279,10 @@ export class ReportsService {
 
     const run = await this.prisma.reportRun.create({
       data: {
-        definitionId,
-        versionId,
+        definitionId: source.definitionId,
+        versionId: source.versionId,
         documentId,
-        params: { reportTypeKey },
+        params: { reportTypeKey: source.label },
         status: 'SUCCEEDED',
         outputFormat,
         rowCount,
@@ -183,7 +298,12 @@ export class ReportsService {
       entityType: 'reportRun',
       entityId: run.id,
       documentId,
-      after: { reportTypeKey, outputFormat, rowCount, versionId },
+      after: {
+        reportTypeKey: source.label,
+        outputFormat,
+        rowCount,
+        versionId: source.versionId,
+      },
     });
 
     return {
@@ -200,27 +320,41 @@ export class ReportsService {
     return renderReportHtml(report);
   }
 
-  /** انواع گزارش فعال که قالب منتشرشده دارند. */
+  /**
+   * انواع گزارش فعال که قالب فعالِ منتشرشده دارند.
+   *
+   * همان قالبی گزارش می‌شود که `publishedTemplate` اجرا می‌کند — نه «اولین قالب
+   * منتشرشده». فهرستی که با اجرا نخواند، بدتر از نبودن فهرست است.
+   */
   async activeTypes() {
     const types = await this.prisma.reportType.findMany({
       where: { isActive: true },
       orderBy: { titleFa: 'asc' },
       include: {
-        definitions: {
-          where: { status: 'PUBLISHED', currentVersionId: { not: null } },
-          select: { id: true, name: true, currentVersion: { select: { versionNo: true } } },
+        activeDefinition: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            currentVersion: { select: { versionNo: true } },
+          },
         },
       },
     });
 
     return types
-      .filter((type) => type.definitions.length > 0)
+      .filter(
+        (type) =>
+          type.activeDefinition?.status === 'PUBLISHED' &&
+          type.activeDefinition.currentVersion !== null,
+      )
       .map((type) => ({
         key: type.key,
         titleFa: type.titleFa,
         dataScopeKey: type.dataScopeKey,
-        definitionId: type.definitions[0]?.id,
-        versionNo: type.definitions[0]?.currentVersion?.versionNo ?? null,
+        definitionId: type.activeDefinition?.id,
+        definitionName: type.activeDefinition?.name ?? null,
+        versionNo: type.activeDefinition?.currentVersion?.versionNo ?? null,
       }));
   }
 

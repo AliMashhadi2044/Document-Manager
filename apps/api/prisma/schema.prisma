@@ -1418,10 +1418,19 @@ model ReportType {
   isSystem Boolean @default(false) @map("is_system")
   isActive Boolean @default(true) @map("is_active")
 
+  /// قالبی که اجرای این نوع گزارش از آن انجام می‌شود.
+  ///
+  /// بدون این ستون، «کدام قالبِ منتشرشده اجرا می‌شود» به ترتیب ساخت گره می‌خورد: اگر
+  /// کاربری از قالب سیستمی کپی می‌گرفت، ویرایش و منتشرش می‌کرد، قالب قدیمی‌تر همچنان
+  /// اجرا می‌شد و کاربر هیچ‌وقت نمی‌فهمید چرا تغییرش اثر ندارد. انتخاب قالب فعال یک
+  /// **اقدام صریح** است، نه عارضه ترتیب ردیف‌ها.
+  activeDefinitionId String? @unique @map("active_definition_id") @db.Uuid
+
+  definitions      ReportDefinition[]
+  activeDefinition ReportDefinition?  @relation("ActiveDefinition", fields: [activeDefinitionId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  definitions ReportDefinition[]
 
   @@map("report_types")
 }
@@ -1442,12 +1451,15 @@ model ReportDefinition {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   reportType     ReportType     @relation(fields: [reportTypeId], references: [id], onDelete: Restrict)
+  activeOfType   ReportType?    @relation("ActiveDefinition")
   createdBy      User?          @relation("ReportDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   currentVersion ReportVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
   versions       ReportVersion[] @relation("DefinitionVersions")
   runs           ReportRun[]
 
   @@index([reportTypeId, status])
+  /// ستون فقرات FK ترکیبی: قالب فعال یک نوع گزارش باید قالبی از **همان** نوع باشد.
+  @@unique([id, reportTypeId])
   @@map("report_definitions")
 }
 

@@ -13,6 +13,10 @@
 import type { RoundingMode } from '@dm/shared';
 
 import {
+  conditionNodes,
+  expressionNodes,
+} from './expression.js';
+import {
   evaluateCondition,
   evaluateExpression,
   readPath,
@@ -70,7 +74,7 @@ export interface LaidOutTable {
   }[];
   readonly rows: readonly (readonly LaidOutCell[])[];
   /** ردیف‌های خالیِ پرکننده تا `minRows`. */
-  readonly fildlerRowCount: number;
+  readonly fillerRowCount: number;
   readonly totals: readonly LaidOutCell[] | null;
   readonly totalsLabel: string | null;
   readonly repeatHeaderOnNewPage: boolean;
@@ -354,7 +358,7 @@ function layoutTable(
       isNumeric: column.format.kind === 'currency' || column.format.kind === 'integer',
     })),
     rows,
-    fildlerRowCount: Math.max(0, block.minRows - rows.length),
+    fillerRowCount: Math.max(0, block.minRows - rows.length),
     totals,
     totalsLabel: block.totalsRow?.enabled ? block.totalsRow.labelFa : null,
     repeatHeaderOnNewPage: block.pagination.repeatHeaderOnNewPage,
@@ -427,12 +431,40 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
-/** شمارش گره‌های یک قالب — سقف `MAX_TEMPLATE_NODES` پیش از ذخیره بررسی می‌شود. */
+/**
+ * شمارش گره‌های یک قالب — سقف `MAX_TEMPLATE_NODES` پیش از ذخیره بررسی می‌شود.
+ *
+ * گره‌های **عبارت‌ها** هم شمرده می‌شوند، نه فقط بلوک‌ها و ستون‌ها. نسخه اول این تابع
+ * تنها بلوک و ستون می‌شمرد و در نتیجه سقف عملاً دست‌نیافتنی بود: حتی قالبی با حداکثر
+ * تعداد بلوک و ستونِ مجازِ schema هم به ۵۰۰۰ نمی‌رسید، در حالی که بزرگ‌شدن واقعی یک
+ * قالب از سمت عبارت‌های تودرتو می‌آید.
+ */
 export function countTemplateNodes(template: TemplateV1): number {
   let count = 0;
+
   for (const block of allBlocks(template)) {
     count += 1;
-    if (block.type === 'table') count += block.columns.length;
+    if (block.visibleWhen) count += conditionNodes(block.visibleWhen);
+
+    switch (block.type) {
+      case 'variable':
+        count += expressionNodes(block.value);
+        break;
+
+      case 'table':
+        for (const column of block.columns) {
+          count += 1 + expressionNodes(column.value);
+          if (column.visibleWhen) count += conditionNodes(column.visibleWhen);
+          for (const line of column.multiline?.lines ?? []) {
+            count += expressionNodes(line.value);
+          }
+        }
+        break;
+
+      default:
+        break;
+    }
   }
+
   return count;
 }

@@ -119,7 +119,7 @@ function renderTable(table: LaidOutTable): string {
   const body = table.rows.map((row) => `<tr>${row.map(renderCell).join('')}</tr>`).join('\n');
 
   // ردیف‌های خالی پرکننده: فرم چاپی تعداد ردیف ثابت دارد (docs/15 §۳).
-  const fillers = Array.from({ length: table.fildlerRowCount }, () => {
+  const fillers = Array.from({ length: table.fillerRowCount }, () => {
     const cells = table.columns
       .map((column) => `<td class="align-${column.align}">${column.isNumeric ? '۰' : ''}</td>`)
       .join('');

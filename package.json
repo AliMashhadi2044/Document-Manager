@@ -21,6 +21,7 @@
     "test:coverage": "vitest run --coverage",
     "verify:phase5": "node scripts/verify-phase5.mjs",
     "verify:phase6": "node scripts/verify-phase6.mjs",
+    "verify:phase7": "node scripts/verify-phase7.mjs",
     "docker:up": "docker compose -f infrastructure/docker-compose.dev.yml up -d",
     "docker:down": "docker compose -f infrastructure/docker-compose.dev.yml down",
     "docker:logs": "docker compose -f infrastructure/docker-compose.dev.yml logs -f"

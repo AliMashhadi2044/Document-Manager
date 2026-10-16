@@ -10,10 +10,10 @@
 import {
   MAX_EXPRESSION_DEPTH,
   MAX_TEMPLATE_NODES,
-  collectConditionPaths,
-  collectVariablePaths,
   conditionDepth,
   expressionDepth,
+  walkConditionPaths,
+  walkExpressionPaths,
   type Condition,
   type Expression,
 } from './expression.js';
@@ -57,15 +57,22 @@ export function tableWidthMm(block: TableBlock): number {
 export interface TemplateValidationInput {
   /** مسیرهای تکیِ مجاز، از Data Dictionary. */
   readonly allowedValuePaths: ReadonlySet<string>;
-  /** کلیدهای مجموعه‌های مجاز. */
-  readonly allowedCollections: ReadonlySet<string>;
+  /**
+   * مجموعه‌های مجاز و **نام ستون‌های هر مجموعه**.
+   *
+   * فهرست ستون‌ها از همان ابتدا بخشی از ورودی است، نه افزوده‌ای اختیاری: بدون آن،
+   * مسیرهای `row.*` هیچ‌جا سنجیده نمی‌شدند و یک غلط تایپی در نام ستون، به‌جای خطای
+   * اعتبارسنجی، یک سلول **خالی** در گزارش مالی می‌شد.
+   */
+  readonly collections: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 /**
  * بررسی ساختاری قالب در برابر Data Dictionary.
  *
- * مسیرهایی که با `row.` شروع می‌شوند بررسی نمی‌شوند: آن‌ها به ردیف جاری جدول اشاره
- * دارند و اعتبارشان به ستون‌های همان منبع داده بستگی دارد، نه به فهرست سراسری.
+ * مسیرهای `row.*` به ردیف جاری جدول اشاره دارند، پس در **دامنه همان جدول** سنجیده
+ * می‌شوند: `row.x` تنها وقتی معتبر است که `x` یکی از ستون‌های منبع داده همان جدول
+ * باشد. بیرون از جدول، `row.*` اصلاً معنا ندارد و خطاست.
  */
 export function validateTemplate(
   template: TemplateV1,
@@ -86,8 +93,12 @@ export function validateTemplate(
   for (const block of allBlocks(template)) {
     const at = `block.${block.id}`;
 
+    /**
+     * شرط نمایش یک **جدول** در دامنه خودِ جدول نیست: جدول تصمیم می‌گیرد که آیا
+     * اصلاً رندر شود، پیش از آنکه ردیفی وجود داشته باشد. پس `row.*` در آن مجاز نیست.
+     */
     if (block.visibleWhen) {
-      checkCondition(block.visibleWhen, `${at}.visibleWhen`, dictionary, problems);
+      checkCondition(block.visibleWhen, `${at}.visibleWhen`, dictionary, null, problems);
     }
 
     switch (block.type) {
@@ -100,11 +111,12 @@ export function validateTemplate(
         break;
 
       case 'variable':
-        checkExpression(block.value, `${at}.value`, dictionary, problems);
+        checkExpression(block.value, `${at}.value`, dictionary, null, problems);
         break;
 
       case 'table': {
-        if (!dictionary.allowedCollections.has(block.dataSource)) {
+        const rowSource = dictionary.collections.has(block.dataSource) ? block.dataSource : null;
+        if (rowSource === null) {
           problems.push({
             path: `${at}.dataSource`,
             message: `منبع داده «${block.dataSource}» در فهرست داده نیست`,
@@ -121,15 +133,28 @@ export function validateTemplate(
           }
           keys.add(column.key);
 
-          checkExpression(column.value, `${at}.columns.${column.key}`, dictionary, problems);
+          checkExpression(
+            column.value,
+            `${at}.columns.${column.key}`,
+            dictionary,
+            rowSource,
+            problems,
+          );
           for (const line of column.multiline?.lines ?? []) {
-            checkExpression(line.value, `${at}.columns.${column.key}.line`, dictionary, problems);
+            checkExpression(
+              line.value,
+              `${at}.columns.${column.key}.line`,
+              dictionary,
+              rowSource,
+              problems,
+            );
           }
           if (column.visibleWhen) {
             checkCondition(
               column.visibleWhen,
               `${at}.columns.${column.key}.visibleWhen`,
               dictionary,
+              rowSource,
               problems,
             );
           }
@@ -175,35 +200,69 @@ function checkExpression(
   expression: Expression,
   at: string,
   dictionary: TemplateValidationInput,
+  rowSource: string | null,
   problems: TemplateProblem[],
 ): void {
   if (expressionDepth(expression) > MAX_EXPRESSION_DEPTH) {
     problems.push({ path: at, message: `عمق عبارت از ${MAX_EXPRESSION_DEPTH} بیشتر است` });
   }
-  checkPaths(collectVariablePaths(expression), at, dictionary, problems);
+  walkExpressionPaths(expression, rowSource, (path, scope) =>
+    checkPath(path, scope, at, dictionary, problems),
+  );
 }
 
 function checkCondition(
   condition: Condition,
   at: string,
   dictionary: TemplateValidationInput,
+  rowSource: string | null,
   problems: TemplateProblem[],
 ): void {
   if (conditionDepth(condition) > MAX_EXPRESSION_DEPTH) {
     problems.push({ path: at, message: `عمق شرط از ${MAX_EXPRESSION_DEPTH} بیشتر است` });
   }
-  checkPaths(collectConditionPaths(condition), at, dictionary, problems);
+  walkConditionPaths(condition, rowSource, (path, scope) =>
+    checkPath(path, scope, at, dictionary, problems),
+  );
 }
 
-function checkPaths(
-  paths: ReadonlySet<string>,
+/**
+ * بررسی یک مسیر در دامنه‌اش.
+ *
+ * `rowSource === null` یعنی «اینجا ردیفی در دامنه نیست»، پس `row.*` خطاست. وقتی
+ * دامنه‌ای هست، نام ستون باید در همان مجموعه وجود داشته باشد — یک غلط تایپی در نام
+ * ستون نباید به سلول خالی تبدیل شود.
+ */
+function checkPath(
+  path: string,
+  rowSource: string | null,
   at: string,
   dictionary: TemplateValidationInput,
   problems: TemplateProblem[],
 ): void {
-  for (const path of paths) {
-    if (path.startsWith('row.')) continue;
-    if (dictionary.allowedValuePaths.has(path) || dictionary.allowedCollections.has(path)) continue;
-    problems.push({ path: at, message: `مسیر داده «${path}» مجاز نیست` });
+  if (path.startsWith('row.')) {
+    if (rowSource === null) {
+      problems.push({
+        path: at,
+        message: `مسیر «${path}» دامنه ردیف ندارد؛ فقط داخل ستون جدول یا تابع تجمیعی معنا دارد`,
+      });
+      return;
+    }
+
+    const fields = dictionary.collections.get(rowSource);
+    // منبع داده ناشناخته، خطای جداگانه خودش را دارد؛ اینجا دوباره گزارش نمی‌شود.
+    if (!fields) return;
+
+    const field = path.slice('row.'.length);
+    if (!fields.has(field)) {
+      problems.push({
+        path: at,
+        message: `ستون «${field}» در منبع داده «${rowSource}» وجود ندارد`,
+      });
+    }
+    return;
   }
+
+  if (dictionary.allowedValuePaths.has(path) || dictionary.collections.has(path)) return;
+  problems.push({ path: at, message: `مسیر داده «${path}» مجاز نیست` });
 }

@@ -405,6 +405,11 @@ erDiagram
   vendors ||--o{ document_vendor_product_types : "فروشنده"
   product_types ||--o{ document_vendor_product_types : "نوع"
 
+  report_types { uuid id PK
+      text key
+      text title_fa
+      text data_scope_key
+      uuid active_definition_id FK }
   report_definitions { uuid id PK
       uuid report_type_id FK
       text name

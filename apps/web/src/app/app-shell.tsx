@@ -8,12 +8,14 @@ import { ChaptersView } from '../features/base-data/chapters-view';
 import { VendorsPage } from '../features/vendors/vendors-page';
 import { DocumentsPage } from '../features/documents/documents-page';
 import { ArchivePage } from '../features/archive/archive-page';
+import { ReportTemplatesPage } from '../features/report-designer/templates-page';
 import { NotificationBell } from '../features/notifications/notification-bell';
 import { ThemeControls } from './theme-controls';
 
 type SectionKey =
   | 'documents'
   | 'archive'
+  | 'report-templates'
   | 'overview'
   | 'lookups'
   | 'chapters'
@@ -30,6 +32,7 @@ interface Section {
 const SECTIONS: readonly Section[] = [
   { key: 'documents', titleFa: 'اسناد', permission: 'document:read' },
   { key: 'archive', titleFa: 'بایگانی', permission: 'archive:read' },
+  { key: 'report-templates', titleFa: 'طراح گزارش', permission: 'report_template:read' },
   { key: 'overview', titleFa: 'وضعیت پروژه' },
   { key: 'lookups', titleFa: 'اطلاعات پایه', permission: 'base_data:read' },
   { key: 'chapters', titleFa: 'فصل‌ها و انواع فاکتور', permission: 'base_data:read' },
@@ -106,6 +109,7 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
           />
         ) : null}
         {section === 'archive' ? <ArchivePage user={user} /> : null}
+        {section === 'report-templates' ? <ReportTemplatesPage user={user} /> : null}
         {section === 'overview' ? <Overview user={user} /> : null}
         {section === 'lookups' ? <LookupManager /> : null}
         {section === 'chapters' ? <ChaptersView /> : null}
@@ -122,13 +126,13 @@ function Overview({ user }: { user: CurrentUser }): JSX.Element {
       <section className="rounded-lg border border-border bg-card p-6">
         <h2 className="text-sm font-semibold">وضعیت پروژه</h2>
         <p className="mt-2 text-sm leading-7 text-muted-foreground">
-          فازهای ۱ تا ۶ تکمیل شده‌اند: زیرساخت و سیستم طراحی، اطلاعات پایه و فروشندگان،
+          فازهای ۱ تا ۷ تکمیل شده‌اند: زیرساخت و سیستم طراحی، اطلاعات پایه و فروشندگان،
           اسناد و فاکتورهای اصلی با محاسبات مالی و snapshot و ثبت نهایی تراکنشی،
           فاکتورهای اختصاصی انشعابات و سوخت با اتصال پویای فصل به نوع فاکتور، بایگانی
-          با فایل امن و بازخورد ناظر و اعلان، و گزارش مالیات با موتور قالب و خروجی چاپ و
-          Excel و PDF. طراح بصری گزارش و گزارش‌گیری عمومی در فازهای بعدی اضافه می‌شوند.
-          هیچ بخشی از این سامانه داده ساختگی نمایش نمی‌دهد؛ همه اعداد از پایگاه داده
-          واقعی می‌آیند.
+          با فایل امن و بازخورد ناظر و اعلان، گزارش مالیات با موتور قالب و خروجی چاپ و
+          Excel و PDF، و طراح بصری قالب گزارش با نسخه‌گذاری و انتشار. گزارش‌گیری عمومی
+          در فازهای بعدی اضافه می‌شود. هیچ بخشی از این سامانه داده ساختگی نمایش نمی‌دهد؛
+          همه اعداد از پایگاه داده واقعی می‌آیند.
         </p>
       </section>
 

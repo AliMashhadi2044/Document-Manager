@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CURRENCY_FORMAT,
+  MAX_EXPRESSION_DEPTH,
+  MAX_TEMPLATE_NODES,
+  countTemplateNodes,
   JALALI_FORMAT,
   TEXT_FORMAT,
   escapeHtml,
@@ -167,6 +170,22 @@ describe('ارزیاب عبارت', () => {
   });
 });
 
+/**
+ * ستون‌های منبع داده `document.vendorAggregates`، همان‌طور که Data Dictionary لایه API
+ * می‌دهد. اعتبارسنجی مسیرهای `row.*` به همین فهرست تکیه می‌کند.
+ */
+const VENDOR_AGGREGATE_FIELDS = new Set([
+  'index',
+  'vendorId',
+  'vendorName',
+  'vendorIdentifier',
+  'goodsAmount',
+  'discount',
+  'net',
+  'tax',
+  'total',
+]);
+
 const MINIMAL_TEMPLATE: TemplateV1 = templateV1Schema.parse({
   schemaVersion: 1,
   reportTypeKey: 'TAX_REPORT',
@@ -274,7 +293,7 @@ describe('چیدمان گزارش', () => {
     const report = layoutReport(MINIMAL_TEMPLATE, datasetOf(rows));
     const table = report.body[0];
     if (table?.kind !== 'table') throw new Error('جدول ساخته نشد');
-    expect(table.fildlerRowCount).toBe(2);
+    expect(table.fillerRowCount).toBe(2);
   });
 
   it('امضاکننده ثبت‌نشده، کادر امضا را حذف نمی‌کند', () => {
@@ -343,7 +362,7 @@ describe('رندر HTML', () => {
 describe('اعتبارسنجی قالب در برابر فهرست داده', () => {
   const dictionary = {
     allowedValuePaths: new Set(['document.title', 'organization.name']),
-    allowedCollections: new Set(['document.vendorAggregates']),
+    collections: new Map([['document.vendorAggregates', VENDOR_AGGREGATE_FIELDS]]),
   };
 
   it('قالب درست مشکلی ندارد', () => {
@@ -391,6 +410,181 @@ describe('اعتبارسنجی قالب در برابر فهرست داده', ()
     const result = templateV1Schema.safeParse({ ...MINIMAL_TEMPLATE, schemaVersion: 2 });
     expect(result.success).toBe(false);
   });
+
+  /**
+   * این سه تست، حفره‌ای را می‌پوشانند که تا فاز ۷ باز بود: مسیرهای `row.*` **اصلاً**
+   * بررسی نمی‌شدند. یعنی یک غلط تایپی در نام ستون (`row.totl`) از اعتبارسنجی رد
+   * می‌شد و در گزارش مالی به‌جای خطا، یک سلول **خالی** می‌نشست.
+   */
+  it('مسیر ردیف به ستون ناموجود منبع داده رد می‌شود', () => {
+    const bad = templateV1Schema.parse({
+      ...MINIMAL_TEMPLATE,
+      body: [
+        {
+          ...MINIMAL_TEMPLATE.body[0],
+          columns: [
+            {
+              key: 'ghost',
+              titleFa: 'ستون خیالی',
+              width: { unit: 'mm', value: 20 },
+              align: 'end',
+              value: { k: 'var', path: 'row.secretSalary' },
+              format: { kind: 'currency', emptyText: '۰' },
+            },
+          ],
+        },
+      ],
+    });
+
+    const problems = validateTemplate(bad, dictionary);
+    expect(problems.map((item) => item.message).join(' ')).toContain('secretSalary');
+  });
+
+  it('مسیر ردیف بیرون از جدول رد می‌شود', () => {
+    const bad = templateV1Schema.parse({
+      ...MINIMAL_TEMPLATE,
+      header: {
+        repeatOnEveryPage: true,
+        blocks: [
+          {
+            id: 'v',
+            type: 'variable',
+            value: { k: 'var', path: 'row.total' },
+            format: { kind: 'currency', emptyText: '۰' },
+          },
+        ],
+      },
+    });
+
+    const problems = validateTemplate(bad, dictionary);
+    expect(problems.map((item) => item.message).join(' ')).toContain('دامنه ردیف ندارد');
+  });
+
+  /**
+   * و همان مسیر، داخل یک تابع تجمیعی، **معتبر** است.
+   *
+   * گره `agg` دامنه `row.*` را به مجموعه‌ای که روی آن تجمیع می‌شود عوض می‌کند — دقیقاً
+   * همان کاری که ارزیاب هنگام اجرا می‌کند. اگر اعتبارسنجی این را نمی‌دانست، یک جمعِ
+   * درست و قابل‌اجرا را رد می‌کرد.
+   */
+  it('مسیر ردیف داخل تابع تجمیعی، بیرون از جدول هم معتبر است', () => {
+    const good = templateV1Schema.parse({
+      ...MINIMAL_TEMPLATE,
+      header: {
+        repeatOnEveryPage: true,
+        blocks: [
+          {
+            id: 'sum',
+            type: 'variable',
+            labelFa: 'جمع کل',
+            value: {
+              k: 'agg',
+              fn: 'sum',
+              over: 'document.vendorAggregates',
+              of: { k: 'var', path: 'row.total' },
+            },
+            format: { kind: 'currency', emptyText: '۰' },
+          },
+        ],
+      },
+    });
+
+    expect(validateTemplate(good, dictionary)).toEqual([]);
+  });
+
+  it('مسیر ردیفِ ناموجود داخل تابع تجمیعی هم رد می‌شود', () => {
+    const bad = templateV1Schema.parse({
+      ...MINIMAL_TEMPLATE,
+      header: {
+        repeatOnEveryPage: true,
+        blocks: [
+          {
+            id: 'sum',
+            type: 'variable',
+            value: {
+              k: 'agg',
+              fn: 'sum',
+              over: 'document.vendorAggregates',
+              of: { k: 'var', path: 'row.bonusPool' },
+            },
+            format: { kind: 'currency', emptyText: '۰' },
+          },
+        ],
+      },
+    });
+
+    expect(validateTemplate(bad, dictionary).map((item) => item.message).join(' ')).toContain(
+      'bonusPool',
+    );
+  });
+
+  it('شرط نمایش ستون هم در دامنه همان جدول سنجیده می‌شود', () => {
+    const bad = templateV1Schema.parse({
+      ...MINIMAL_TEMPLATE,
+      body: [
+        {
+          ...MINIMAL_TEMPLATE.body[0],
+          columns: [
+            {
+              ...MINIMAL_TEMPLATE.body[0].columns[0],
+              visibleWhen: { k: 'empty', of: { k: 'var', path: 'row.nothingHere' } },
+            },
+          ],
+        },
+      ],
+    });
+
+    const problems = validateTemplate(bad, dictionary);
+    expect(problems.map((item) => item.message).join(' ')).toContain('nothingHere');
+  });
+
+  /** معیار پذیرش ۶ فاز ۷: قالبی که از سقف عمق یا تعداد گره بگذرد، ذخیره نمی‌شود. */
+  it('عبارت عمیق‌تر از سقف رد می‌شود', () => {
+    let deep: unknown = { k: 'var', path: 'row.total' };
+    for (let level = 0; level < MAX_EXPRESSION_DEPTH + 5; level += 1) {
+      deep = { k: 'arith', op: 'add', args: [deep, { k: 'const', type: 'money', v: '1' }] };
+    }
+
+    const bad = templateV1Schema.parse({
+      ...MINIMAL_TEMPLATE,
+      body: [
+        {
+          ...MINIMAL_TEMPLATE.body[0],
+          columns: [{ ...MINIMAL_TEMPLATE.body[0].columns[0], value: deep }],
+        },
+      ],
+    });
+
+    const problems = validateTemplate(bad, dictionary);
+    expect(problems.map((item) => item.message).join(' ')).toContain('عمق عبارت');
+  });
+
+  it('قالب با گره‌های بیش از سقف رد می‌شود', () => {
+    // درخت concat با انشعاب ۶ و عمق ۵: حدود ۹۳۰۰ گره، بیشتر از سقف ۵۰۰۰.
+    const wide = (depth: number): unknown =>
+      depth === 0
+        ? { k: 'const', type: 'text', v: 'x' }
+        : { k: 'concat', args: Array.from({ length: 6 }, () => wide(depth - 1)) };
+
+    const bad = templateV1Schema.parse({
+      ...MINIMAL_TEMPLATE,
+      body: [
+        {
+          ...MINIMAL_TEMPLATE.body[0],
+          columns: [
+            {
+              ...MINIMAL_TEMPLATE.body[0].columns[1],
+              value: wide(5),
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(countTemplateNodes(bad)).toBeGreaterThan(MAX_TEMPLATE_NODES);
+    const problems = validateTemplate(bad, dictionary);
+    expect(problems.map((item) => item.message).join(' ')).toContain('گره‌های قالب');
+  });
 });
 
 describe('جا شدن ستون‌ها در عرض صفحه', () => {
@@ -431,7 +625,7 @@ describe('جا شدن ستون‌ها در عرض صفحه', () => {
 
     const problems = validateTemplate(wide, {
       allowedValuePaths: new Set(['document.title']),
-      allowedCollections: new Set(['document.vendorAggregates']),
+      collections: new Map([['document.vendorAggregates', VENDOR_AGGREGATE_FIELDS]]),
     });
 
     expect(problems.map((item) => item.message).join(' ')).toContain('بریده می‌شوند');

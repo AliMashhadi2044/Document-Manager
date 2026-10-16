@@ -33,6 +33,12 @@ export interface DataSourceDefinition {
 const text = (key: string, titleFa: string): FieldDefinition => ({ key, titleFa, type: 'text' });
 const money = (key: string, titleFa: string): FieldDefinition => ({ key, titleFa, type: 'money' });
 
+/** فیلدی که دیدنش مجوز «جزئیات محاسبه فاکتور» می‌خواهد. */
+const calcDetail = (field: FieldDefinition): FieldDefinition => ({
+  ...field,
+  requiredPermissions: ['invoice:read_calc_details'],
+});
+
 export const DATA_SOURCES: readonly DataSourceDefinition[] = [
   {
     key: 'organization',
@@ -109,11 +115,16 @@ export const DATA_SOURCES: readonly DataSourceDefinition[] = [
       text('invoiceKind', 'نوع فاکتور'),
       text('chapterTitle', 'فصل'),
       text('vendorName', 'فروشنده'),
-      money('grossAmount', 'مبلغ کالا'),
-      money('discountAmount', 'تخفیف'),
-      money('netAmount', 'خالص'),
-      money('taxAmount', 'مالیات و عوارض'),
-      money('totalAmount', 'جمع کل'),
+      /*
+       * مبالغ **تک‌تک فاکتورها** جزئیات محاسبه‌اند، نه خلاصه سند: همان چیزی که مجوز
+       * `invoice:read_calc_details` درباره‌اش است. گزارش تجمیعی فروشنده‌ها (که بایگانی
+       * برای چاپ لازمش دارد) این مجوز را نمی‌خواهد، ولی ریزِ هر فاکتور می‌خواهد.
+       */
+      calcDetail(money('grossAmount', 'مبلغ کالا')),
+      calcDetail(money('discountAmount', 'تخفیف')),
+      calcDetail(money('netAmount', 'خالص')),
+      calcDetail(money('taxAmount', 'مالیات و عوارض')),
+      calcDetail(money('totalAmount', 'جمع کل')),
     ],
   },
 ];
@@ -132,9 +143,19 @@ export function allowedValuePaths(): Set<string> {
   return paths;
 }
 
-export function allowedCollectionKeys(): Set<string> {
-  return new Set(
-    DATA_SOURCES.filter((source) => source.cardinality === 'list').map((source) => source.key),
+/**
+ * مجموعه‌های مجاز و نام ستون‌های هر مجموعه.
+ *
+ * نام ستون‌ها هم برمی‌گردد چون اعتبارسنجی قالب، مسیرهای `row.*` را در دامنه جدول
+ * می‌سنجد: `row.total` تنها وقتی معتبر است که منبع داده همان جدول ستونی به نام
+ * `total` داشته باشد.
+ */
+export function collectionFields(): Map<string, Set<string>> {
+  return new Map(
+    DATA_SOURCES.filter((source) => source.cardinality === 'list').map((source) => [
+      source.key,
+      new Set(source.fields.map((field) => field.key)),
+    ]),
   );
 }
 
@@ -152,27 +173,53 @@ export function permissionsForPaths(paths: Iterable<string>): {
   const unknownPaths: string[] = [];
 
   for (const path of paths) {
-    if (path.startsWith('row.')) continue;
+    // مسیر مجموعه، بدون فیلد: مجوز خودِ منبع.
+    const whole = DATA_SOURCE_BY_KEY.get(path);
+    if (whole) {
+      for (const permission of whole.requiredPermissions) permissions.add(permission);
+      continue;
+    }
 
-    const source = DATA_SOURCE_BY_KEY.get(path) ?? findSourceOfValuePath(path);
-    if (!source) {
+    const resolved = resolveFieldPath(path);
+    if (!resolved) {
       unknownPaths.push(path);
       continue;
     }
-    for (const permission of source.requiredPermissions) permissions.add(permission);
+
+    for (const permission of resolved.source.requiredPermissions) permissions.add(permission);
+    /*
+     * مجوز **فیلد**، نه فقط منبع.
+     *
+     * `requiredPermissions` روی فیلد از همان ابتدا در تایپ بود ولی هیچ‌جا خوانده
+     * نمی‌شد — یعنی اعلامش هیچ اثری نداشت. ستونی که جزئیات محاسبه یک فاکتور را نشان
+     * می‌دهد با ستونی که جمع سند را نشان می‌دهد یک سطح دسترسی نمی‌خواهد، و بدون این
+     * حلقه، قالبی که مدیر ساخته بود همان ریز محاسبات را به نقشی نشان می‌داد که حق
+     * دیدنش را ندارد.
+     */
+    for (const permission of resolved.field.requiredPermissions ?? []) {
+      permissions.add(permission);
+    }
   }
 
   return { permissions, unknownPaths };
 }
 
-function findSourceOfValuePath(path: string): DataSourceDefinition | undefined {
+/**
+ * تجزیه یک مسیر `source.field` به منبع و فیلدش.
+ *
+ * برای مجموعه‌ها هم کار می‌کند: لایه اجرا مسیرهای `row.x` را پیش از این بررسی، با
+ * کلید منبع دادهٔ همان جدول **کامل** می‌کند (`document.invoices.taxAmount`)، وگرنه
+ * نمی‌شد فهمید `row.taxAmount` به کدام مجموعه است.
+ */
+function resolveFieldPath(
+  path: string,
+): { source: DataSourceDefinition; field: FieldDefinition } | undefined {
   const lastDot = path.lastIndexOf('.');
   if (lastDot <= 0) return undefined;
 
-  const sourceKey = path.slice(0, lastDot);
-  const fieldKey = path.slice(lastDot + 1);
-  const source = DATA_SOURCE_BY_KEY.get(sourceKey);
-  if (!source || source.cardinality !== 'single') return undefined;
+  const source = DATA_SOURCE_BY_KEY.get(path.slice(0, lastDot));
+  if (!source) return undefined;
 
-  return source.fields.some((field) => field.key === fieldKey) ? source : undefined;
+  const field = source.fields.find((item) => item.key === path.slice(lastDot + 1));
+  return field ? { source, field } : undefined;
 }

@@ -280,6 +280,9 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       // دو مسیر گزارش هم POSTِ فقط-خواننده‌اند: شناسه سند و فروشنده در مسیر می‌آیند و
       // بدنه متد هیچ نوشتنی ندارد.
       'ReportsController.amountDetails',
+      // اعتبارسنجی قالب بدون ذخیره: ورودی‌اش بزرگ است و در URL جا نمی‌شود، ولی چیزی
+      // نمی‌نویسد.
+      'ReportsController.checkTemplate',
       'ReportsController.productTypeSuggestions',
       'VendorsController.checkDuplicate',
       'VendorsController.validateIbanEndpoint',
