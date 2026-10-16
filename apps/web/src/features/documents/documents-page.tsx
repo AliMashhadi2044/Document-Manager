@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DOCUMENT_STATUS_LABELS, DOCUMENT_TYPE_LABELS, type DocumentStatus } from '@dm/shared';
 
 import { Button } from '../../shared/ui/button';
@@ -6,6 +6,7 @@ import { Input } from '../../shared/ui/input';
 import { DataTable, type Column } from '../../shared/ui/data-table';
 import { formatIsoAsJalali, formatMoney, toPersianDigits } from '../../shared/format/money';
 import { useDocuments, type DocumentRow } from './documents.api';
+import { useCurrentUser } from '../auth/auth.api';
 import { DocumentDetailView } from './document-detail';
 import { CreateDocumentForm } from './create-document-form';
 
@@ -18,13 +19,32 @@ const STATUS_STYLES: Record<DocumentStatus, string> = {
   REOPENED: 'bg-warning/10 text-warning',
 };
 
-export function DocumentsPage(): JSX.Element {
+export function DocumentsPage({
+  /** سندی که از بیرون (اعلان) باید باز شود. */
+  openDocumentId = null,
+  onOpenedDocument,
+}: {
+  openDocumentId?: string | null;
+  onOpenedDocument?: () => void;
+} = {}): JSX.Element {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const list = useDocuments(page, search);
+  const { data: user } = useCurrentUser();
+  // بایگان و ناظر سند نمی‌سازند؛ دکمه‌ای که به ۴۰۳ ختم می‌شود، فقط کاربر را سردرگم
+  // می‌کند. مرجع همچنان سرور است، نه این شرط.
+  const canCreate = user?.permissions.includes('document:create') ?? false;
+
+  // درخواست بیرونی یک‌بار اثر می‌گذارد و بعد پاک می‌شود، تا کاربر بتواند برگردد.
+  useEffect(() => {
+    if (openDocumentId !== null) {
+      setSelected(openDocumentId);
+      onOpenedDocument?.();
+    }
+  }, [openDocumentId, onOpenedDocument]);
 
   if (selected) {
     return <DocumentDetailView documentId={selected} onBack={() => setSelected(null)} />;
@@ -126,7 +146,9 @@ export function DocumentsPage(): JSX.Element {
         onPageChange={setPage}
         emptyTitle="سندی ثبت نشده است"
         emptyDescription="برای شروع، اولین سند را ایجاد کنید."
-        emptyAction={<Button onClick={() => setCreating(true)}>ایجاد سند</Button>}
+        emptyAction={
+          canCreate ? <Button onClick={() => setCreating(true)}>ایجاد سند</Button> : undefined
+        }
         toolbar={
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-64 flex-1">
@@ -140,9 +162,11 @@ export function DocumentsPage(): JSX.Element {
                 placeholder="شرح سند یا شماره سند"
               />
             </div>
-            <Button onClick={() => setCreating((value) => !value)}>
-              {creating ? 'بستن فرم' : 'ایجاد سند'}
-            </Button>
+            {canCreate ? (
+              <Button onClick={() => setCreating((value) => !value)}>
+                {creating ? 'بستن فرم' : 'ایجاد سند'}
+              </Button>
+            ) : null}
           </div>
         }
       />

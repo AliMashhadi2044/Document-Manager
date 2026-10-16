@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "verify:phase5": "node scripts/verify-phase5.mjs",
     "docker:up": "docker compose -f infrastructure/docker-compose.dev.yml up -d",
     "docker:down": "docker compose -f infrastructure/docker-compose.dev.yml down",
     "docker:logs": "docker compose -f infrastructure/docker-compose.dev.yml logs -f"

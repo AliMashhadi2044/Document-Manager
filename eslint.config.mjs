@@ -178,7 +178,7 @@ export default tseslint.config(
 
   /** اسکریپت‌های seed و ابزار: چاپ در خروجی بخشی از کارشان است. */
   {
-    files: ['apps/api/prisma/**/*.ts', 'packages/*/scripts/**/*.mjs'],
+    files: ['apps/api/prisma/**/*.ts', 'packages/*/scripts/**/*.mjs', 'scripts/**/*.mjs'],
     rules: {
       'no-console': 'off',
       // متغیرهای سراسری Node در این اسکریپت‌ها طبیعی‌اند؛ تایپ‌چک مرجع نبودِ متغیر است.

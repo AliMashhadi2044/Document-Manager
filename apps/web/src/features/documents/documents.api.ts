@@ -186,3 +186,48 @@ export function useReopenDocument() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
   });
 }
+
+/**
+ * ارجاع سند به بایگانی — پایان کار کارپردازی روی سند.
+ *
+ * مثل ثبت نهایی، گذار وضعیت است و کلید idempotency لازم دارد تا تلاش دوباره شبکه دو
+ * گذار ثبت نکند.
+ */
+export function useSendToArchive() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<DocumentDetail>(`/documents/${id}/send-to-archive`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['documents'] });
+      void queryClient.invalidateQueries({ queryKey: ['archive'] });
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+/**
+ * ارجاع سند برای اصلاح — اقدام ناظر، با ثبت علت الزامی.
+ *
+ * مجوزش `feedback:create` است، یعنی همان کسی که حق ثبت ایراد دارد؛ کارپردازی سند
+ * خودش را برگشت نمی‌زند.
+ */
+export function useSendBackForRevision() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiFetch<DocumentDetail>(`/documents/${id}/send-back`, {
+        method: 'POST',
+        json: { reason },
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['documents'] });
+      void queryClient.invalidateQueries({ queryKey: ['archive'] });
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}

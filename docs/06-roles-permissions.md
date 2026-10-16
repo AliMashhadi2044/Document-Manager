@@ -37,7 +37,8 @@
 | `feedback:read` | مشاهده بازخوردها |
 | `feedback:create` | ثبت بازخورد (ناظر) |
 | `feedback:reply` | پاسخ به بازخورد (کارپردازی) |
-| `feedback:resolve` | تغییر وضعیت رسیدگی |
+| `feedback:resolve` | تغییر وضعیت رسیدگی (بستن) |
+| `feedback:reopen` | بازگشایی بازخورد بسته‌شده |
 | `report:run` | اجرای گزارش و تولید خروجی |
 | `report:export` | دانلود Excel و PDF |
 | `report_template:read` / `report_template:write` / `report_template:publish` | طراح قالب |
@@ -79,7 +80,8 @@
 | `feedback:read` | ● | ● | ● | |
 | `feedback:create` | ○ | ○ | ● | **فقط ناظر** |
 | `feedback:reply` | ● | ○ | ○ | |
-| `feedback:resolve` | ● | ○ | ○ | |
+| `feedback:resolve` | ● | ○ | ○ | بستن: تأیید رسیدگی یا رد |
+| `feedback:reopen` | ○ | ○ | ● | **فقط ناظر** — تضمین اثرِ نظارت |
 | `report:run` | ● | ◐ | ◐ | بایگانی و ناظر: فقط گزارش‌های نشان‌دار «مجاز برای مشاهده» |
 | `report:export` | ● | ◐ | ◐ | همان محدودیت بالا |
 | `report_template:*` | ● | ○ | ○ | |

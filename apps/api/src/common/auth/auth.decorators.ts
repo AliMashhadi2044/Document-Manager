@@ -4,6 +4,7 @@ import type { Permission } from '@dm/shared';
 import { AppError } from '../errors/app-error';
 
 export const PERMISSIONS_KEY = 'required_permissions';
+export const ANY_PERMISSIONS_KEY = 'required_any_permissions';
 export const PUBLIC_KEY = 'is_public';
 export const READ_ONLY_KEY = 'is_read_only_route';
 
@@ -16,6 +17,20 @@ export const READ_ONLY_KEY = 'is_read_only_route';
  */
 export const RequirePermission = (...permissions: Permission[]) =>
   SetMetadata(PERMISSIONS_KEY, permissions);
+
+/**
+ * مسیری که با **هر یک** از چند مجوز قابل صدا زدن است.
+ *
+ * `@RequirePermission(a, b)` یعنی «هم a و هم b»؛ این یکی یعنی «a یا b». تنها جایی لازم
+ * شد که دو نقشِ متفاوت دو گذارِ متفاوت از یک منبع را انجام می‌دهند: تغییر وضعیت
+ * بازخورد با `feedback:resolve` (کارپردازی) یا `feedback:reopen` (ناظر). اینکه کدام
+ * گذار برای کدام مجوز باز است، در سرویس و بر اساس جدول گذارها بررسی می‌شود؛ این
+ * نشان فقط دروازه اول است و نگهبان همچنان کسی را که هیچ‌کدام را ندارد رد می‌کند.
+ *
+ * فهرست خالی یعنی «هیچ‌کس» و همان رفتار بسته را دارد، نه باز.
+ */
+export const RequireAnyPermission = (...permissions: Permission[]) =>
+  SetMetadata(ANY_PERMISSIONS_KEY, permissions);
 
 /**
  * مسیر فقط نیازمند **ورود**، بدون مجوز خاص (مثل خروج از همه دستگاه‌ها).

@@ -44,6 +44,7 @@ export const PERMISSIONS = [
   'feedback:create',
   'feedback:reply',
   'feedback:resolve',
+  'feedback:reopen',
 
   'report:run',
   'report:export',
@@ -99,6 +100,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'feedback:create': 'ثبت بازخورد',
   'feedback:reply': 'پاسخ به بازخورد',
   'feedback:resolve': 'تغییر وضعیت رسیدگی',
+  'feedback:reopen': 'بازگشایی بازخورد',
 
   'report:run': 'اجرای گزارش',
   'report:export': 'دانلود خروجی',
@@ -129,6 +131,13 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
  * نکته‌های عمدی (تصمیم D9 و §۶ پرامپت):
  *  - کارپردازی `archive:write` و `attachment:upload` **ندارد** — تفکیک وظایف بایگانی.
  *  - کارپردازی `feedback:create` **ندارد** — ثبت بازخورد کار ناظر است.
+ *  - `feedback:resolve` نزد کارپردازی است (او رسیدگی را تأیید می‌کند) ولی
+ *    `feedback:reopen` نزد **ناظر**. این تقسیم عمدی است: شمارنده بازخورد باز، دروازه
+ *    نهایی شدن بایگانی است؛ اگر بستنِ بازخورد تنها در دست کارپردازی بود، او می‌توانست
+ *    ایراد ناظر را خودش ببندد و سند را بایگانی کند — یعنی نظارت بی‌اثر. ناظر همیشه
+ *    می‌تواند بازخورد بسته‌شده را بازگشایی کند و دروازه دوباره بسته می‌شود.
+ *    (نقصی که در آزمون زنده فاز ۵ پیدا شد: گردش کار مستند دو گذارِ «بازگشایی توسط
+ *    ناظر» داشت که هیچ نقشی مجوزش را نداشت.)
  *  - مدیریت کاربران و نقش‌ها به نقش جدای «مدیر سامانه» داده شده است.
  */
 export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
@@ -192,6 +201,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'attachment:read',
     'feedback:read',
     'feedback:create',
+    'feedback:reopen',
     'report:run',
     'report:export',
   ],

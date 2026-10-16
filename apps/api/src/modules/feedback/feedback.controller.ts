@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import {
   CurrentUser,
+  RequireAnyPermission,
   RequirePermission,
   type AuthenticatedUser,
 } from '../../common/auth/auth.decorators';
@@ -121,7 +122,14 @@ export class FeedbackController {
     return this.feedback.reply(id, body.body, user);
   }
 
-  @RequirePermission('feedback:resolve')
+  /**
+   * تغییر وضعیت رسیدگی.
+   *
+   * دو نقش دو کار متفاوت می‌کنند: کارپردازی می‌بندد (`feedback:resolve`) و ناظر
+   * بازگشایی می‌کند (`feedback:reopen`). پس دروازه مسیر «یکی از این دو» است و
+   * جدول گذارها در سرویس تعیین می‌کند هر مجوز کدام گذار را باز می‌کند.
+   */
+  @RequireAnyPermission('feedback:resolve', 'feedback:reopen')
   @Patch('feedbacks/:id/status')
   @ApiOperation({ summary: 'تغییر وضعیت رسیدگی — با ثبت در تاریخچه' })
   async changeStatus(

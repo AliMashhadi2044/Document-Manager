@@ -3,7 +3,12 @@ import { Reflector } from '@nestjs/core';
 import type { Permission } from '@dm/shared';
 
 import { AppError } from '../errors/app-error';
-import { PERMISSIONS_KEY, PUBLIC_KEY, type AuthenticatedUser } from './auth.decorators';
+import {
+  ANY_PERMISSIONS_KEY,
+  PERMISSIONS_KEY,
+  PUBLIC_KEY,
+  type AuthenticatedUser,
+} from './auth.decorators';
 
 /**
  * لایه ۲ — مجوز.
@@ -28,11 +33,16 @@ export class PermissionGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (required === undefined) {
+    const requiredAny = this.reflector.getAllAndOverride<Permission[] | undefined>(
+      ANY_PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (required === undefined && requiredAny === undefined) {
       throw AppError.forbidden('این مسیر مجوز اعلام‌شده ندارد');
     }
 
-    if (required.length === 0) return true;
+    if (required?.length === 0 && requiredAny === undefined) return true;
 
     const request = context.switchToHttp().getRequest<{ user?: AuthenticatedUser }>();
     const user = request.user;
@@ -40,8 +50,13 @@ export class PermissionGuard implements CanActivate {
       throw AppError.unauthorized();
     }
 
-    const granted = required.every((permission) => user.permissions.includes(permission));
-    if (!granted) {
+    const hasAll = (required ?? []).every((permission) => user.permissions.includes(permission));
+    // `undefined` یعنی این نشان روی مسیر نیست؛ فهرست خالی یعنی «هیچ‌کس».
+    const hasAny =
+      requiredAny === undefined ||
+      requiredAny.some((permission) => user.permissions.includes(permission));
+
+    if (!hasAll || !hasAny) {
       throw AppError.forbidden();
     }
 

@@ -206,6 +206,40 @@ export function validateUpload(
 }
 
 /**
+ * بازگرداندن نام فایل multipart به UTF-8.
+ *
+ * چرا لازم است: در `multipart/form-data` نام فایل بدون اعلام charset می‌آید و busboy
+ * (زیر multer) هر بایت را یک نویسه latin1 می‌خواند. پس «اسکن سند.pdf» به شکل
+ * «Ø§Ø³Ú©Ù† Ø³Ù†Ø¯.pdf» به برنامه می‌رسد و همان‌طور هم ذخیره و در هدر دانلود
+ * برگردانده می‌شود.
+ *
+ * این نقص در آزمون زنده فاز ۵ پیدا شد؛ تست‌های واحد آن را ندیده بودند چون همه نام
+ * فایل‌های آزمون ASCII بودند.
+ *
+ * روش: نویسه‌ها را به بایت برمی‌گردانیم و با UTF-8 سخت‌گیر رمزگشایی می‌کنیم. اگر نام
+ * واقعاً latin1 بوده (یا از قبل درست رمزگشایی شده)، همان مقدار اصلی برگردانده می‌شود —
+ * پس این تابع هرگز نام سالم را خراب نمی‌کند.
+ */
+export function decodeMultipartFilename(raw: string): string {
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) {
+    const code = raw.charCodeAt(index);
+    // نویسه بالاتر از یک بایت یعنی رشته قبلاً درست رمزگشایی شده است.
+    if (code > 0xff) return raw;
+    bytes[index] = code;
+  }
+
+  try {
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    // رشته‌ای که هیچ بایت چندنویسه‌ای ندارد، با رمزگشایی عوض نمی‌شود؛ بازگرداندن
+    // همان مقدار اصلی، نیت را روشن‌تر می‌کند.
+    return decoded;
+  } catch {
+    return raw;
+  }
+}
+
+/**
  * نام امن برای هدر دانلود.
  *
  * نویسه‌های کنترلی، نقل‌قول، جداکننده مسیر و نویسه‌های دوجهته حذف می‌شوند تا نه هدر

@@ -26,10 +26,15 @@ import {
   useFinalizeDocument,
   useReopenDocument,
   useRevisions,
+  useSendBackForRevision,
+  useSendToArchive,
   type InvoiceRow,
 } from './documents.api';
 import { CreateInvoiceForm } from '../invoices/create-invoice-form';
 import { useDeleteInvoice } from '../invoices/invoices.api';
+import { AttachmentsPanel } from '../files/attachments-panel';
+import { FeedbackPanel } from '../feedback/feedback-panel';
+import { useCurrentUser } from '../auth/auth.api';
 
 export function DocumentDetailView({
   documentId,
@@ -42,9 +47,14 @@ export function DocumentDetailView({
   const revisions = useRevisions(documentId);
   const finalize = useFinalizeDocument();
   const reopen = useReopenDocument();
+  const sendToArchive = useSendToArchive();
+  const sendBack = useSendBackForRevision();
+  const { data: user } = useCurrentUser();
 
   const [reason, setReason] = useState('');
   const [showReopen, setShowReopen] = useState(false);
+  const [showSendBack, setShowSendBack] = useState(false);
+  const [sendBackReason, setSendBackReason] = useState('');
   const [showAddInvoice, setShowAddInvoice] = useState(false);
   const removeInvoice = useDeleteInvoice();
   const [notice, setNotice] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
@@ -55,6 +65,14 @@ export function DocumentDetailView({
   }
 
   const editable = data.status === 'DRAFT' || data.status === 'REOPENED';
+  const permissions = user?.permissions ?? [];
+  // «ارجاع به بایگانی» فقط روی سند ثبت‌شده معنا دارد و فقط کار کارپردازی است.
+  const canSendToArchive =
+    data.status === 'FINALIZED' && permissions.includes('document:send_to_archive');
+  // «ارجاع برای اصلاح» کار ناظر است؛ مجوزش همان مجوز ثبت بازخورد است.
+  const canSendBack =
+    permissions.includes('feedback:create') &&
+    (data.status === 'FINALIZED' || data.status === 'PENDING_ARCHIVE' || data.status === 'ARCHIVED');
 
   return (
     <div className="space-y-6">
@@ -67,6 +85,39 @@ export function DocumentDetailView({
           {editable ? (
             <Button variant="secondary" onClick={() => setShowAddInvoice((value) => !value)}>
               افزودن فاکتور
+            </Button>
+          ) : null}
+          {canSendToArchive ? (
+            <Button
+              variant="secondary"
+              loading={sendToArchive.isPending}
+              onClick={() => {
+                setNotice(null);
+                sendToArchive.mutate(documentId, {
+                  onSuccess: () => {
+                    setNotice({
+                      kind: 'success',
+                      text: 'سند به بایگانی ارجاع شد. ثبت شماره و تاریخ سند و بارگذاری اسکن، کار بایگانی است.',
+                    });
+                    void refetch();
+                  },
+                  onError: (error) =>
+                    setNotice({
+                      kind: 'error',
+                      text:
+                        error instanceof ApiError
+                          ? formatServerMessage(error.message)
+                          : 'ارجاع به بایگانی ناموفق بود',
+                    }),
+                });
+              }}
+            >
+              ارجاع به بایگانی
+            </Button>
+          ) : null}
+          {canSendBack ? (
+            <Button variant="secondary" onClick={() => setShowSendBack((value) => !value)}>
+              ارجاع برای اصلاح
             </Button>
           ) : null}
           {editable ? (
@@ -95,11 +146,11 @@ export function DocumentDetailView({
             >
               ثبت نهایی
             </Button>
-          ) : (
+          ) : permissions.includes('document:reopen') ? (
             <Button variant="secondary" onClick={() => setShowReopen((value) => !value)}>
               بازگشایی سند
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -159,6 +210,54 @@ export function DocumentDetailView({
               }}
             >
               بازگشایی
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      {showSendBack && canSendBack ? (
+        <section className="rounded-lg border border-border bg-card p-5">
+          <h3 className="text-sm font-semibold">ارجاع سند برای اصلاح</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            ثبت علت الزامی است و برای کارپردازی اعلان ساخته می‌شود. وضعیت سند به «نیازمند
+            اصلاح» می‌رود و مبالغ دست‌نخورده می‌مانند.
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <div className="min-w-72 flex-1">
+              <Input
+                label="علت ارجاع"
+                required
+                value={sendBackReason}
+                onChange={(event) => setSendBackReason(event.target.value)}
+              />
+            </div>
+            <Button
+              loading={sendBack.isPending}
+              disabled={!sendBackReason.trim()}
+              onClick={() => {
+                setNotice(null);
+                sendBack.mutate(
+                  { id: documentId, reason: sendBackReason.trim() },
+                  {
+                    onSuccess: () => {
+                      setSendBackReason('');
+                      setShowSendBack(false);
+                      setNotice({ kind: 'success', text: 'سند برای اصلاح ارجاع شد.' });
+                      void refetch();
+                    },
+                    onError: (error) =>
+                      setNotice({
+                        kind: 'error',
+                        text:
+                          error instanceof ApiError
+                            ? formatServerMessage(error.message)
+                            : 'ارجاع برای اصلاح ناموفق بود',
+                      }),
+                  },
+                );
+              }}
+            >
+              ارجاع برای اصلاح
             </Button>
           </div>
         </section>
@@ -265,6 +364,18 @@ export function DocumentDetailView({
           <Field label="جمع کل" value={formatMoney(data.totalAmount)} strong />
         </dl>
       </section>
+
+      {permissions.includes('attachment:read') ? (
+        <AttachmentsPanel
+          documentId={documentId}
+          canUpload={permissions.includes('attachment:upload') && data.status !== 'ARCHIVED'}
+          canDelete={permissions.includes('attachment:delete') && data.status !== 'ARCHIVED'}
+        />
+      ) : null}
+
+      {user && permissions.includes('feedback:read') && data.status !== 'DRAFT' ? (
+        <FeedbackPanel documentId={documentId} user={user} />
+      ) : null}
 
       {revisions.data && revisions.data.length > 0 ? (
         <section className="rounded-lg border border-border bg-card p-6">

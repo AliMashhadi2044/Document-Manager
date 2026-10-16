@@ -13,7 +13,13 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { DEFAULT_UPLOAD_LIMITS, UPLOAD_TYPES, safeDownloadFilename, type UploadTypeKey } from '@dm/shared';
+import {
+  DEFAULT_UPLOAD_LIMITS,
+  UPLOAD_TYPES,
+  decodeMultipartFilename,
+  safeDownloadFilename,
+  type UploadTypeKey,
+} from '@dm/shared';
 import type { Response } from 'express';
 
 import {
@@ -82,12 +88,20 @@ export class AttachmentsController {
 
     const attachmentKind = kind === 'OTHER' ? 'OTHER' : 'SCAN';
 
+    // نام فایل را پیش از هر کاری به UTF-8 برمی‌گردانیم: multer آن را latin1 می‌خواند و
+    // نام فارسی به شکل مخدوش به اینجا می‌رسد. یک‌جا اصلاح می‌شود تا هم نامِ ذخیره‌شده
+    // و هم پیام خطای همان فایل درست باشند.
+    const normalized = files.map((file) => ({
+      ...file,
+      originalname: decodeMultipartFilename(file.originalname),
+    }));
+
     // هر فایل مستقل پردازش می‌شود: یک فایل نامعتبر، بقیه را دور نمی‌ریزد، ولی
     // نتیجه‌اش هم پنهان نمی‌ماند.
     const uploaded = [];
     const failed = [];
 
-    for (const file of files) {
+    for (const file of normalized) {
       try {
         const attachment = await this.attachments.upload(documentId, file, attachmentKind, user);
         uploaded.push(attachment);

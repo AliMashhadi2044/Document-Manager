@@ -6,6 +6,7 @@ import {
   UPLOAD_ACCEPT_ATTRIBUTE,
   UPLOAD_TYPE_KEYS,
   UPLOAD_TYPES,
+  decodeMultipartFilename,
   detectUploadType,
   fileExtension,
   safeDownloadFilename,
@@ -163,5 +164,38 @@ describe('فهرست انواع مجاز', () => {
     expect(fileExtension('noext')).toBe('');
     expect(fileExtension('.hidden')).toBe('');
     expect(fileExtension('trailing.')).toBe('');
+  });
+});
+
+describe('رمزگشایی نام فایل multipart', () => {
+  /** همان بلایی که busboy سر نام فارسی می‌آورد: هر بایت، یک نویسه latin1. */
+  const asLatin1 = (value: string): string =>
+    [...new TextEncoder().encode(value)].map((byte) => String.fromCharCode(byte)).join('');
+
+  it('نام فارسی مخدوش را به شکل درست برمی‌گرداند', () => {
+    // این دقیقاً نقصی است که در آزمون زنده فاز ۵ دیده شد.
+    expect(decodeMultipartFilename(asLatin1('اسکن سند.pdf'))).toBe('اسکن سند.pdf');
+    expect(decodeMultipartFilename(asLatin1('صورتحساب شهریور ۱۴۰۵.pdf'))).toBe(
+      'صورتحساب شهریور ۱۴۰۵.pdf',
+    );
+  });
+
+  it('نام ASCII را دست‌نخورده می‌گذارد', () => {
+    expect(decodeMultipartFilename('invoice-2026.pdf')).toBe('invoice-2026.pdf');
+  });
+
+  it('نامی که از قبل درست رمزگشایی شده را خراب نمی‌کند', () => {
+    expect(decodeMultipartFilename('اسکن سند.pdf')).toBe('اسکن سند.pdf');
+  });
+
+  it('رشته‌ای که UTF-8 معتبر نیست، همان‌طور که بود برمی‌گردد', () => {
+    // 0xFF در UTF-8 هرگز بایت آغازین معتبر نیست؛ پس باید نام اصلی بماند.
+    const invalid = `file${String.fromCharCode(0xff)}.pdf`;
+    expect(decodeMultipartFilename(invalid)).toBe(invalid);
+  });
+
+  it('با پاک‌سازی نام دانلود با هم کار می‌کنند', () => {
+    const raw = asLatin1('اسکن سند.pdf');
+    expect(safeDownloadFilename(decodeMultipartFilename(raw))).toBe('اسکن سند.pdf');
   });
 });

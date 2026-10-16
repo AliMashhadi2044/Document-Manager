@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
 import { PERMISSIONS, type Permission } from '@dm/shared';
 
-import { PERMISSIONS_KEY, PUBLIC_KEY } from './auth.decorators';
+import { ANY_PERMISSIONS_KEY, PERMISSIONS_KEY, PUBLIC_KEY } from './auth.decorators';
 import { AppModule } from '../../app.module';
 
 /**
@@ -58,6 +58,8 @@ interface RouteInfo {
   readonly method: string;
   readonly isPublic: boolean;
   readonly permissions: Permission[] | undefined;
+  /** مجوزهای «یکی از این‌ها» — نشان `@RequireAnyPermission`. */
+  readonly anyPermissions: Permission[] | undefined;
 }
 
 function collectRoutes(): RouteInfo[] {
@@ -83,6 +85,9 @@ function collectRoutes(): RouteInfo[] {
           Reflect.getMetadata(PUBLIC_KEY, handler) === true ||
           Reflect.getMetadata(PUBLIC_KEY, controller) === true,
         permissions: Reflect.getMetadata(PERMISSIONS_KEY, handler) as Permission[] | undefined,
+        anyPermissions: Reflect.getMetadata(ANY_PERMISSIONS_KEY, handler) as
+          | Permission[]
+          | undefined,
       });
     }
   }
@@ -100,7 +105,10 @@ describe('پوشش مجوز endpointها', () => {
   });
 
   it('هر مسیر یا مجوز اعلام‌شده دارد یا صریحاً عمومی است', () => {
-    const undeclared = routes.filter((route) => !route.isPublic && route.permissions === undefined);
+    const undeclared = routes.filter(
+      (route) =>
+        !route.isPublic && route.permissions === undefined && route.anyPermissions === undefined,
+    );
 
     expect(
       undeclared.map((route) => `${route.controller}.${route.method}`),
@@ -112,7 +120,7 @@ describe('پوشش مجوز endpointها', () => {
     const invalid: string[] = [];
 
     for (const route of routes) {
-      for (const permission of route.permissions ?? []) {
+      for (const permission of [...(route.permissions ?? []), ...(route.anyPermissions ?? [])]) {
         if (!(PERMISSIONS as readonly string[]).includes(permission)) {
           invalid.push(`${route.controller}.${route.method} → ${permission}`);
         }
@@ -135,5 +143,15 @@ describe('پوشش مجوز endpointها', () => {
       'HealthController.live',
       'HealthController.ready',
     ]);
+  });
+
+  it('نشان «یکی از این مجوزها» هرگز با فهرست خالی به کار نرفته است', () => {
+    // فهرست خالی در نگهبان یعنی «هیچ‌کس»؛ اگر جایی سهواً خالی بماند، مسیر برای همه
+    // بسته می‌شود و این شکل از خرابی در زمان اجرا دیر پیدا می‌شود.
+    const emptyAny = routes
+      .filter((route) => route.anyPermissions?.length === 0)
+      .map((route) => `${route.controller}.${route.method}`);
+
+    expect(emptyAny).toEqual([]);
   });
 });

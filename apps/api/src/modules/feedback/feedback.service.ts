@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { FeedbackStatus, Prisma, ReviewFeedback } from '@prisma/client';
+import type { Permission } from '@dm/shared';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -42,12 +43,37 @@ export interface CreateFeedbackInput {
  *
  * انتقال‌های مجاز وضعیت هم جدول‌اند، نه شرط پراکنده.
  */
-const FEEDBACK_TRANSITIONS: Record<FeedbackStatus, readonly FeedbackStatus[]> = {
-  OPEN: ['ANSWERED', 'RESOLVED', 'REJECTED'],
-  ANSWERED: ['RESOLVED', 'REJECTED', 'OPEN'],
-  // رسیدگی‌شده و رد‌شده پایان مسیرند؛ باز کردن دوباره یعنی بازخورد تازه.
-  RESOLVED: [],
-  REJECTED: [],
+/**
+ * گذارهای مجاز وضعیت بازخورد، همراه با **مجوز لازم هر گذار**.
+ *
+ * چرا مجوز روی خود گذار نشسته و نه فقط روی مسیر: بستن بازخورد کار کارپردازی است
+ * (`feedback:resolve` — او رسیدگی را تأیید می‌کند) ولی بازگشایی کار ناظر
+ * (`feedback:reopen`). اگر هر دو زیر یک مجوز بودند، یا کارپردازی می‌توانست ایراد
+ * ناظر را خودش ببندد و تمام — یعنی دروازه `open_feedback_count` بی‌اثر — یا ناظر
+ * می‌توانست رسیدگی را به‌جای کارپردازی تأیید کند.
+ *
+ * این نقص در آزمون زنده فاز ۵ پیدا شد: گردش کار مستند (docs/07 §۷) دو گذار
+ * «بازگشایی توسط ناظر» داشت، ولی ناظر هیچ مجوزی برای تغییر وضعیت نداشت و جدول
+ * گذارها هم `RESOLVED` را پایان مسیر می‌دانست؛ یعنی آن دو گذار برای **هیچ‌کس** شدنی
+ * نبود.
+ */
+const FEEDBACK_TRANSITIONS: Record<
+  FeedbackStatus,
+  readonly { readonly to: FeedbackStatus; readonly permission: Permission }[]
+> = {
+  OPEN: [
+    { to: 'ANSWERED', permission: 'feedback:reply' },
+    { to: 'RESOLVED', permission: 'feedback:resolve' },
+    { to: 'REJECTED', permission: 'feedback:resolve' },
+  ],
+  ANSWERED: [
+    { to: 'RESOLVED', permission: 'feedback:resolve' },
+    { to: 'REJECTED', permission: 'feedback:resolve' },
+    { to: 'OPEN', permission: 'feedback:reopen' },
+  ],
+  // پایانِ مسیر فقط از دید کارپردازی؛ ناظر همیشه می‌تواند بازگشایی کند.
+  RESOLVED: [{ to: 'OPEN', permission: 'feedback:reopen' }],
+  REJECTED: [{ to: 'OPEN', permission: 'feedback:reopen' }],
 };
 
 const FEEDBACK_SORTABLE = ['createdAt', 'updatedAt', 'status'] as const;
@@ -247,11 +273,19 @@ export class FeedbackService {
   ): Promise<ReviewFeedback> {
     const feedback = await this.loadVisible(feedbackId, user);
 
-    const allowed = FEEDBACK_TRANSITIONS[feedback.status];
-    if (!allowed.includes(toStatus)) {
+    const transition = FEEDBACK_TRANSITIONS[feedback.status].find((item) => item.to === toStatus);
+    if (!transition) {
       throw AppError.conflict(
         'INVALID_FEEDBACK_TRANSITION',
         `تغییر وضعیت از «${FEEDBACK_STATUS_FA[feedback.status]}» به «${FEEDBACK_STATUS_FA[toStatus]}» مجاز نیست`,
+      );
+    }
+
+    // لایه دوم: نگهبان مسیر فقط «یکی از دو مجوز» را می‌خواهد؛ اینکه این گذارِ مشخص
+    // برای این کاربر باز است یا نه، همین‌جا بررسی می‌شود.
+    if (!user.permissions.includes(transition.permission)) {
+      throw AppError.forbidden(
+        `تغییر وضعیت به «${FEEDBACK_STATUS_FA[toStatus]}» در اختیار نقش شما نیست`,
       );
     }
 

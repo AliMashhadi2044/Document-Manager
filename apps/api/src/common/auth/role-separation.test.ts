@@ -2,7 +2,12 @@ import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ROLE_PERMISSIONS, type Permission } from '@dm/shared';
 
-import { PERMISSIONS_KEY, PUBLIC_KEY, READ_ONLY_KEY } from './auth.decorators';
+import {
+  ANY_PERMISSIONS_KEY,
+  PERMISSIONS_KEY,
+  PUBLIC_KEY,
+  READ_ONLY_KEY,
+} from './auth.decorators';
 import { AppModule } from '../../app.module';
 
 /**
@@ -29,6 +34,8 @@ interface RouteInfo {
   readonly isReadOnly: boolean;
   /** مجوز اعلام نشده؟ `undefined` یعنی فراموش شده، `[]` یعنی «فقط ورود لازم است». */
   readonly permissions: readonly Permission[] | undefined;
+  /** مجوزهای «یکی از این‌ها» — نشان `@RequireAnyPermission`. */
+  readonly anyPermissions: readonly Permission[] | undefined;
 }
 
 const HTTP_METHOD_NAMES: Record<number, string> = {
@@ -94,6 +101,9 @@ function collectRoutes(): RouteInfo[] {
           Reflect.getMetadata(PUBLIC_KEY, controller) === true,
         isReadOnly: Reflect.getMetadata(READ_ONLY_KEY, handler) === true,
         permissions: Reflect.getMetadata(PERMISSIONS_KEY, handler) as Permission[] | undefined,
+        anyPermissions: Reflect.getMetadata(ANY_PERMISSIONS_KEY, handler) as
+          | Permission[]
+          | undefined,
       });
     }
   }
@@ -114,9 +124,16 @@ const UNSAFE_ROUTES = ROUTES.filter(
 /** مسیری که کاربر با این مجموعه مجوز می‌تواند صدا بزند. */
 function canCall(route: RouteInfo, permissions: readonly Permission[]): boolean {
   if (route.isPublic) return true;
-  if (route.permissions === undefined) return false; // نگهبان fail-closed
-  // فهرست خالی یعنی «فقط ورود لازم است» — هر کاربر واردشده‌ای می‌تواند.
-  return route.permissions.every((permission) => permissions.includes(permission));
+  // نگهبان fail-closed: هیچ نشانی روی مسیر نباشد، مسیر بسته است.
+  if (route.permissions === undefined && route.anyPermissions === undefined) return false;
+
+  // فهرست خالی در `@RequirePermission` یعنی «فقط ورود لازم است».
+  const hasAll = (route.permissions ?? []).every((permission) => permissions.includes(permission));
+  const hasAny =
+    route.anyPermissions === undefined ||
+    route.anyPermissions.some((permission) => permissions.includes(permission));
+
+  return hasAll && hasAny;
 }
 
 describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی', () => {
@@ -129,10 +146,14 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
   /**
    * معیار پذیرش ۱: ناظر روی **هر** مسیر نوشتنی ۴۰۳ می‌گیرد.
    *
-   * دو استثنای عمدی: ثبت بازخورد و ارجاع برای اصلاح — که اصلاً کار ناظرند. هر مسیر
-   * نوشتنی دیگری که ناظر بتواند صدا بزند، یک اشتباه است.
+   * استثناهای عمدی: ثبت بازخورد، بازگشایی بازخورد و ارجاع برای اصلاح — که اصلاً کار
+   * ناظرند. هر مسیر نوشتنی دیگری که ناظر بتواند صدا بزند، یک اشتباه است.
+   *
+   * `FeedbackController.changeStatus` با `@RequireAnyPermission` باز است، ولی ناظر از
+   * آن تنها گذارِ «بازگشایی» را می‌تواند؛ این محدودیت در جدول گذارهای سرویس است و
+   * تست خودش را در `feedback-transitions.test.ts` دارد.
    */
-  it('ناظر هیچ مسیر نوشتنی‌ای جز ثبت بازخورد و ارجاع برای اصلاح ندارد', () => {
+  it('ناظر هیچ مسیر نوشتنی‌ای جز بازخورد و ارجاع برای اصلاح ندارد', () => {
     const supervisor = DEFAULT_ROLE_PERMISSIONS.SUPERVISOR;
 
     const allowed = UNSAFE_ROUTES.filter(
@@ -143,6 +164,7 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       // خروج از نشست‌های خود کاربر و خواندن اعلان‌های خودش، کار هر کاربر واردشده است.
       'AuthController.logoutAll',
       'DocumentsController.sendBack',
+      'FeedbackController.changeStatus',
       'FeedbackController.create',
       'NotificationsController.markAllRead',
       'NotificationsController.markRead',
@@ -219,7 +241,8 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
 
   it('هیچ مسیر نوشتنی‌ای بدون اعلام دسترسی نیست', () => {
     const undeclared = UNSAFE_ROUTES.filter(
-      (route) => !route.isPublic && route.permissions === undefined,
+      (route) =>
+        !route.isPublic && route.permissions === undefined && route.anyPermissions === undefined,
     ).map((route) => `${route.controller}.${route.method}`);
 
     expect(undeclared).toEqual([]);
