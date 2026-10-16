@@ -45,6 +45,17 @@ export function formatQuantity(value: string): string {
   return toPersianDigits(groupDigits(trimmed));
 }
 
+/**
+ * پیام سرور برای نمایش.
+ *
+ * پیام‌های دامنه فارسی‌اند ولی عددهایشان (تعداد، طول ماه، روز) لاتین تولید می‌شوند.
+ * تبدیل ارقام **اینجا**، در لایه نمایش، انجام می‌شود نه در هر پیام سرور: یک نقطه
+ * به‌جای ده‌ها رشته، و پیام سرور برای log و تست خوانا و پایدار می‌ماند.
+ */
+export function formatServerMessage(message: string): string {
+  return toPersianDigits(message);
+}
+
 /** نرخ basis point به درصد خوانا: ۱۰۰۰ ⇒ «۱۰٪» */
 export function formatRateBp(rateBp: number | null): string {
   if (rateBp === null) return '—';

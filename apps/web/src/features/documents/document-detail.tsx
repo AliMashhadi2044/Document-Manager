@@ -3,6 +3,9 @@ import {
   DOCUMENT_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
   PAYMENT_METHOD_KIND_LABELS,
+  ROUNDING_MODE_LABELS,
+  ROUNDING_SCOPE_LABELS,
+  jalaliMonthName,
   type PaymentMethodKind,
 } from '@dm/shared';
 
@@ -15,6 +18,7 @@ import {
   formatMoney,
   formatQuantity,
   formatRateBp,
+  formatServerMessage,
   toPersianDigits,
 } from '../../shared/format/money';
 import {
@@ -24,6 +28,8 @@ import {
   useRevisions,
   type InvoiceRow,
 } from './documents.api';
+import { CreateInvoiceForm } from '../invoices/create-invoice-form';
+import { useDeleteInvoice } from '../invoices/invoices.api';
 
 export function DocumentDetailView({
   documentId,
@@ -39,6 +45,8 @@ export function DocumentDetailView({
 
   const [reason, setReason] = useState('');
   const [showReopen, setShowReopen] = useState(false);
+  const [showAddInvoice, setShowAddInvoice] = useState(false);
+  const removeInvoice = useDeleteInvoice();
   const [notice, setNotice] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
 
   if (isPending) return <LoadingState label="در حال بارگذاری سند…" />;
@@ -56,6 +64,11 @@ export function DocumentDetailView({
         </Button>
 
         <div className="flex gap-2">
+          {editable ? (
+            <Button variant="secondary" onClick={() => setShowAddInvoice((value) => !value)}>
+              افزودن فاکتور
+            </Button>
+          ) : null}
           {editable ? (
             <Button
               loading={finalize.isPending}
@@ -136,7 +149,10 @@ export function DocumentDetailView({
                     onError: (error) =>
                       setNotice({
                         kind: 'error',
-                        text: error instanceof ApiError ? error.message : 'خطا در بازگشایی',
+                        text:
+                          error instanceof ApiError
+                            ? formatServerMessage(error.message)
+                            : 'خطا در بازگشایی',
                       }),
                   },
                 );
@@ -167,8 +183,8 @@ export function DocumentDetailView({
           <Field label="شماره سند" value={data.documentNumber ?? 'ثبت نشده (بایگانی)'} />
           <Field
             label="سیاست گرد کردن"
-            value={`${data.roundingPolicy.scope === 'LINE' ? 'سطح ردیف' : 'سطح فاکتور'} · ${
-              data.roundingPolicy.mode === 'HALF_UP' ? 'نیم به بالا' : data.roundingPolicy.mode
+            value={`${ROUNDING_SCOPE_LABELS[data.roundingPolicy.scope]} · ${
+              ROUNDING_MODE_LABELS[data.roundingPolicy.mode]
             }`}
           />
           <Field label="تعداد فاکتور" value={toPersianDigits(String(data.invoices.length))} />
@@ -190,12 +206,52 @@ export function DocumentDetailView({
         </section>
       ) : null}
 
+      {showAddInvoice && editable ? (
+        <CreateInvoiceForm
+          documentId={documentId}
+          documentJalaliYear={data.jalaliYear}
+          policy={data.roundingPolicy}
+          onClose={() => setShowAddInvoice(false)}
+          onCreated={() => {
+            void refetch();
+            setNotice({ kind: 'success', text: 'فاکتور ثبت شد.' });
+          }}
+        />
+      ) : null}
+
       <section className="space-y-4">
-        <h3 className="text-sm font-semibold">
-          فاکتورها (به ترتیب تاریخ صورتحساب)
-        </h3>
+        <h3 className="text-sm font-semibold">فاکتورها (به ترتیب تاریخ صورتحساب)</h3>
+
+        {data.invoices.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+            این سند هنوز فاکتوری ندارد.
+            {editable ? ' با دکمه «افزودن فاکتور» اولین فاکتور را ثبت کنید.' : ''}
+          </p>
+        ) : null}
+
         {data.invoices.map((invoice) => (
-          <InvoiceCard key={invoice.id} invoice={invoice} />
+          <InvoiceCard
+            key={invoice.id}
+            invoice={invoice}
+            onRemove={
+              editable
+                ? () => {
+                    setNotice(null);
+                    removeInvoice.mutate(invoice.id, {
+                      onSuccess: () => void refetch(),
+                      onError: (error) =>
+                        setNotice({
+                          kind: 'error',
+                          text:
+                            error instanceof ApiError
+                              ? formatServerMessage(error.message)
+                              : 'خطا در حذف فاکتور',
+                        }),
+                    });
+                  }
+                : undefined
+            }
+          />
         ))}
       </section>
 
@@ -238,7 +294,13 @@ const TRIGGER_LABELS: Record<string, string> = {
   CORRECTION: 'اصلاح',
 };
 
-function InvoiceCard({ invoice }: { invoice: InvoiceRow }): JSX.Element {
+function InvoiceCard({
+  invoice,
+  onRemove,
+}: {
+  invoice: InvoiceRow;
+  onRemove?: (() => void) | undefined;
+}): JSX.Element {
   return (
     <article className="rounded-lg border border-border bg-card">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
@@ -252,8 +314,40 @@ function InvoiceCard({ invoice }: { invoice: InvoiceRow }): JSX.Element {
             {formatIsoAsJalali(invoice.invoiceDate)}
           </p>
         </div>
-        <span className="text-sm font-medium tabular-nums">{formatMoney(invoice.totalAmount)}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium tabular-nums">
+            {formatMoney(invoice.totalAmount)}
+          </span>
+          {onRemove ? (
+            <Button size="sm" variant="ghost" onClick={onRemove}>
+              حذف فاکتور
+            </Button>
+          ) : null}
+        </div>
       </header>
+
+      {/* جزئیات اختصاصی از snapshot خود فاکتور می‌آیند، نه از اطلاعات پایه امروز. */}
+      {invoice.utilityDetail ? (
+        <dl className="grid gap-4 border-b border-border px-5 py-4 text-sm sm:grid-cols-3">
+          <Field label="مدرسه" value={invoice.utilityDetail.schoolTitleSnapshot} />
+          <Field label="ناحیه" value={invoice.utilityDetail.districtTitleSnapshot} />
+          <Field label="نوع انشعاب" value={invoice.utilityDetail.utilityTypeTitleSnapshot} />
+        </dl>
+      ) : null}
+
+      {invoice.fuelDetail ? (
+        <dl className="grid gap-4 border-b border-border px-5 py-4 text-sm sm:grid-cols-4">
+          <Field label="نوع خودرو" value={invoice.fuelDetail.vehicleTypeTitleSnapshot} />
+          <Field label="پلاک" value={toPersianDigits(invoice.fuelDetail.plateNumberSnapshot)} />
+          <Field label="نوع سوخت" value={invoice.fuelDetail.fuelTypeTitleSnapshot} />
+          <Field
+            label="ماه"
+            value={`${jalaliMonthName(invoice.fuelDetail.jalaliMonth)} ${toPersianDigits(
+              String(invoice.fuelDetail.jalaliYear),
+            )}`}
+          />
+        </dl>
+      ) : null}
 
       <div className="grid gap-4 px-5 py-4 text-sm sm:grid-cols-2">
         <Field
@@ -299,7 +393,12 @@ function InvoiceCard({ invoice }: { invoice: InvoiceRow }): JSX.Element {
               {invoice.items.map((item) => (
                 <tr key={item.id} className="border-t border-border">
                   <td className="px-3 py-2">{toPersianDigits(String(item.rowNo))}</td>
-                  <td className="px-3 py-2">{item.description}</td>
+                  <td className="px-3 py-2">
+                    {/* ردیف سوخت، تاریخ ذخیره‌شده خودش را نشان می‌دهد. */}
+                    {item.fuelEntry
+                      ? `سوخت‌گیری ${formatIsoAsJalali(item.fuelEntry.entryDate)}`
+                      : item.description}
+                  </td>
                   <td className="px-3 py-2 text-center">{formatQuantity(item.quantity)}</td>
                   <td className="px-3 py-2 text-end tabular-nums">
                     {formatMoney(item.unitPrice, { withUnit: false })}
@@ -374,6 +473,10 @@ function Field({
 
 /** خطای ثبت نهایی می‌تواند چند مشکل را هم‌زمان داشته باشد؛ همه نمایش داده می‌شوند. */
 function describeError(error: ApiError): string {
-  if (error.details.length === 0) return error.message;
-  return [error.message, ...error.details.map((detail) => `• ${detail.message}`)].join('\n');
+  const lines =
+    error.details.length === 0
+      ? [error.message]
+      : [error.message, ...error.details.map((detail) => `• ${detail.message}`)];
+  // ارقام لاتین پیام سرور در لایه نمایش فارسی می‌شوند.
+  return formatServerMessage(lines.join('\n'));
 }

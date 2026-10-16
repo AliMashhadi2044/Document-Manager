@@ -1,0 +1,423 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  INVOICE_KIND_REGISTRY,
+  formatJalali,
+  isoDateToJalali,
+  jalaliToIsoDate,
+  parseJalali,
+  type InvoiceKind,
+  type InvoiceLineModel,
+} from '@dm/shared';
+
+import { apiFetch, ApiError } from '../../shared/api/client';
+import { Button } from '../../shared/ui/button';
+import { Input } from '../../shared/ui/input';
+import { formatServerMessage } from '../../shared/format/money';
+import { Select } from '../../shared/ui/select';
+import { SearchableSelect } from '../../shared/ui/searchable-select';
+import { useBudgetCategories } from '../base-data/base-data.api';
+import {
+  useChapterInvoiceTypes,
+  useCreateInvoice,
+  useVendorSearch,
+  type ChapterInvoiceTypeOption,
+  type CreateInvoicePayload,
+  type InvoiceDetailsPayload,
+} from './invoices.api';
+import { ItemsFields, emptyItemsDraft, invoiceTaxToPayload, itemsToPayload, type ItemsDraft } from './items-fields';
+import { UtilityFields, EMPTY_UTILITY, type UtilityDraft } from './utility-fields';
+import { FuelFields, emptyFuelDraft, type FuelDraft } from './fuel-fields';
+import { PaymentFields, EMPTY_PAYMENT, paymentToPayload, type PaymentDraft, type PaymentMethodRef } from './payment-fields';
+import type { RoundingPolicyRef } from './invoice-preview';
+
+interface BootstrapData {
+  readonly paymentMethods: readonly PaymentMethodRef[];
+  readonly utilityTypes: ReadonlyArray<{ id: string; title: string }>;
+  readonly fuelTypes: ReadonlyArray<{ id: string; title: string }>;
+  readonly vehicleTypes: ReadonlyArray<{ id: string; title: string }>;
+  readonly measurementUnits: ReadonlyArray<{ id: string; title: string }>;
+}
+
+/**
+ * افزودن فاکتور به سند.
+ *
+ * **مسیر انتخاب فرم** — همان معیار پذیرش ۱ فاز ۴:
+ *
+ *   فصل ⇒ (درخواست به سرور) انواع فاکتور مجاز همان فصل ⇒ `kind` نوع انتخاب‌شده
+ *        ⇒ `INVOICE_KIND_REGISTRY[kind].lineModel` ⇒ کامپوننت فرم
+ *
+ * هیچ شرطی روی **عنوان فصل** یا کلید نوع فاکتور نیست. اگر مدیر سامانه فردا فصلی با
+ * نام دیگر بسازد و به نوع «انشعابات» وصلش کند، همین فرم باز می‌شود؛ و اگر فصلی به
+ * دو نوع وصل باشد، کاربر انتخاب می‌کند (معیار پذیرش ۲).
+ */
+export function CreateInvoiceForm({
+  documentId,
+  documentJalaliYear,
+  policy,
+  onClose,
+  onCreated,
+}: {
+  documentId: string;
+  documentJalaliYear: number;
+  policy: RoundingPolicyRef;
+  onClose: () => void;
+  onCreated: () => void;
+}): JSX.Element {
+  const categories = useBudgetCategories();
+  const bootstrap = useQuery({
+    queryKey: ['base-data', 'bootstrap'],
+    queryFn: () => apiFetch<BootstrapData>('/base-data/bootstrap'),
+    staleTime: 5 * 60_000,
+  });
+  const create = useCreateInvoice(documentId);
+
+  const [chapterId, setChapterId] = useState('');
+  const [invoiceTypeId, setInvoiceTypeId] = useState('');
+  const [vendorId, setVendorId] = useState('');
+  const [vendorSearch, setVendorSearch] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(todayJalali());
+  const [notes, setNotes] = useState('');
+  const [payment, setPayment] = useState<PaymentDraft>(EMPTY_PAYMENT);
+  /** تا وقتی کاربر روش پرداخت را دست نزده، پیش‌فرض **نوع فعلی** فاکتور حاکم است. */
+  const [paymentTouched, setPaymentTouched] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const [itemsDraft, setItemsDraft] = useState<ItemsDraft>(() => emptyItemsDraft(null));
+  const [utilityDraft, setUtilityDraft] = useState<UtilityDraft>(EMPTY_UTILITY);
+  const [fuelDraft, setFuelDraft] = useState<FuelDraft>(() => emptyFuelDraft(documentJalaliYear));
+
+  const invoiceTypes = useChapterInvoiceTypes(chapterId);
+  const vendors = useVendorSearch(vendorSearch);
+
+  const options = invoiceTypes.data?.options ?? [];
+  const selectedType = options.find((option) => option.invoiceTypeId === invoiceTypeId);
+  const kind: InvoiceKind | null = selectedType?.kind ?? null;
+  const lineModel: InvoiceLineModel | null = kind ? INVOICE_KIND_REGISTRY[kind].lineModel : null;
+
+  // فصل با یک نوع مجاز ⇒ انتخاب خودکار؛ با چند نوع ⇒ پیش‌فرض فصل، و کاربر می‌تواند
+  // عوضش کند (§۱۰ پرامپت).
+  useEffect(() => {
+    if (options.length === 0) {
+      setInvoiceTypeId('');
+      return;
+    }
+    const preferred = options.find((option) => option.isDefault) ?? options[0];
+    setInvoiceTypeId((current) =>
+      options.some((option) => option.invoiceTypeId === current)
+        ? current
+        : (preferred as ChapterInvoiceTypeOption).invoiceTypeId,
+    );
+  }, [options]);
+
+  // روش پرداخت پیش‌فرض **هر نوع فاکتور** (الزام فاز ۴).
+  //
+  // نکته‌ای که در آزمون دستی پیدا شد: اگر فقط «وقتی خالی است» پر شود، با عوض شدن نوع
+  // فاکتور، پیش‌فرض نوع قبلی باقی می‌ماند — کاربر فاکتور سوخت می‌سازد و روش «قبض»
+  // از فاکتور انشعابات روی آن مانده است. پس تا وقتی کاربر دست نزده، پیش‌فرض نوع
+  // فعلی جایگزین می‌شود و نبودِ پیش‌فرض یعنی خالی.
+  useEffect(() => {
+    if (paymentTouched) return;
+    const method = selectedType?.defaultPaymentMethod ?? null;
+    setPayment((current) => ({ ...EMPTY_PAYMENT, notes: current.notes, paymentMethodId: method?.id ?? '' }));
+  }, [paymentTouched, selectedType?.invoiceTypeId, selectedType?.defaultPaymentMethod]);
+
+  const chapters = useMemo(
+    () =>
+      (categories.data ?? []).flatMap((category) =>
+        category.chapters
+          .filter((chapter) => chapter.isActive)
+          .map((chapter) => ({
+            value: chapter.id,
+            label: `${category.titleFa} — ${chapter.title}${chapter.code ? ` (${chapter.code})` : ''}`,
+          })),
+      ),
+    [categories.data],
+  );
+
+  const reference = bootstrap.data;
+  const isoInvoiceDate = safeIso(invoiceDate);
+
+  const submit = (): void => {
+    setMessage(null);
+
+    if (!kind || isoInvoiceDate === null) {
+      setMessage('نوع فاکتور و تاریخ صورتحساب را کامل کنید.');
+      return;
+    }
+
+    const details = buildDetails(kind, { itemsDraft, utilityDraft, fuelDraft }, policy);
+    if (details === null) {
+      setMessage('اطلاعات فرم کامل نیست.');
+      return;
+    }
+
+    const payload: CreateInvoicePayload = {
+      chapterId,
+      invoiceTypeId,
+      vendorId: vendorId || null,
+      invoiceNumber: invoiceNumber.trim() || null,
+      invoiceDate: isoInvoiceDate,
+      notes: notes.trim() || null,
+      details,
+      payment: paymentToPayload(payment),
+    };
+
+    create.mutate(payload, {
+      onSuccess: () => {
+        onCreated();
+        onClose();
+      },
+      onError: (error) =>
+        setMessage(error instanceof ApiError ? describeError(error) : 'خطا در ثبت فاکتور'),
+    });
+  };
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">افزودن فاکتور</h3>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          بستن
+        </Button>
+      </div>
+
+      <div className="mt-4 space-y-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Select
+            label="فصل"
+            required
+            value={chapterId}
+            onChange={(event) => setChapterId(event.target.value)}
+            options={chapters}
+            hint="انواع فاکتور مجاز، از اتصال‌های همین فصل در اطلاعات پایه می‌آیند."
+          />
+
+          {chapterId === '' ? null : invoiceTypes.isPending ? (
+            // تا وقتی پاسخ سرور نرسیده، «نوعی تعریف نشده» یک **خطای دروغ** است؛
+            // فهرست خالی در حال بارگذاری با فهرست خالی واقعی یکی نیست.
+            <p className="self-end text-sm text-muted-foreground">
+              در حال خواندن انواع فاکتور مجاز این فصل…
+            </p>
+          ) : options.length === 0 ? (
+            <p className="self-end rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              برای این فصل هیچ نوع فاکتوری در اطلاعات پایه تعریف نشده است. ابتدا در بخش
+              «فصل‌ها و انواع فاکتور» اتصال را بسازید.
+            </p>
+          ) : options.length === 1 ? (
+            <div className="self-end">
+              <span className="block text-sm font-medium">نوع فاکتور</span>
+              <p className="mt-1.5 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-sm">
+                {options[0]?.titleFa} — تنها نوع مجاز این فصل
+              </p>
+            </div>
+          ) : (
+            <Select
+              label="نوع فاکتور"
+              required
+              value={invoiceTypeId}
+              onChange={(event) => setInvoiceTypeId(event.target.value)}
+              placeholder={null}
+              options={options.map((option) => ({
+                value: option.invoiceTypeId,
+                label: option.titleFa,
+              }))}
+            />
+          )}
+        </div>
+
+        {kind === null || reference === undefined ? (
+          <p className="text-sm text-muted-foreground">
+            برای ادامه، فصل را انتخاب کنید.
+          </p>
+        ) : (
+          <>
+            <div className="grid gap-4 md:grid-cols-3">
+              <SearchableSelect
+                label="فروشنده"
+                search={vendorSearch}
+                onSearchChange={setVendorSearch}
+                loading={vendors.isFetching}
+                total={vendors.data?.total}
+                value={vendorId}
+                options={(vendors.data?.items ?? []).map((vendor) => ({
+                  value: vendor.id,
+                  label: vendor.name,
+                  description: vendor.representativeName ?? undefined,
+                }))}
+                onChange={setVendorId}
+                hint="روی همه انواع فاکتور در دسترس و اختیاری است."
+              />
+
+              <Input
+                label="شماره صورتحساب"
+                value={invoiceNumber}
+                onChange={(event) => setInvoiceNumber(event.target.value)}
+                hint="اختیاری"
+              />
+
+              <Input
+                label="تاریخ صورتحساب"
+                required
+                value={invoiceDate}
+                onChange={(event) => setInvoiceDate(event.target.value)}
+                error={isoInvoiceDate === null ? 'تاریخ شمسی معتبر نیست' : undefined}
+                hint="قالب ۱۴۰۵/۰۷/۱۲"
+              />
+            </div>
+
+            {/* نقطه واحد انتخاب فرم: از روی `lineModel` خانواده، نه عنوان فصل. */}
+            {lineModel === 'ITEMS' ? (
+              <ItemsFields
+                draft={itemsDraft}
+                onChange={setItemsDraft}
+                units={reference.measurementUnits}
+                policy={policy}
+              />
+            ) : null}
+
+            {lineModel === 'SINGLE_AMOUNT' ? (
+              <UtilityFields
+                draft={utilityDraft}
+                onChange={setUtilityDraft}
+                utilityTypes={reference.utilityTypes}
+                policy={policy}
+              />
+            ) : null}
+
+            {lineModel === 'DAILY_ENTRIES' ? (
+              <FuelFields
+                draft={fuelDraft}
+                onChange={setFuelDraft}
+                vehicleTypes={reference.vehicleTypes}
+                fuelTypes={reference.fuelTypes}
+              />
+            ) : null}
+
+            <PaymentFields
+              draft={payment}
+              onChange={(next) => {
+                setPaymentTouched(true);
+                setPayment(next);
+              }}
+              methods={reference.paymentMethods}
+              vendorId={vendorId}
+            />
+
+            <Input
+              label="توضیحات فاکتور"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              hint="توضیح اختصاصی همین فاکتور"
+            />
+
+            {message ? (
+              <p
+                role="alert"
+                className="whitespace-pre-line rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+              >
+                {message}
+              </p>
+            ) : null}
+
+            <div className="flex gap-2">
+              <Button loading={create.isPending} onClick={submit}>
+                ثبت فاکتور
+              </Button>
+              <Button variant="secondary" onClick={onClose}>
+                انصراف
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * ساخت `details` بر اساس خانواده.
+ *
+ * این تابع تنها جایی است که شکل ورودی هر خانواده ساخته می‌شود؛ `kind` از پاسخ سرور
+ * می‌آید و سرور هم دوباره با نوع فاکتور می‌سنجدش.
+ */
+function buildDetails(
+  kind: InvoiceKind,
+  drafts: { itemsDraft: ItemsDraft; utilityDraft: UtilityDraft; fuelDraft: FuelDraft },
+  policy: RoundingPolicyRef,
+): InvoiceDetailsPayload | null {
+  const lineModel = INVOICE_KIND_REGISTRY[kind].lineModel;
+
+  if (lineModel === 'ITEMS') {
+    if (kind !== 'NORMAL' && kind !== 'STAD') return null;
+    const tax = invoiceTaxToPayload(drafts.itemsDraft, policy);
+    return {
+      kind,
+      taxMode: tax.taxMode,
+      taxRateBp: tax.taxRateBp,
+      taxAmount: tax.taxAmount,
+      items: itemsToPayload(drafts.itemsDraft, policy),
+    };
+  }
+
+  if (lineModel === 'SINGLE_AMOUNT') {
+    const draft = drafts.utilityDraft;
+    if (draft.schoolId === '' || draft.utilityTypeId === '' || draft.baseAmount === '') return null;
+    return {
+      kind: 'UTILITY',
+      schoolId: draft.schoolId,
+      utilityTypeId: draft.utilityTypeId,
+      baseAmount: draft.baseAmount,
+      discountAmount: draft.discountAmount || '0',
+      taxMode: draft.tax.mode,
+      taxRateBp: draft.tax.mode === 'PERCENT' ? draft.tax.rateBp : null,
+      taxAmount: draft.tax.mode === 'AMOUNT' ? draft.tax.amount || '0' : null,
+    };
+  }
+
+  const draft = drafts.fuelDraft;
+  const entries = draft.entries.filter((entry) => entry.day !== null && entry.amount !== '');
+  if (draft.vehicleId === '' || draft.fuelTypeId === '' || entries.length === 0) return null;
+
+  return {
+    kind: 'FUEL',
+    vehicleId: draft.vehicleId,
+    fuelTypeId: draft.fuelTypeId,
+    jalaliYear: draft.jalaliYear,
+    jalaliMonth: draft.jalaliMonth,
+    entries: entries.map((entry) => ({ day: entry.day as number, amount: entry.amount })),
+  };
+}
+
+/**
+ * تاریخ شمسی تایپ‌شده ⇒ `YYYY-MM-DD` میلادی؛ نامعتبر ⇒ `null`.
+ *
+ * خواندن و تبدیل هر دو از `@dm/shared` می‌آیند (ارقام فارسی، جداکننده‌های مختلف و
+ * اعتبار روز در ماه). نوشتن دوباره‌شان اینجا همان ریسک R12 است.
+ */
+function safeIso(jalaliText: string): string | null {
+  try {
+    return jalaliToIsoDate(parseJalali(jalaliText));
+  } catch {
+    return null;
+  }
+}
+
+function todayJalali(): string {
+  const now = new Date();
+  const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
+  // با ارقام لاتین، چون همین رشته دوباره خوانده و به سرور تبدیل می‌شود.
+  return formatJalali(isoDateToJalali(iso), { persianDigits: false });
+}
+
+function describeError(error: ApiError): string {
+  const lines =
+    error.details.length === 0
+      ? [error.message]
+      : [error.message, ...error.details.map((detail) => `• ${detail.message}`)];
+  // ارقام لاتین پیام سرور در لایه نمایش فارسی می‌شوند.
+  return formatServerMessage(lines.join('\n'));
+}

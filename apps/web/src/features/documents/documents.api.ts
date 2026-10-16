@@ -26,6 +26,8 @@ export interface DocumentRow {
 export interface InvoiceItemRow {
   readonly id: string;
   readonly rowNo: number;
+  /** فقط در فاکتور سوخت مقدار دارد: روز و تاریخ همان ردیف. */
+  readonly fuelEntry: { readonly jalaliDay: number; readonly entryDate: string } | null;
   readonly description: string;
   readonly productCode: string | null;
   readonly quantity: string;
@@ -61,13 +63,26 @@ export interface InvoiceRow {
     readonly paymentMethod: { readonly titleFa: string };
   } | null;
   readonly items: readonly InvoiceItemRow[];
+  /** جزئیات اختصاصی؛ حداکثر یکی از این دو مقدار دارد (فاز ۴). */
+  readonly utilityDetail: {
+    readonly schoolTitleSnapshot: string;
+    readonly districtTitleSnapshot: string;
+    readonly utilityTypeTitleSnapshot: string;
+  } | null;
+  readonly fuelDetail: {
+    readonly plateNumberSnapshot: string;
+    readonly vehicleTypeTitleSnapshot: string;
+    readonly fuelTypeTitleSnapshot: string;
+    readonly jalaliYear: number;
+    readonly jalaliMonth: number;
+  } | null;
 }
 
 export interface DocumentDetail extends DocumentRow {
   readonly totalGross: string;
   readonly totalDiscount: string;
   readonly totalNet: string;
-  readonly roundingPolicy: { readonly scope: string; readonly mode: string };
+  readonly roundingPolicy: { readonly scope: 'LINE' | 'INVOICE'; readonly mode: 'HALF_UP' | 'FLOOR' | 'HALF_EVEN' };
   readonly buyerSnapshot: { readonly name: string; readonly economicCode: string | null };
   readonly stadMetadata: {
     readonly needNumber: string;
