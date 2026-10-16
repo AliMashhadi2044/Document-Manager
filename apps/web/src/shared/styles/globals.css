@@ -93,3 +93,45 @@
     font-feature-settings: 'ss02';
   }
 }
+
+/**
+ * چاپ (docs/09 §۶).
+ *
+ * صفحه افقی است چون گزارش مالیات ۱۲ ستون دارد و در عرض A4 عمودی ستون‌ها بریده
+ * می‌شوند. کنترل‌های رابط کاربری با نشان `no-print` از خروجی چاپی بیرون می‌مانند.
+ */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm 10mm;
+  }
+
+  html,
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* سرستون جدول در هر صفحه تکرار می‌شود و ردیف وسط صفحه نمی‌شکند. */
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr,
+  .break-inside-avoid {
+    break-inside: avoid;
+  }
+
+  /* پیمایش افقی در چاپ معنا ندارد و باعث بریده شدن ستون می‌شود. */
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+}

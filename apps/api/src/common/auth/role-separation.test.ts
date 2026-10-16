@@ -168,6 +168,13 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       'FeedbackController.create',
       'NotificationsController.markAllRead',
       'NotificationsController.markRead',
+      // اجرای گزارش POST است و واقعاً می‌نویسد — ولی تنها چیزی که می‌نویسد **گزارشِ
+      // اجرا** است (یک ردیف `report_runs` و یک ردیف حسابرسی)، نه داده سند. نشان
+      // «فقط خواندنی» روی این مسیرها دروغ می‌بود.
+      'ReportsController.excelExport',
+      'ReportsController.html',
+      'ReportsController.pdfExport',
+      'ReportsController.preview',
     ]);
   });
 
@@ -193,6 +200,11 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       'AuthController.logoutAll',
       'NotificationsController.markAllRead',
       'NotificationsController.markRead',
+      // اجرای گزارش: فقط ردیف اجرا می‌نویسد، نه داده سند (توضیح در تست ناظر).
+      'ReportsController.excelExport',
+      'ReportsController.html',
+      'ReportsController.pdfExport',
+      'ReportsController.preview',
     ]);
 
     // و صریحاً: هیچ‌کدام از مجوزهای مالی را ندارد.
@@ -259,12 +271,16 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
     expect(authenticatedOnly).toEqual(['AuthController.logoutAll', 'AuthController.me']);
   });
 
-  it('نشان «فقط خواندنی» فقط روی مسیرهای جست‌وجوی فروشنده است', () => {
+  it('نشان «فقط خواندنی» فقط روی مسیرهایی است که واقعاً نمی‌نویسند', () => {
     const readOnly = ROUTES.filter((route) => route.isReadOnly)
       .map((route) => `${route.controller}.${route.method}`)
       .sort();
 
     expect(readOnly).toEqual([
+      // دو مسیر گزارش هم POSTِ فقط-خواننده‌اند: شناسه سند و فروشنده در مسیر می‌آیند و
+      // بدنه متد هیچ نوشتنی ندارد.
+      'ReportsController.amountDetails',
+      'ReportsController.productTypeSuggestions',
       'VendorsController.checkDuplicate',
       'VendorsController.validateIbanEndpoint',
     ]);

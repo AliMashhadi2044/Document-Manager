@@ -106,6 +106,117 @@ function filePart(name, data, mime) {
   return form;
 }
 
+/**
+ * ساخت یک سند **تازه** و ارجاعش به بایگانی، بدون شماره سند و بدون فایل.
+ *
+ * چرا هر بار از نو: آزمون «نهایی کردن بایگانی بدون پیش‌نیاز» به سندی نیاز دارد که
+ * قطعاً شماره و فایل **ندارد**. تکیه بر یک سند موجود، اولین باری که کسی (یا همین
+ * اسکریپت) شماره‌اش را ثبت کند، تست را بی‌صدا بی‌معنا می‌کند — که دقیقاً یک‌بار
+ * اتفاق افتاد.
+ */
+async function createBareDocument(client) {
+  const [buyers, categories, bootstrap] = await Promise.all([
+    client.request('GET', '/buyers?pageSize=50'),
+    client.request('GET', '/base-data/chapters/categories'),
+    client.request('GET', '/base-data/bootstrap'),
+  ]);
+
+  const buyerId = buyers.data?.items?.[0]?.id;
+  if (!buyerId) throw new Error('هیچ مجموعه خریداری ثبت نشده است');
+
+  const paymentMethodId = (bootstrap.data?.paymentMethods ?? []).find(
+    (method) => method.kind === 'PETTY_CASH',
+  )?.id;
+  if (!paymentMethodId) throw new Error('روش پرداخت تنخواه ثبت نشده است');
+
+  let chapter = null;
+  for (const category of categories.data ?? []) {
+    for (const candidate of category.chapters ?? []) {
+      const link = (candidate.invoiceTypes ?? []).find(
+        (item) => item.invoiceType?.kind === 'NORMAL',
+      );
+      if (link) {
+        chapter = { id: candidate.id, invoiceTypeId: link.invoiceType.id };
+        break;
+      }
+    }
+    if (chapter) break;
+  }
+  if (!chapter) throw new Error('فصلی با نوع فاکتور عادی پیدا نشد');
+
+  const created = await client.request('POST', '/documents', {
+    body: {
+      title: `سند آزمون بایگانی ${stamp}`,
+      type: 'NORMAL',
+      fiscalYear: 1405,
+      jalaliYear: 1405,
+      buyerEntityId: buyerId,
+      stad: null,
+    },
+  });
+  if (created.status !== 201 && created.status !== 200) {
+    throw new Error(`ساخت سند آزمون ناموفق: ${created.status} ${cut(created.data, 400)}`);
+  }
+  const documentId = created.data.id;
+
+  const invoice = await client.request('POST', `/documents/${documentId}/invoices`, {
+    body: {
+      chapterId: chapter.id,
+      invoiceTypeId: chapter.invoiceTypeId,
+      vendorId: null,
+      invoiceNumber: 'ARCH-1',
+      invoiceDate: '2026-10-06',
+      notes: null,
+      payment: { paymentMethodId },
+      details: {
+        kind: 'NORMAL',
+        taxMode: 'PERCENT',
+        taxRateBp: 1000,
+        taxAmount: null,
+        items: [
+          {
+            rowNo: 1,
+            description: 'ردیف آزمون بایگانی',
+            productCode: null,
+            quantity: '1',
+            unitId: null,
+            unitPrice: '1000000',
+            discountAmount: '0',
+            taxMode: 'PERCENT',
+            taxRateBp: 1000,
+            taxAmount: null,
+          },
+        ],
+      },
+    },
+  });
+  if (invoice.status !== 201 && invoice.status !== 200) {
+    throw new Error(`ثبت فاکتور آزمون ناموفق: ${invoice.status} ${cut(invoice.data, 400)}`);
+  }
+
+  await client.request('POST', `/documents/${documentId}/finalize`, { idempotent: true });
+  await client.request('POST', `/documents/${documentId}/send-to-archive`, { idempotent: true });
+
+  return documentId;
+}
+
+/**
+ * بستن بازخوردهای بازِ یک سند.
+ *
+ * بازخورد باز از اجرای قبلی (یا از آزمون دستی در مرورگر) دروازه نهایی شدن بایگانی را
+ * می‌بندد و اجرای بعدی را می‌شکند.
+ */
+async function resolveOpenFeedback(client, documentId) {
+  const list = await client.request('GET', `/feedbacks?documentId=${documentId}&pageSize=100`);
+  for (const feedback of list.data?.items ?? []) {
+    if (feedback.status === 'OPEN' || feedback.status === 'ANSWERED') {
+      await client.request('PATCH', `/feedbacks/${feedback.id}/status`, {
+        body: { status: 'RESOLVED', note: 'پاک‌سازی پیش از اجرای آزمون' },
+      });
+    }
+  }
+}
+
 /** سند را — از هر وضعیتی — به FINALIZED برمی‌گرداند تا اجرای چندباره ممکن باشد. */
 async function prepare(client, documentId) {
   for (let step = 0; step < 4; step += 1) {
@@ -144,9 +255,13 @@ async function main() {
   await bayegan.login();
   await nazer.login();
 
+  await resolveOpenFeedback(karpardaz, DOC_A);
   await prepare(karpardaz, DOC_A);
   await prepare(karpardaz, DOC_B);
-  results.push('— ورود چهار کاربر و آماده‌سازی دو سند انجام شد —');
+
+  // سند سوم، تازه و خالی: برای آزمون «نهایی کردن بایگانی بدون پیش‌نیاز».
+  const bareDocumentId = await createBareDocument(karpardaz);
+  results.push('— ورود چهار کاربر و آماده‌سازی سه سند انجام شد —');
 
   // ── ۱) CSRF
   const noCsrf = await karpardaz.request('POST', `/documents/${DOC_A}/send-to-archive`, {
@@ -318,7 +433,7 @@ async function main() {
   );
 
   // ── ۱۵) نهایی کردن بایگانی سند B: همه پیش‌نیازهای کم با هم
-  const notReady = await bayegan.request('POST', `/archive/documents/${DOC_B}/complete`, {
+  const notReady = await bayegan.request('POST', `/archive/documents/${bareDocumentId}/complete`, {
     idempotent: true,
   });
   const paths = (notReady.data?.details ?? []).map((item) => item.path);

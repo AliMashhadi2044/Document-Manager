@@ -1,0 +1,198 @@
+/**
+ * Schema قالب گزارش — نسخه ۱ (docs/09 §۲).
+ *
+ * قالب یک **سند داده** است: در دیتابیس به‌صورت JSONB می‌نشیند، در طراح بصری فاز ۷ ساخته
+ * می‌شود و موتور فقط می‌خواندش. هیچ کد اجرایی در قالب نیست.
+ *
+ * `schemaVersion` از همین ابتدا هست و `z.literal(1)` است، نه `z.number()`: قالبِ نسخه
+ * ناشناخته باید **رد** شود، نه اینکه نیمه‌خوانده و نیمه‌درست رندر شود. مهاجرت نسخه‌ها
+ * وقتی نسخه ۲ آمد، یک تابع صریح خواهد بود.
+ */
+
+import { z } from 'zod';
+
+import { conditionSchema, expressionSchema, formatSpecSchema } from './expression.js';
+
+const mm = z.number().min(0).max(500);
+
+export const pageSchema = z.object({
+  size: z.enum(['A4', 'A5', 'A3', 'LETTER']),
+  orientation: z.enum(['portrait', 'landscape']),
+  margins: z.object({
+    top: mm,
+    bottom: mm,
+    inlineStart: mm,
+    inlineEnd: mm,
+  }),
+  direction: z.literal('rtl'),
+});
+
+export const styleTokensSchema = z.object({
+  fontFamily: z.string().max(100),
+  baseFontSizePt: z.number().min(5).max(24),
+  headingFontSizePt: z.number().min(5).max(36),
+  tableFontSizePt: z.number().min(5).max(20),
+  borderWidthPx: z.number().min(0).max(5),
+  /** پالت چاپ: سیاه‌وسفید، بدون پس‌زمینه کم‌کنتراست (docs/09 §۶). */
+  borderColor: z.string().regex(/^#[0-9a-fA-F]{6}$/u),
+  textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/u),
+  mutedTextColor: z.string().regex(/^#[0-9a-fA-F]{6}$/u),
+});
+export type StyleTokens = z.infer<typeof styleTokensSchema>;
+
+const blockBase = {
+  id: z.string().min(1).max(60),
+  visibleWhen: conditionSchema.optional(),
+};
+
+const textBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('text'),
+  /** متن با جای‌گذاری `{{path}}`؛ جای‌گذاری با escape کامل انجام می‌شود. */
+  text: z.string().max(2000),
+  align: z.enum(['start', 'center', 'end']),
+  bold: z.boolean().default(false),
+  fontSizePt: z.number().min(5).max(36).optional(),
+});
+
+const variableBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('variable'),
+  labelFa: z.string().max(200).optional(),
+  value: expressionSchema,
+  format: formatSpecSchema,
+  align: z.enum(['start', 'center', 'end']).default('start'),
+});
+
+const multilineSchema = z.object({
+  /** خطوط اضافی همان سلول؛ خط اول خودِ `value` ستون است. */
+  lines: z
+    .array(
+      z.object({
+        value: expressionSchema,
+        format: formatSpecSchema,
+        muted: z.boolean().default(false),
+      }),
+    )
+    .max(4),
+});
+
+export const tableColumnSchema = z.object({
+  key: z.string().min(1).max(60),
+  titleFa: z.string().min(1).max(120),
+  width: z.object({
+    unit: z.enum(['mm', 'percent', 'auto']),
+    value: z.number().min(0).max(500).optional(),
+  }),
+  align: z.enum(['start', 'center', 'end']),
+  value: expressionSchema,
+  format: formatSpecSchema,
+  multiline: multilineSchema.optional(),
+  visibleWhen: conditionSchema.optional(),
+});
+export type TableColumn = z.infer<typeof tableColumnSchema>;
+
+export const aggregateSchema = z.enum(['sum', 'count', 'none']);
+
+const tableBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('table'),
+  /** باید کلیدی از Data Dictionary باشد؛ بررسی‌اش کار لایه API است. */
+  dataSource: z.string().min(1).max(120),
+  columns: z.array(tableColumnSchema).min(1).max(40),
+  sortBy: z
+    .array(z.object({ path: z.string().max(120), dir: z.enum(['asc', 'desc']) }))
+    .max(5)
+    .default([]),
+  totalsRow: z
+    .object({
+      enabled: z.boolean(),
+      labelFa: z.string().max(100),
+      /** برای هر کلید ستون: چه چیزی در ردیف جمع بنشیند. */
+      cells: z.record(aggregateSchema),
+    })
+    .optional(),
+  /** حداقل تعداد ردیف چاپی؛ کمبود با ردیف خالی پر می‌شود (docs/15 §۳). */
+  minRows: z.number().int().min(0).max(100).default(0),
+  pagination: z.object({
+    repeatHeaderOnNewPage: z.boolean(),
+    avoidRowBreak: z.boolean(),
+  }),
+});
+
+const signatureBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('signature'),
+  /** `roleKey` امضاکننده در اطلاعات پایه؛ نام و سمت در لحظه تولید snapshot می‌شوند. */
+  signatoryRoleKey: z.string().min(1).max(50),
+  align: z.enum(['start', 'center', 'end']),
+  /** ارتفاع فضای امضا بر حسب میلی‌متر. */
+  spaceMm: z.number().min(0).max(60).default(18),
+});
+
+const signatureRowBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('signatureRow'),
+  blocks: z.array(signatureBlockSchema).min(1).max(4),
+});
+
+const dividerBlockSchema = z.object({ ...blockBase, type: z.literal('divider') });
+const spacerBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('spacer'),
+  heightMm: z.number().min(0).max(100),
+});
+const pageNumberBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('pageNumber'),
+  templateFa: z.string().max(100).default('صفحه {{page}} از {{pages}}'),
+});
+const generatedAtBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('generatedAt'),
+  labelFa: z.string().max(100).default('تاریخ تولید گزارش'),
+});
+
+export const blockSchema = z.discriminatedUnion('type', [
+  textBlockSchema,
+  variableBlockSchema,
+  tableBlockSchema,
+  signatureBlockSchema,
+  signatureRowBlockSchema,
+  dividerBlockSchema,
+  spacerBlockSchema,
+  pageNumberBlockSchema,
+  generatedAtBlockSchema,
+]);
+export type Block = z.infer<typeof blockSchema>;
+export type TableBlock = z.infer<typeof tableBlockSchema>;
+export type TextBlock = z.infer<typeof textBlockSchema>;
+export type SignatureBlock = z.infer<typeof signatureBlockSchema>;
+
+export const templateV1Schema = z.object({
+  schemaVersion: z.literal(1),
+  reportTypeKey: z.string().min(1).max(60),
+  titleFa: z.string().min(1).max(200),
+  page: pageSchema,
+  styles: styleTokensSchema,
+  header: z.object({ blocks: z.array(blockSchema).max(30), repeatOnEveryPage: z.boolean() }),
+  body: z.array(blockSchema).max(60),
+  footer: z.object({ blocks: z.array(blockSchema).max(30), repeatOnEveryPage: z.boolean() }),
+});
+export type TemplateV1 = z.infer<typeof templateV1Schema>;
+
+/** همه بلوک‌های قالب، به‌صورت تخت — برای شمارش گره و بررسی مسیرها. */
+export function allBlocks(template: TemplateV1): Block[] {
+  const blocks = [...template.header.blocks, ...template.body, ...template.footer.blocks];
+  const out: Block[] = [];
+  for (const block of blocks) {
+    out.push(block);
+    if (block.type === 'signatureRow') out.push(...block.blocks);
+  }
+  return out;
+}
+
+/** متغیرهای `{{path}}` داخل متن یک بلوک متنی. */
+export function textPlaceholders(text: string): string[] {
+  return [...text.matchAll(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/gu)].map((match) => match[1] as string);
+}

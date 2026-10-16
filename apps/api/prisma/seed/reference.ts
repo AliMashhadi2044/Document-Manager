@@ -28,6 +28,7 @@ import {
   seedOrganization,
   seedPaymentMethods,
 } from './base-data';
+import { seedProductTypesAndSignatories, seedReports } from './reports';
 
 const prisma = new PrismaClient();
 
@@ -183,6 +184,10 @@ async function main(): Promise<void> {
   await seedBudgetStructure(prisma);
   await seedLookups(prisma);
   await seedFiscalYearsAndTaxRates(prisma);
+
+  // فاز ۶ — گزارش مالیات به‌صورت داده: نوع گزارش، قالب منتشرشده، انواع کالا و امضاکنندگان.
+  await seedProductTypesAndSignatories(prisma);
+  await seedReports(prisma);
 
   await seedInitialUser(roleIds);
   console.log('— پایان —');

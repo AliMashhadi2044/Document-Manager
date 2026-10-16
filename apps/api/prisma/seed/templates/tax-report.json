@@ -1,0 +1,425 @@
+{
+  "schemaVersion": 1,
+  "reportTypeKey": "TAX_REPORT",
+  "titleFa": "گزارش مالیات بر ارزش افزوده",
+  "page": {
+    "size": "A4",
+    "orientation": "landscape",
+    "margins": {
+      "top": 12,
+      "bottom": 12,
+      "inlineStart": 10,
+      "inlineEnd": 10
+    },
+    "direction": "rtl"
+  },
+  "styles": {
+    "fontFamily": "Vazirmatn, Tahoma, sans-serif",
+    "baseFontSizePt": 9,
+    "headingFontSizePt": 13,
+    "tableFontSizePt": 8,
+    "borderWidthPx": 1,
+    "borderColor": "#333333",
+    "textColor": "#000000",
+    "mutedTextColor": "#555555"
+  },
+  "header": {
+    "repeatOnEveryPage": true,
+    "blocks": [
+      {
+        "id": "org-name",
+        "type": "text",
+        "text": "{{organization.name}}",
+        "align": "center",
+        "bold": true,
+        "fontSizePt": 13
+      },
+      {
+        "id": "report-title",
+        "type": "text",
+        "text": "گزارش مالیات بر ارزش افزوده",
+        "align": "center",
+        "bold": true,
+        "fontSizePt": 12
+      },
+      {
+        "id": "document-line",
+        "type": "text",
+        "text": "شرح سند: {{document.title}} — سال مالی {{document.fiscalYear}}",
+        "align": "center",
+        "bold": false
+      },
+      {
+        "id": "document-number-line",
+        "type": "text",
+        "text": "شماره سند: {{document.documentNumber}} — تاریخ سند: {{document.documentDateJalali}}",
+        "align": "center",
+        "bold": false,
+        "visibleWhen": {
+          "k": "not",
+          "of": {
+            "k": "empty",
+            "of": {
+              "k": "var",
+              "path": "document.documentNumber"
+            }
+          }
+        }
+      },
+      {
+        "id": "header-divider",
+        "type": "divider"
+      }
+    ]
+  },
+  "body": [
+    {
+      "id": "vendor-table",
+      "type": "table",
+      "dataSource": "document.vendorAggregates",
+      "minRows": 4,
+      "sortBy": [],
+      "pagination": {
+        "repeatHeaderOnNewPage": true,
+        "avoidRowBreak": true
+      },
+      "totalsRow": {
+        "enabled": true,
+        "labelFa": "جمع کل",
+        "cells": {
+          "goodsAmount": "sum",
+          "discount": "sum",
+          "net": "sum",
+          "tax": "sum",
+          "total": "sum"
+        }
+      },
+      "columns": [
+        {
+          "key": "rowNo",
+          "titleFa": "ردیف",
+          "width": {
+            "unit": "mm",
+            "value": 7
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.index"
+          },
+          "format": {
+            "kind": "integer",
+            "persianDigits": true,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        },
+        {
+          "key": "counterparty",
+          "titleFa": "طرف قرارداد حقیقی / حقوقی — کد ملی / شماره اقتصادی",
+          "width": {
+            "unit": "mm",
+            "value": 38
+          },
+          "align": "start",
+          "value": {
+            "k": "var",
+            "path": "row.vendorName"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": false,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          },
+          "multiline": {
+            "lines": [
+              {
+                "value": {
+                  "k": "var",
+                  "path": "row.vendorIdentifier"
+                },
+                "muted": true,
+                "format": {
+                  "kind": "economicCode",
+                  "persianDigits": true,
+                  "thousandSeparator": false,
+                  "decimals": 0,
+                  "emptyText": ""
+                }
+              }
+            ]
+          }
+        },
+        {
+          "key": "representative",
+          "titleFa": "نام فروشنده",
+          "width": {
+            "unit": "mm",
+            "value": 22
+          },
+          "align": "start",
+          "value": {
+            "k": "var",
+            "path": "row.representativeName"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": false,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        },
+        {
+          "key": "address",
+          "titleFa": "آدرس",
+          "width": {
+            "unit": "mm",
+            "value": 32
+          },
+          "align": "start",
+          "value": {
+            "k": "var",
+            "path": "row.address"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": false,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        },
+        {
+          "key": "contact",
+          "titleFa": "تلفن — کد پستی",
+          "width": {
+            "unit": "mm",
+            "value": 20
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.phone"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": true,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": "—"
+          },
+          "multiline": {
+            "lines": [
+              {
+                "value": {
+                  "k": "var",
+                  "path": "row.postalCode"
+                },
+                "muted": true,
+                "format": {
+                  "kind": "text",
+                  "persianDigits": true,
+                  "thousandSeparator": false,
+                  "decimals": 0,
+                  "emptyText": ""
+                }
+              }
+            ]
+          }
+        },
+        {
+          "key": "invoiceRef",
+          "titleFa": "شماره صورت حساب — تاریخ صورت حساب",
+          "width": {
+            "unit": "mm",
+            "value": 22
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.invoiceNumber"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": true,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          },
+          "multiline": {
+            "lines": [
+              {
+                "value": {
+                  "k": "var",
+                  "path": "row.invoiceDate"
+                },
+                "muted": false,
+                "format": {
+                  "kind": "jalaliDate",
+                  "persianDigits": true,
+                  "thousandSeparator": false,
+                  "decimals": 0,
+                  "emptyText": ""
+                }
+              }
+            ]
+          }
+        },
+        {
+          "key": "productType",
+          "titleFa": "نوع کالا",
+          "width": {
+            "unit": "mm",
+            "value": 20
+          },
+          "align": "start",
+          "value": {
+            "k": "var",
+            "path": "row.productTypeTitle"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": false,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        },
+        {
+          "key": "goodsAmount",
+          "titleFa": "مبلغ کالا",
+          "width": {
+            "unit": "mm",
+            "value": 23
+          },
+          "align": "end",
+          "value": {
+            "k": "var",
+            "path": "row.goodsAmount"
+          },
+          "format": {
+            "kind": "currency",
+            "persianDigits": true,
+            "thousandSeparator": true,
+            "decimals": 0,
+            "emptyText": "۰"
+          }
+        },
+        {
+          "key": "discount",
+          "titleFa": "مبلغ تخفیف",
+          "width": {
+            "unit": "mm",
+            "value": 19
+          },
+          "align": "end",
+          "value": {
+            "k": "var",
+            "path": "row.discount"
+          },
+          "format": {
+            "kind": "currency",
+            "persianDigits": true,
+            "thousandSeparator": true,
+            "decimals": 0,
+            "emptyText": "۰"
+          }
+        },
+        {
+          "key": "net",
+          "titleFa": "مبلغ خالص",
+          "width": {
+            "unit": "mm",
+            "value": 23
+          },
+          "align": "end",
+          "value": {
+            "k": "var",
+            "path": "row.net"
+          },
+          "format": {
+            "kind": "currency",
+            "persianDigits": true,
+            "thousandSeparator": true,
+            "decimals": 0,
+            "emptyText": "۰"
+          }
+        },
+        {
+          "key": "tax",
+          "titleFa": "عوارض و مالیات بر ارزش افزوده",
+          "width": {
+            "unit": "mm",
+            "value": 23
+          },
+          "align": "end",
+          "value": {
+            "k": "var",
+            "path": "row.tax"
+          },
+          "format": {
+            "kind": "currency",
+            "persianDigits": true,
+            "thousandSeparator": true,
+            "decimals": 0,
+            "emptyText": "۰"
+          }
+        },
+        {
+          "key": "total",
+          "titleFa": "جمع کل",
+          "width": {
+            "unit": "mm",
+            "value": 23
+          },
+          "align": "end",
+          "value": {
+            "k": "var",
+            "path": "row.total"
+          },
+          "format": {
+            "kind": "currency",
+            "persianDigits": true,
+            "thousandSeparator": true,
+            "decimals": 0,
+            "emptyText": "۰"
+          }
+        }
+      ]
+    }
+  ],
+  "footer": {
+    "repeatOnEveryPage": false,
+    "blocks": [
+      {
+        "id": "footer-space",
+        "type": "spacer",
+        "heightMm": 6
+      },
+      {
+        "id": "signatures",
+        "type": "signatureRow",
+        "blocks": [
+          {
+            "id": "sign-procurement",
+            "type": "signature",
+            "signatoryRoleKey": "PROCUREMENT_LEAD",
+            "align": "center",
+            "spaceMm": 18
+          },
+          {
+            "id": "sign-manager",
+            "type": "signature",
+            "signatoryRoleKey": "GENERAL_MANAGER",
+            "align": "center",
+            "spaceMm": 18
+          }
+        ]
+      }
+    ]
+  }
+}

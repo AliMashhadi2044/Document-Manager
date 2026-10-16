@@ -8,13 +8,19 @@
  * هرگز به `Date` با ساعت تبدیل نمی‌شود تا timezone یک روز جابه‌جایش نکند.
  */
 
-import {
-  isValidJalaaliDate,
-  jalaaliMonthLength,
-  isLeapJalaaliYear,
-  toGregorian,
-  toJalaali,
-} from 'jalaali-js';
+/**
+ * `jalaali-js` یک ماژول CommonJS است و **نام‌های صادرشده‌اش در ESM قابل تحلیل ایستا
+ * نیستند**. اگر به‌صورت `import { toJalaali } from 'jalaali-js'` نوشته شود، باندلرها
+ * (مثل Vite) با pre-bundle آن را می‌پوشانند ولی Node خامِ ESM همان‌جا می‌شکند:
+ * «does not provide an export named …». پس import پیش‌فرض و سپس تجزیه — که در هر دو
+ * خروجی CJS و ESM کار می‌کند.
+ *
+ * این نقص در فاز ۶ پیدا شد، وقتی یک اسکریپت Node مستقیماً خروجی ESM بسته را خواند.
+ */
+import jalaali from 'jalaali-js';
+
+const { isValidJalaaliDate, jalaaliMonthLength, isLeapJalaaliYear, toGregorian, toJalaali } =
+  jalaali;
 
 import { normalizeDigits } from '../money/money.js';
 

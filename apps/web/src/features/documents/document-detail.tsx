@@ -35,6 +35,7 @@ import { useDeleteInvoice } from '../invoices/invoices.api';
 import { AttachmentsPanel } from '../files/attachments-panel';
 import { FeedbackPanel } from '../feedback/feedback-panel';
 import { useCurrentUser } from '../auth/auth.api';
+import { ReportPreview } from '../reports/report-preview';
 
 export function DocumentDetailView({
   documentId,
@@ -55,6 +56,7 @@ export function DocumentDetailView({
   const [showReopen, setShowReopen] = useState(false);
   const [showSendBack, setShowSendBack] = useState(false);
   const [sendBackReason, setSendBackReason] = useState('');
+  const [showReport, setShowReport] = useState(false);
   const [showAddInvoice, setShowAddInvoice] = useState(false);
   const removeInvoice = useDeleteInvoice();
   const [notice, setNotice] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
@@ -64,8 +66,15 @@ export function DocumentDetailView({
     return <ErrorState message="دریافت سند ناموفق بود" onRetry={() => void refetch()} />;
   }
 
-  const editable = data.status === 'DRAFT' || data.status === 'REOPENED';
   const permissions = user?.permissions ?? [];
+
+  if (showReport && user) {
+    return (
+      <ReportPreview documentId={documentId} user={user} onBack={() => setShowReport(false)} />
+    );
+  }
+
+  const editable = data.status === 'DRAFT' || data.status === 'REOPENED';
   // «ارجاع به بایگانی» فقط روی سند ثبت‌شده معنا دارد و فقط کار کارپردازی است.
   const canSendToArchive =
     data.status === 'FINALIZED' && permissions.includes('document:send_to_archive');
@@ -85,6 +94,11 @@ export function DocumentDetailView({
           {editable ? (
             <Button variant="secondary" onClick={() => setShowAddInvoice((value) => !value)}>
               افزودن فاکتور
+            </Button>
+          ) : null}
+          {permissions.includes('report:run') && data.status !== 'DRAFT' ? (
+            <Button variant="secondary" onClick={() => setShowReport(true)}>
+              گزارش مالیات
             </Button>
           ) : null}
           {canSendToArchive ? (

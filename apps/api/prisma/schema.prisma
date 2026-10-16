@@ -40,6 +40,10 @@ model User {
   uploadedAttachments  Attachment[]                  @relation("AttachmentUploadedBy")
   deletedAttachments   Attachment[]                  @relation("AttachmentDeletedBy")
   createdFeedbacks     ReviewFeedback[]              @relation("FeedbackCreatedBy")
+  reportDefinitions    ReportDefinition[]            @relation("ReportDefinitionCreatedBy")
+  reportVersions       ReportVersion[]               @relation("ReportVersionCreatedBy")
+  reportRuns           ReportRun[]                   @relation("ReportRunRequestedBy")
+  productTypesSet      DocumentVendorProductType[]   @relation("ProductTypeSetBy")
   feedbackReplies      ReviewFeedbackReply[]         @relation("FeedbackReplyBy")
   feedbackStatusEvents ReviewFeedbackStatusHistory[] @relation("FeedbackStatusActor")
   notifications        Notification[]                @relation("NotificationRecipient")
@@ -348,6 +352,9 @@ model Vendor {
 
   bankAccounts VendorBankAccount[]
   invoices     Invoice[]
+
+  documentProductTypes   DocumentVendorProductType[]
+  productTypeSuggestions VendorProductTypeSuggestion[]
 
   @@index([isActive])
   @@index([name])
@@ -663,6 +670,9 @@ model ProductType {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  documentVendors DocumentVendorProductType[]
+  suggestions     VendorProductTypeSuggestion[]
+
   @@index([isActive, sortOrder])
   @@map("product_types")
 }
@@ -836,6 +846,8 @@ model FinancialDocument {
   attachments     Attachment[]
   feedbacks       ReviewFeedback[]
   notifications   Notification[]
+  reportRuns      ReportRun[]
+  vendorProductTypes DocumentVendorProductType[]
 
   /// لازم برای FK ترکیبی از invoices — ستون فقرات محدودیت یک فاکتور ستاد (ADR-0006).
   @@unique([id, type])
@@ -1360,4 +1372,179 @@ model Notification {
   /// کارتابل اعلان: خوانده‌نشده‌های همان کاربر، جدیدترین اول.
   @@index([userId, readAt, createdAt])
   @@map("notifications")
+}
+
+// ═══════════════════════ فاز ۶ — گزارش‌گیری ═══════════════════════
+// مرجع: docs/09-report-engine.md و docs/03-erd.md §۵
+//
+// سه قاعده‌ای که این بخش را از یک «صفحه گزارش» جدا می‌کند:
+//  ۱. قالب **داده** است (JSONB)، نه کد؛ گزارش مالیات کد رندر اختصاصی ندارد.
+//  ۲. نسخه منتشرشده تغییرناپذیر است، پس خروجی تاریخی با ویرایش قالب خراب نمی‌شود.
+//  ۳. هر اجرا هم نسخه قالب و هم نسخه سند را ثبت می‌کند ⇒ بازتولید بیت‌به‌بیت.
+
+enum ReportDefinitionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ReportVersionStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ReportRunStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum ReportOutputFormat {
+  HTML
+  EXCEL
+  PDF
+}
+
+/// نوع گزارش: دامنه داده‌ای که قالب‌های این نوع می‌توانند به آن دسترسی داشته باشند.
+model ReportType {
+  id     String @id @default(uuid()) @db.Uuid
+  key    String @unique @db.VarChar(60)
+  titleFa String @map("title_fa") @db.VarChar(200)
+
+  /// کلید دامنه داده در Data Dictionary؛ فعلاً فقط `document`.
+  dataScopeKey String @map("data_scope_key") @db.VarChar(60)
+
+  /// گزارش سیستمی: قابل کپی و ویرایش، ولی نسخه اصلی به‌عنوان مرجع بازگشت می‌ماند.
+  isSystem Boolean @default(false) @map("is_system")
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  definitions ReportDefinition[]
+
+  @@map("report_types")
+}
+
+model ReportDefinition {
+  id           String                 @id @default(uuid()) @db.Uuid
+  reportTypeId String                 @map("report_type_id") @db.Uuid
+  name         String                 @db.VarChar(200)
+  status       ReportDefinitionStatus @default(DRAFT)
+
+  /// نسخه‌ای که اجرا از آن انجام می‌شود؛ همیشه یک نسخه PUBLISHED.
+  currentVersionId String? @unique @map("current_version_id") @db.Uuid
+
+  isSystem    Boolean @default(false) @map("is_system")
+  createdById String? @map("created_by") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  reportType     ReportType     @relation(fields: [reportTypeId], references: [id], onDelete: Restrict)
+  createdBy      User?          @relation("ReportDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  currentVersion ReportVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       ReportVersion[] @relation("DefinitionVersions")
+  runs           ReportRun[]
+
+  @@index([reportTypeId, status])
+  @@map("report_definitions")
+}
+
+/// نسخه قالب. پس از PUBLISHED شدن **هرگز** ویرایش نمی‌شود.
+model ReportVersion {
+  id           String              @id @default(uuid()) @db.Uuid
+  definitionId String              @map("definition_id") @db.Uuid
+  versionNo    Int                 @map("version_no")
+  status       ReportVersionStatus @default(DRAFT)
+
+  /// نسخه schema قالب؛ قالب با نسخه ناشناخته اجرا نمی‌شود.
+  templateSchemaVersion Int  @default(1) @map("template_schema_version")
+  template              Json
+
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
+  createdById String?   @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  definition        ReportDefinition  @relation("DefinitionVersions", fields: [definitionId], references: [id], onDelete: Cascade)
+  createdBy         User?             @relation("ReportVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  currentOfDefinition ReportDefinition? @relation("CurrentVersion")
+  runs              ReportRun[]
+
+  @@unique([definitionId, versionNo])
+  /// ستون فقرات FK ترکیبی: نسخه جاری یک قالب باید نسخه **همان** قالب باشد.
+  @@unique([id, definitionId])
+  @@map("report_versions")
+}
+
+/// یک اجرای گزارش. خروجی فایلی به `attachments` وصل می‌شود.
+model ReportRun {
+  id           String             @id @default(uuid()) @db.Uuid
+  definitionId String             @map("definition_id") @db.Uuid
+  versionId    String             @map("version_id") @db.Uuid
+  documentId   String             @map("document_id") @db.Uuid
+
+  /// نسخه سند در لحظه اجرا — بدون آن، بازتولید خروجی تاریخی ممکن نیست.
+  documentRevisionId String? @map("document_revision_id") @db.Uuid
+
+  params       Json               @default("{}")
+  status       ReportRunStatus    @default(PENDING)
+  outputFormat ReportOutputFormat
+  rowCount     Int?               @map("row_count")
+  durationMs   Int?               @map("duration_ms")
+  errorMessage String?            @map("error_message") @db.Text
+
+  requestedById String   @map("requested_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  definition ReportDefinition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  version    ReportVersion     @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  document   FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  requestedBy User             @relation("ReportRunRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+  @@index([requestedById, createdAt])
+  @@map("report_runs")
+}
+
+/// نوع کالای یک فروشنده **در یک سند**.
+///
+/// کلید ترکیبی `(document_id, vendor_id)` است نه فقط فروشنده: یک فروشنده در سندهای
+/// مختلف نوع کالای متفاوت دارد (docs/03-erd.md §۵).
+model DocumentVendorProductType {
+  documentId    String @map("document_id") @db.Uuid
+  vendorId      String @map("vendor_id") @db.Uuid
+  productTypeId String @map("product_type_id") @db.Uuid
+
+  setById String   @map("set_by") @db.Uuid
+  setAt   DateTime @default(now()) @map("set_at") @db.Timestamptz(3)
+
+  document    FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  vendor      Vendor            @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  productType ProductType       @relation(fields: [productTypeId], references: [id], onDelete: Restrict)
+  setBy       User              @relation("ProductTypeSetBy", fields: [setById], references: [id], onDelete: Cascade)
+
+  @@id([documentId, vendorId])
+  @@index([vendorId])
+  @@map("document_vendor_product_types")
+}
+
+/// پیشنهاد نوع کالا برای یک فروشنده، بر اساس انتخاب‌های قبلی.
+///
+/// چرا جدول جدا و نه شمارش لحظه‌ای روی جدول بالا: پیشنهاد باید مرتب‌سازی‌شده و سریع
+/// باشد و با حذف یک سند هم از بین نرود؛ «این فروشنده معمولاً انشعاب برق می‌فروشد»
+/// دانشی است که به یک سند بسته نیست.
+model VendorProductTypeSuggestion {
+  vendorId      String @map("vendor_id") @db.Uuid
+  productTypeId String @map("product_type_id") @db.Uuid
+  useCount      Int    @default(0) @map("use_count")
+
+  lastUsedAt DateTime @default(now()) @map("last_used_at") @db.Timestamptz(3)
+
+  vendor      Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  productType ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+
+  @@id([vendorId, productTypeId])
+  @@index([vendorId, useCount])
+  @@map("vendor_product_type_suggestions")
 }

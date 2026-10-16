@@ -16,6 +16,7 @@ import { DocumentsModule } from './modules/documents/documents.module';
 import { FilesModule } from './modules/files/files.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
 import { ArchiveModule } from './modules/archive/archive.module';
+import { ReportingModule } from './modules/reporting/reporting.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { HealthController } from './modules/health/health.controller';
 
@@ -35,6 +36,7 @@ import { HealthController } from './modules/health/health.controller';
     FilesModule,
     FeedbackModule,
     ArchiveModule,
+    ReportingModule,
   ],
   controllers: [HealthController],
   providers: [
