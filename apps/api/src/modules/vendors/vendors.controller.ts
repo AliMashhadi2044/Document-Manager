@@ -5,6 +5,7 @@ import { formatIban, validateIban } from '@dm/shared';
 
 import {
   CurrentUser,
+  ReadOnlyRoute,
   RequirePermission,
   type AuthenticatedUser,
 } from '../../common/auth/auth.decorators';
@@ -44,6 +45,7 @@ export class VendorsController {
   }
 
   @RequirePermission('vendor:read')
+  @ReadOnlyRoute()
   @Post('check-duplicate')
   @ApiOperation({ summary: 'یافتن فروشندگان مشابه پیش از ثبت رکورد جدید' })
   async checkDuplicate(
@@ -70,6 +72,7 @@ export class VendorsController {
 
   /** اعتبارسنجی شبا بدون ذخیره — برای بازخورد لحظه‌ای فرم. */
   @RequirePermission('vendor:read')
+  @ReadOnlyRoute()
   @Post('validate-iban')
   @ApiOperation({ summary: 'بررسی شبا و تشخیص بانک (بدون ذخیره)' })
   async validateIbanEndpoint(

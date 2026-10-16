@@ -144,6 +144,25 @@ export class DocumentsController {
     return this.documents.sendToArchive(id, user);
   }
 
+  /**
+   * ارجاع برای اصلاح — اقدام ناظر.
+   *
+   * مجوزش `feedback:create` است (جدول `TRANSITIONS`)، یعنی همان کسی که حق دیدن ایراد
+   * و ثبتش را دارد. کارپردازی این مجوز را ندارد و نمی‌تواند سند خودش را برگشت بزند.
+   */
+  @RequirePermission('feedback:create')
+  @Idempotent()
+  @Post(':id/send-back')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'ارجاع سند برای اصلاح، با ثبت علت الزامی' })
+  async sendBack(
+    @Param('id') id: string,
+    @Body(new ZodBody(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.documents.sendBackForRevision(id, body.reason, user);
+  }
+
   @RequirePermission('invoice:create')
   @Post(':id/invoices')
   @ApiOperation({ summary: 'افزودن فاکتور به سند' })

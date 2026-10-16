@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { AuthService } from './auth.service';
 import { CSRF_COOKIE, SESSION_COOKIE, SessionService } from './session.service';
 import {
+  Authenticated,
   CurrentUser,
   Public,
   RequirePermission,
@@ -90,7 +91,7 @@ export class AuthController {
     };
   }
 
-  @RequirePermission()
+  @Authenticated()
   @Post('logout-all')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'خروج از همه دستگاه‌ها' })

@@ -5,6 +5,7 @@ import { AppError } from '../errors/app-error';
 
 export const PERMISSIONS_KEY = 'required_permissions';
 export const PUBLIC_KEY = 'is_public';
+export const READ_ONLY_KEY = 'is_read_only_route';
 
 /**
  * اعلام مجوز لازم یک endpoint.
@@ -16,8 +17,28 @@ export const PUBLIC_KEY = 'is_public';
 export const RequirePermission = (...permissions: Permission[]) =>
   SetMetadata(PERMISSIONS_KEY, permissions);
 
+/**
+ * مسیر فقط نیازمند **ورود**، بدون مجوز خاص (مثل خروج از همه دستگاه‌ها).
+ *
+ * معادل `@RequirePermission()` بدون آرگومان است، ولی نیت را صریح می‌کند: «عمداً بدون
+ * مجوز» در برابر «مجوزش یادم رفت». تست‌های پوشش دسترسی به همین تفاوت تکیه می‌کنند.
+ */
+export const Authenticated = () => SetMetadata(PERMISSIONS_KEY, []);
+
 /** مسیر عمومی و بدون نیاز به نشست (مثل ورود و health). */
 export const Public = () => SetMetadata(PUBLIC_KEY, true);
+
+/**
+ * مسیر POST که **هیچ چیزی را تغییر نمی‌دهد**.
+ *
+ * چند مسیر خواندنی ناچارند POST باشند، چون ورودی‌شان داده هویتی است و داده حساس در
+ * URL ممنوع است (مثل بررسی تکراری بودن فروشنده یا اعتبارسنجی شبا). بدون این نشان،
+ * تست تفکیک وظایف آن‌ها را «مسیر نوشتنی» می‌شمارد و هشدار دروغ می‌دهد.
+ *
+ * گذاشتن این نشان روی مسیری که واقعاً می‌نویسد، یعنی خاموش کردن یک کنترل امنیتی؛
+ * پس فقط جایی استفاده می‌شود که بدنه متد هیچ نوشتنی ندارد.
+ */
+export const ReadOnlyRoute = () => SetMetadata(READ_ONLY_KEY, true);
 
 export interface AuthenticatedUser {
   readonly id: string;

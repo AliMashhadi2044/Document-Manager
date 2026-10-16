@@ -13,6 +13,10 @@ import { AuthModule } from './modules/auth/auth.module';
 import { BaseDataModule } from './modules/base-data/base-data.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { FilesModule } from './modules/files/files.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
+import { ArchiveModule } from './modules/archive/archive.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -26,7 +30,11 @@ import { HealthController } from './modules/health/health.controller';
     AuthModule,
     BaseDataModule,
     VendorsModule,
+    NotificationsModule,
     DocumentsModule,
+    FilesModule,
+    FeedbackModule,
+    ArchiveModule,
   ],
   controllers: [HealthController],
   providers: [

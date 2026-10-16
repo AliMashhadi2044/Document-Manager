@@ -20,6 +20,8 @@ import {
 } from '../../common/query/list-query';
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
 import { buildDocumentSnapshot } from './document-snapshot';
+import { DocumentAccessService } from './document-access.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const DOCUMENT_SORTABLE = ['createdAt', 'fiscalYear', 'documentDate', 'totalAmount'] as const;
 
@@ -44,6 +46,8 @@ export class DocumentsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly financial: FinancialService,
+    private readonly access: DocumentAccessService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(query: ListQuery, user: AuthenticatedUser): Promise<PageResult<FinancialDocument>> {
@@ -102,18 +106,9 @@ export class DocumentsService {
     return document;
   }
 
-  /**
-   * دامنه دسترسی بر اساس نقش (docs/06-roles-permissions.md §۴ لایه ۲).
-   * ناظر پیش‌نویس را نمی‌بیند (تصمیم Q8)؛ بایگانی فقط اسناد ارجاع‌شده را.
-   */
+  /** دامنه دسترسی نقش — قاعده‌اش در `DocumentAccessService` است، نه اینجا. */
   private accessScope(user: AuthenticatedUser): Prisma.FinancialDocumentWhereInput {
-    if (user.permissions.includes('document:read_draft')) return {};
-
-    if (user.permissions.includes('archive:write')) {
-      return { status: { in: ['PENDING_ARCHIVE', 'ARCHIVED', 'NEEDS_REVISION'] } };
-    }
-
-    return { status: { not: 'DRAFT' } };
+    return this.access.scope(user);
   }
 
   async create(input: CreateDocumentInput, user: AuthenticatedUser): Promise<FinancialDocument> {
@@ -267,8 +262,69 @@ export class DocumentsService {
     return this.transition(id, 'REOPEN', reason, user);
   }
 
+  /**
+   * ارجاع به بایگانی.
+   *
+   * ردیف `archive_metadata` همین‌جا و **در همان تراکنش** ساخته می‌شود، نه هنگام اولین
+   * اقدام بایگان؛ وگرنه کارتابل بایگانی سندی را نشان می‌داد که هنوز رکورد فرایندی
+   * ندارد و «از چه زمانی منتظر است» بی‌پاسخ می‌ماند.
+   */
   async sendToArchive(id: string, user: AuthenticatedUser): Promise<FinancialDocument> {
-    return this.transition(id, 'SEND_TO_ARCHIVE', null, user);
+    const document = await this.transition(id, 'SEND_TO_ARCHIVE', null, user, async (tx) => {
+      await tx.archiveMetadata.upsert({
+        where: { documentId: id },
+        create: { documentId: id, status: 'RECEIVED', receivedAt: new Date() },
+        update: { status: 'RECEIVED', receivedAt: new Date() },
+      });
+    });
+
+    await this.notifications.notifyPermissionHolders(
+      'archive:write',
+      {
+        kind: 'DOCUMENT_SENT_TO_ARCHIVE',
+        title: `سند «${document.title}» به بایگانی ارجاع شد`,
+        documentId: id,
+      },
+      { exceptUserId: user.id },
+    );
+
+    return document;
+  }
+
+  /** نهایی کردن بایگانی — فقط از مسیر سرویس بایگانی فراخوانی می‌شود. */
+  async archive(id: string, user: AuthenticatedUser): Promise<FinancialDocument> {
+    return this.transition(id, 'ARCHIVE', null, user, async (tx) => {
+      await tx.financialDocument.update({
+        where: { id },
+        data: { archivedAt: new Date() },
+      });
+    });
+  }
+
+  /**
+   * ارجاع برای اصلاح — اقدام ناظر.
+   *
+   * ثبت دلیل الزامی است (جدول `TRANSITIONS`) و کارپرداز سازنده سند اعلان می‌گیرد.
+   */
+  async sendBackForRevision(
+    id: string,
+    reason: string,
+    user: AuthenticatedUser,
+  ): Promise<FinancialDocument> {
+    const document = await this.transition(id, 'SEND_BACK_FOR_REVISION', reason, user);
+
+    await this.notifications.notifyUsers(
+      [document.createdById],
+      {
+        kind: 'DOCUMENT_NEEDS_REVISION',
+        title: `سند «${document.title}» برای اصلاح برگشت خورد`,
+        body: reason,
+        documentId: id,
+      },
+      { exceptUserId: user.id },
+    );
+
+    return document;
   }
 
   /**
@@ -317,7 +373,7 @@ export class DocumentsService {
       // نسخه کامل **پیش از** تغییر وضعیت ثبت می‌شود، تا وضعیت قبلی همیشه
       // قابل بازیابی باشد (ADR-0009).
       if (rule.createsRevision) {
-        await this.createRevision(tx, id, action === 'REOPEN' ? 'REOPEN' : 'FINALIZE', reason, user.id);
+        await this.createRevision(tx, id, revisionTrigger(action), reason, user.id);
       }
 
       const updated = await tx.financialDocument.update({
@@ -479,4 +535,16 @@ export class DocumentsService {
       include: { actor: { select: { fullName: true, username: true } } },
     });
   }
+}
+
+/**
+ * نگاشت اقدام به علت نسخه.
+ *
+ * پیش از این همه‌چیز جز بازگشایی «ثبت نهایی» ثبت می‌شد؛ با افزوده شدن بایگانی در فاز
+ * ۵، نسخه بایگانی هم «ثبت نهایی» برچسب می‌خورد و تاریخچه گمراه‌کننده می‌شد.
+ */
+function revisionTrigger(action: WorkflowAction): 'FINALIZE' | 'REOPEN' | 'ARCHIVE' {
+  if (action === 'REOPEN') return 'REOPEN';
+  if (action === 'ARCHIVE') return 'ARCHIVE';
+  return 'FINALIZE';
 }

@@ -5,10 +5,14 @@ name: document-manager-dev
 # توجه: پورت میزبان عمداً 5433 است، نه 5432. روی این ماشین یک PostgreSQL محلی از قبل
 # روی 5432 در حال اجراست و اگر از همان پورت استفاده کنیم، برنامه بی‌صدا به دیتابیس
 # اشتباه وصل می‌شود.
-# object storage عمداً پشت profile است و تا فاز ۵ لازم نیست:
+# object storage با profile بالا می‌آید:
 #     docker compose --profile storage up -d
-# دلیل: کشیدن ایمیج MinIO روی شبکه این محیط ممکن نشد. جزئیات و راهکارها در
-# docs/16-local-development.md آمده است.
+#
+# پیش‌فرض SeaweedFS است، نه MinIO. دلیلش فنی نیست بلکه محیطی است: ایمیج MinIO روی
+# این شبکه قابل دریافت نبود (pull access denied روی docker.io و 401 روی quay.io).
+# هر دو درگاه S3 سازگارند و کد برنامه یکی است؛ برای برگشتن به MinIO کافی است
+# سرویس minio با profile `storage-minio` بالا بیاید. جزئیات در
+# docs/16-local-development.md و ADR-0011.
 
 services:
   postgres:
@@ -31,8 +35,40 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
+  # درگاه S3 پیش‌فرض محیط توسعه.
+  s3:
     profiles: ['storage']
+    image: ${S3_IMAGE:-chrislusf/seaweedfs:latest}
+    container_name: dm-s3
+    restart: unless-stopped
+    command:
+      - server
+      - -dir=/data
+      - -s3
+      - -s3.port=8333
+      - -s3.config=/etc/seaweedfs/s3-config.json
+      - -master.volumeSizeLimitMB=1024
+    ports:
+      - '${S3_PORT:-9000}:8333'
+    volumes:
+      - s3-data:/data
+      # هویت و کلید دسترسی توسعه؛ مقدار واقعی production از env می‌آید، نه از این فایل.
+      - ./seaweedfs:/etc/seaweedfs:ro
+    healthcheck:
+      # ریشه بدون امضا ۴۰۳ می‌دهد — یعنی درگاه بالا و احراز هویت فعال است.
+      # آدرس از `hostname -i` می‌آید چون SeaweedFS روی IP کانتینر گوش می‌دهد، نه لوپ‌بک.
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q -S -O /dev/null http://$$(hostname -i):8333/ 2>&1 | grep -q "403\|200"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # جایگزین: در محیطی که ایمیج MinIO در دسترس است، این سرویس به‌جای بالایی بالا بیاید.
+  minio:
+    profiles: ['storage-minio']
     image: ${MINIO_IMAGE:-minio/minio:latest}
     container_name: dm-minio
     restart: unless-stopped
@@ -56,4 +92,5 @@ services:
 
 volumes:
   postgres-data:
+  s3-data:
   minio-data:

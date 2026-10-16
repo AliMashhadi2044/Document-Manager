@@ -36,6 +36,14 @@ model User {
   auditLogs         AuditLog[]
   preferences       UserPreferences?
 
+  archivedDocuments    ArchiveMetadata[]             @relation("ArchiveCompletedBy")
+  uploadedAttachments  Attachment[]                  @relation("AttachmentUploadedBy")
+  deletedAttachments   Attachment[]                  @relation("AttachmentDeletedBy")
+  createdFeedbacks     ReviewFeedback[]              @relation("FeedbackCreatedBy")
+  feedbackReplies      ReviewFeedbackReply[]         @relation("FeedbackReplyBy")
+  feedbackStatusEvents ReviewFeedbackStatusHistory[] @relation("FeedbackStatusActor")
+  notifications        Notification[]                @relation("NotificationRecipient")
+
   @@index([isActive])
   @@map("users")
 }
@@ -824,6 +832,11 @@ model FinancialDocument {
   revisions    DocumentRevision[]
   transitions  DocumentStatusTransition[]
 
+  archiveMetadata ArchiveMetadata?
+  attachments     Attachment[]
+  feedbacks       ReviewFeedback[]
+  notifications   Notification[]
+
   /// لازم برای FK ترکیبی از invoices — ستون فقرات محدودیت یک فاکتور ستاد (ADR-0006).
   @@unique([id, type])
   @@index([fiscalYear, status, type, createdAt])
@@ -946,6 +959,8 @@ model Invoice {
   utilityDetail InvoiceUtilityDetail?
   fuelDetail    InvoiceFuelDetail?
 
+  feedbacks ReviewFeedback[]
+
   /// مرجع FK ترکیبی جدول‌های جزئیات اختصاصی: جزئیات انشعابات فقط به فاکتوری با
   /// `invoice_kind = 'UTILITY'` می‌چسبد و جزئیات سوخت فقط به `'FUEL'`. این قید را
   /// دیتابیس نگه می‌دارد، نه کد.
@@ -984,6 +999,7 @@ model InvoiceItem {
   unit    MeasurementUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
   fuelEntry InvoiceFuelEntry?
+  feedbacks ReviewFeedback[]
 
   /// مرجع FK ترکیبی ردیف سوخت — تضمین می‌کند ردیف تاریخ و ردیف مالی یک فاکتور باشند.
   @@unique([id, invoiceId])
@@ -1128,4 +1144,220 @@ model InvoiceFuelEntry {
   @@unique([invoiceItemId, invoiceId])
   @@index([invoiceId, jalaliDay])
   @@map("invoice_fuel_entries")
+}
+
+// ═══════════════════════ فاز ۵ — بایگانی، فایل، نظارت ═══════════════════════
+// مرجع: docs/03-erd.md §۴ و docs/12-file-storage-policy.md
+//
+// سه قاعده این بخش:
+//  ۱. شماره و تاریخ سند فقط در `financial_documents` زندگی می‌کنند؛ `archive_metadata`
+//     اطلاعات **فرایند** بایگانی را دارد، نه داده سند. دو منبع حقیقت، یعنی اختلاف.
+//  ۲. فایل‌ها hard-delete نمی‌شوند: `deleted_at` تنها soft-delete پروژه است.
+//  ۳. بازخورد ناظر **هرگز** حذف نمی‌شود؛ فقط وضعیتش عوض می‌شود و هر تغییر در
+//     `review_feedback_status_history` می‌نشیند (معیار پذیرش ۷).
+
+enum ArchiveStatus {
+  RECEIVED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum AttachmentKind {
+  SCAN
+  OTHER
+  REPORT_OUTPUT
+}
+
+enum AttachmentStatus {
+  PENDING
+  READY
+  QUARANTINED
+}
+
+enum ScanStatus {
+  SKIPPED
+  PENDING
+  CLEAN
+  INFECTED
+}
+
+enum FeedbackStatus {
+  OPEN
+  ANSWERED
+  RESOLVED
+  REJECTED
+}
+
+enum FeedbackTargetKind {
+  DOCUMENT
+  STAD_META
+  VENDOR
+  INVOICE
+  INVOICE_ITEM
+  PAYMENT
+  ARCHIVE
+  TAX_REPORT
+}
+
+enum NotificationKind {
+  DOCUMENT_SENT_TO_ARCHIVE
+  DOCUMENT_ARCHIVED
+  DOCUMENT_NEEDS_REVISION
+  FEEDBACK_CREATED
+  FEEDBACK_REPLIED
+  FEEDBACK_RESOLVED
+}
+
+/// اطلاعات فرایند بایگانی یک سند — یک ردیف به‌ازای هر سند، از لحظه ارجاع.
+model ArchiveMetadata {
+  documentId String        @id @map("document_id") @db.Uuid
+  status     ArchiveStatus @default(RECEIVED)
+
+  notes String? @db.Text
+
+  /// لحظه ورود به کارتابل بایگانی (ارجاع کارپردازی).
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  archivedById String?   @map("archived_by_id") @db.Uuid
+  archivedAt   DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  document   FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  archivedBy User?             @relation("ArchiveCompletedBy", fields: [archivedById], references: [id], onDelete: SetNull)
+
+  @@index([status, receivedAt])
+  @@map("archive_metadata")
+}
+
+/// فایل پیوست سند (اسکن و غیره).
+model Attachment {
+  id         String         @id @default(uuid()) @db.Uuid
+  documentId String         @map("document_id") @db.Uuid
+  kind       AttachmentKind @default(SCAN)
+
+  /// کلید شیء در object storage — **سروری** ساخته می‌شود و نام کاربر در آن نیست.
+  storageKey String @unique @map("storage_key") @db.VarChar(500)
+
+  /// نام اصلی فقط **داده** است و هرگز در مسیر فایل یا کلید شیء استفاده نمی‌شود.
+  originalFilename String @map("original_filename") @db.VarChar(255)
+
+  /// MIME اعلامی کلاینت در برابر نوع تشخیص‌داده‌شده از محتوا — هر دو نگه داشته
+  /// می‌شوند تا تلاش برای جعل، بعداً قابل بررسی باشد.
+  declaredMime String @map("declared_mime") @db.VarChar(150)
+  detectedMime String @map("detected_mime") @db.VarChar(150)
+  typeKey      String @map("type_key") @db.VarChar(20)
+
+  sizeBytes      BigInt @map("size_bytes") @db.BigInt
+  checksumSha256 String @map("checksum_sha256") @db.Char(64)
+
+  pageCount Int? @map("page_count")
+
+  status     AttachmentStatus @default(PENDING)
+  scanStatus ScanStatus       @default(SKIPPED) @map("scan_status")
+
+  uploadedById String   @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  /// تنها soft-delete پروژه: فایل از UI حذف شده ولی ردپای حسابرسی باقی می‌ماند.
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedById String?   @map("deleted_by_id") @db.Uuid
+
+  document   FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  uploadedBy User              @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  deletedBy  User?             @relation("AttachmentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([documentId, deletedAt, createdAt])
+  @@index([checksumSha256])
+  @@map("attachments")
+}
+
+/// بازخورد ناظر روی سند یا یکی از اجزای آن.
+model ReviewFeedback {
+  id         String             @id @default(uuid()) @db.Uuid
+  documentId String             @map("document_id") @db.Uuid
+  targetKind FeedbackTargetKind @map("target_kind")
+
+  /// هدف دقیق‌تر؛ بسته به `targetKind` پر می‌شود. قید سازگاری در migration است.
+  invoiceId     String? @map("invoice_id") @db.Uuid
+  invoiceItemId String? @map("invoice_item_id") @db.Uuid
+  sectionKey    String? @map("section_key") @db.VarChar(100)
+
+  body   String         @db.Text
+  status FeedbackStatus @default(OPEN)
+
+  createdById String    @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  resolvedAt  DateTime? @map("resolved_at") @db.Timestamptz(3)
+
+  document    FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  invoice     Invoice?          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceItem InvoiceItem?      @relation(fields: [invoiceItemId], references: [id], onDelete: Cascade)
+  createdBy   User              @relation("FeedbackCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  replies       ReviewFeedbackReply[]
+  statusHistory ReviewFeedbackStatusHistory[]
+
+  @@index([documentId, status, createdAt])
+  @@index([status, createdAt])
+  @@index([invoiceId])
+  @@map("review_feedbacks")
+}
+
+/// پاسخ کارپردازی به یک بازخورد. پاسخ‌ها هم حذف نمی‌شوند.
+model ReviewFeedbackReply {
+  id         String @id @default(uuid()) @db.Uuid
+  feedbackId String @map("feedback_id") @db.Uuid
+  body       String @db.Text
+
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  feedback  ReviewFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  createdBy User           @relation("FeedbackReplyBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([feedbackId, createdAt])
+  @@map("review_feedback_replies")
+}
+
+/// تاریخچه کامل وضعیت بازخورد — بدون این، «رسیدگی شد» ادعایی بی‌سند است.
+model ReviewFeedbackStatusHistory {
+  id         String          @id @default(uuid()) @db.Uuid
+  feedbackId String          @map("feedback_id") @db.Uuid
+  fromStatus FeedbackStatus? @map("from_status")
+  toStatus   FeedbackStatus  @map("to_status")
+  note       String?         @db.Text
+
+  actorId   String   @map("actor_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  feedback ReviewFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  actor    User           @relation("FeedbackStatusActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([feedbackId, createdAt])
+  @@map("review_feedback_status_history")
+}
+
+/// اعلان داخلی — بدون ایمیل و بدون سرویس بیرونی.
+model Notification {
+  id     String           @id @default(uuid()) @db.Uuid
+  userId String           @map("user_id") @db.Uuid
+  kind   NotificationKind
+
+  title String  @db.VarChar(200)
+  body  String? @db.Text
+
+  documentId String? @map("document_id") @db.Uuid
+  feedbackId String? @map("feedback_id") @db.Uuid
+
+  readAt    DateTime? @map("read_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user     User               @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  document FinancialDocument? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  /// کارتابل اعلان: خوانده‌نشده‌های همان کاربر، جدیدترین اول.
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
 }

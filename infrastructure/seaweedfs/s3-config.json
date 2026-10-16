@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "dm",
+      "credentials": [
+        { "accessKey": "dm_minio", "secretKey": "dm_minio_dev_password" }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}
