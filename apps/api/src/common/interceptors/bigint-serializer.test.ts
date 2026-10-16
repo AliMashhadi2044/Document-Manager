@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Prisma } from '@prisma/client';
 
 import { serializeBigInts } from './bigint-serializer.interceptor';
 
@@ -46,6 +47,23 @@ describe('سریالایز BIGINT در مرز API', () => {
     expect(serializeBigInts(null)).toBeNull();
     expect(serializeBigInts(undefined)).toBeUndefined();
     expect(serializeBigInts(date)).toBe(date);
+  });
+
+  it('Prisma.Decimal به رشته با سه رقم اعشار تبدیل می‌شود', () => {
+    // بدون این، مقدار به‌صورت **عدد** سریالایز می‌شد و قرارداد «مقدار = رشته»
+    // می‌شکست — همان باگی که در رندر جزئیات سند دیده شد.
+    expect(serializeBigInts(new Prisma.Decimal('2.5'))).toBe('2.500');
+    expect(serializeBigInts(new Prisma.Decimal('3'))).toBe('3.000');
+    expect(typeof serializeBigInts(new Prisma.Decimal('1.234'))).toBe('string');
+  });
+
+  it('مقدار اعشاری درون ردیف فاکتور هم تبدیل می‌شود', () => {
+    const row = { rowNo: 1, quantity: new Prisma.Decimal('2.5'), unitPrice: 1_000_001n };
+    expect(serializeBigInts(row)).toEqual({
+      rowNo: 1,
+      quantity: '2.500',
+      unitPrice: '1000001',
+    });
   });
 
   it('آرایه در ریشه را هم پوشش می‌دهد', () => {

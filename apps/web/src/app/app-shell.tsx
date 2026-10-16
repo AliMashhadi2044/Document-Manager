@@ -6,9 +6,10 @@ import { useLogout, type CurrentUser } from '../features/auth/auth.api';
 import { LookupManager } from '../features/base-data/lookup-manager';
 import { ChaptersView } from '../features/base-data/chapters-view';
 import { VendorsPage } from '../features/vendors/vendors-page';
+import { DocumentsPage } from '../features/documents/documents-page';
 import { ThemeControls } from './theme-controls';
 
-type SectionKey = 'overview' | 'lookups' | 'chapters' | 'vendors' | 'settings';
+type SectionKey = 'documents' | 'overview' | 'lookups' | 'chapters' | 'vendors' | 'settings';
 
 interface Section {
   readonly key: SectionKey;
@@ -18,6 +19,7 @@ interface Section {
 }
 
 const SECTIONS: readonly Section[] = [
+  { key: 'documents', titleFa: 'اسناد', permission: 'document:read' },
   { key: 'overview', titleFa: 'وضعیت پروژه' },
   { key: 'lookups', titleFa: 'اطلاعات پایه', permission: 'base_data:read' },
   { key: 'chapters', titleFa: 'فصل‌ها و انواع فاکتور', permission: 'base_data:read' },
@@ -26,7 +28,7 @@ const SECTIONS: readonly Section[] = [
 ];
 
 export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
-  const [section, setSection] = useState<SectionKey>('overview');
+  const [section, setSection] = useState<SectionKey>('documents');
   const logout = useLogout();
 
   const visible = SECTIONS.filter(
@@ -77,6 +79,7 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
+        {section === 'documents' ? <DocumentsPage /> : null}
         {section === 'overview' ? <Overview user={user} /> : null}
         {section === 'lookups' ? <LookupManager /> : null}
         {section === 'chapters' ? <ChaptersView /> : null}
@@ -93,9 +96,10 @@ function Overview({ user }: { user: CurrentUser }): JSX.Element {
       <section className="rounded-lg border border-border bg-card p-6">
         <h2 className="text-sm font-semibold">وضعیت پروژه</h2>
         <p className="mt-2 text-sm leading-7 text-muted-foreground">
-          فاز ۱ (زیرساخت و سیستم طراحی) و فاز ۲ (اطلاعات پایه و فروشندگان) تکمیل شده‌اند.
-          ماژول اسناد و فاکتورها در فاز ۳ اضافه می‌شود. هیچ بخشی از این صفحه داده ساختگی
-          نمایش نمی‌دهد؛ همه اعداد از پایگاه داده واقعی می‌آیند.
+          فازهای ۱ تا ۳ تکمیل شده‌اند: زیرساخت و سیستم طراحی، اطلاعات پایه و فروشندگان،
+          و اسناد و فاکتورهای اصلی با محاسبات مالی، snapshot و ثبت نهایی تراکنشی.
+          فاکتورهای اختصاصی (انشعابات و سوخت) در فاز ۴ اضافه می‌شوند. هیچ بخشی از این
+          سامانه داده ساختگی نمایش نمی‌دهد؛ همه اعداد از پایگاه داده واقعی می‌آیند.
         </p>
       </section>
 

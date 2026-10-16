@@ -1,13 +1,18 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 /**
- * سریالایز امن BIGINT در مرز API (ADR-0003، ریسک R2).
+ * سریالایز امن مقادیر عددی در مرز API (ADR-0003، ریسک R2).
  *
- * `JSON.stringify` روی `bigint` خطا می‌دهد و `Number(bigint)` بالای ۲^۵۳ دقت را
- * **خاموشانه** از بین می‌برد. این interceptor هر `bigint` را در پاسخ به رشته عددی
- * تبدیل می‌کند، پس هیچ مبلغی در مسیر خروج دقت از دست نمی‌دهد.
+ * دو نوع مقدار اینجا به **رشته** تبدیل می‌شوند:
+ *
+ *  - `bigint` (مبالغ ریالی): `JSON.stringify` رویش خطا می‌دهد و `Number(bigint)`
+ *    بالای ۲^۵۳ دقت را خاموشانه از بین می‌برد.
+ *  - `Prisma.Decimal` (مقدار/تعداد): به‌صورت پیش‌فرض **عدد** سریالایز می‌شود، که
+ *    هم قرارداد «مقدار = رشته» را می‌شکند و هم مقدار اعشاری را در معرض خطای
+ *    ممیز شناور می‌گذارد. با سه رقم اعشار ثابت به رشته می‌رود.
  */
 @Injectable()
 export class BigIntSerializerInterceptor implements NestInterceptor {
@@ -24,6 +29,11 @@ export function serializeBigInts(value: unknown): unknown {
 
   if (value === null || value === undefined) {
     return value;
+  }
+
+  // مقدار/تعداد همیشه با سه رقم اعشار، مطابق NUMERIC(18,3) در دیتابیس.
+  if (Prisma.Decimal.isDecimal(value)) {
+    return (value as Prisma.Decimal).toFixed(3);
   }
 
   if (Array.isArray(value)) {
