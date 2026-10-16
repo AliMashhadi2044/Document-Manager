@@ -20,6 +20,18 @@ export interface RoundingPolicy {
 }
 
 /** پیش‌فرض سازمان؛ صرفاً مقدار اولیه، نه قاعده ثابت. */
+/** برچسب فارسی سیاست گرد کردن — یک‌جا، تا متن نمایشی در UI پراکنده نشود. */
+export const ROUNDING_MODE_LABELS: Record<RoundingMode, string> = {
+  HALF_UP: 'نیم به بالا',
+  FLOOR: 'به پایین',
+  HALF_EVEN: 'نیم به زوج',
+};
+
+export const ROUNDING_SCOPE_LABELS: Record<RoundingScope, string> = {
+  LINE: 'سطح ردیف',
+  INVOICE: 'سطح فاکتور',
+};
+
 export const DEFAULT_ROUNDING_POLICY: RoundingPolicy = {
   scope: 'LINE',
   mode: 'HALF_UP',
