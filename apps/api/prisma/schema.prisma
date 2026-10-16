@@ -532,7 +532,8 @@ model District {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  schools School[]
+  schools         School[]
+  utilityInvoices InvoiceUtilityDetail[]
 
   @@index([isActive, sortOrder])
   @@map("districts")
@@ -551,6 +552,8 @@ model School {
 
   district District @relation(fields: [districtId], references: [id], onDelete: Restrict)
 
+  utilityInvoices InvoiceUtilityDetail[]
+
   @@unique([districtId, title])
   @@index([isActive])
   @@map("schools")
@@ -564,6 +567,8 @@ model UtilityType {
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  utilityInvoices InvoiceUtilityDetail[]
 
   @@index([isActive, sortOrder])
   @@map("utility_types")
@@ -580,7 +585,8 @@ model VehicleType {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  vehicles Vehicle[]
+  vehicles     Vehicle[]
+  fuelInvoices InvoiceFuelDetail[]
 
   @@index([isActive, sortOrder])
   @@map("vehicle_types")
@@ -601,7 +607,8 @@ model Vehicle {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  vehicleType VehicleType @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  vehicleType  VehicleType         @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  fuelInvoices InvoiceFuelDetail[]
 
   @@index([vehicleTypeId, isActive])
   @@map("vehicles")
@@ -615,6 +622,8 @@ model FuelType {
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  fuelInvoices InvoiceFuelDetail[]
 
   @@index([isActive, sortOrder])
   @@map("fuel_types")
@@ -933,6 +942,14 @@ model Invoice {
   items   InvoiceItem[]
   payment InvoicePayment?
 
+  /// جزئیات اختصاصی — هر فاکتور حداکثر یکی از این‌ها را دارد، مطابق `invoiceKind`.
+  utilityDetail InvoiceUtilityDetail?
+  fuelDetail    InvoiceFuelDetail?
+
+  /// مرجع FK ترکیبی جدول‌های جزئیات اختصاصی: جزئیات انشعابات فقط به فاکتوری با
+  /// `invoice_kind = 'UTILITY'` می‌چسبد و جزئیات سوخت فقط به `'FUEL'`. این قید را
+  /// دیتابیس نگه می‌دارد، نه کد.
+  @@unique([id, invoiceKind])
   /// مرتب‌سازی پیش‌فرض فهرست فاکتورها: تاریخ صعودی با ترتیب ثانویه پایدار (§۹).
   @@index([documentId, invoiceDate, id])
   @@index([vendorId, invoiceDate])
@@ -966,6 +983,10 @@ model InvoiceItem {
   invoice Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   unit    MeasurementUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
+  fuelEntry InvoiceFuelEntry?
+
+  /// مرجع FK ترکیبی ردیف سوخت — تضمین می‌کند ردیف تاریخ و ردیف مالی یک فاکتور باشند.
+  @@unique([id, invoiceId])
   @@unique([invoiceId, rowNo])
   @@index([invoiceId])
   @@map("invoice_items")
@@ -1000,4 +1021,111 @@ model InvoicePayment {
   pettyCashHolder   User?              @relation("PettyCashHolder", fields: [pettyCashHolderId], references: [id], onDelete: SetNull)
 
   @@map("invoice_payments")
+}
+
+// ═══════════════════════ فاز ۴ — فاکتورهای اختصاصی ═══════════════════════
+// مرجع: docs/05-invoice-types.md و معیار پذیرش فاز ۴.
+//
+// قاعده طراحی این بخش: **مبالغ فقط یک‌جا زندگی می‌کنند** — در `invoice_items`.
+// جدول‌های زیر هیچ مبلغی را تکرار نمی‌کنند و تنها ویژگی‌های غیرمالی اختصاصی
+// (مدرسه، ناحیه، نوع انشعاب، خودرو، نوع سوخت، ماه، روز) را نگه می‌دارند. اگر مبلغ
+// در دو جا ذخیره می‌شد، دو منبع حقیقت داشتیم و واگرایی‌شان فقط زمان می‌خواست.
+//
+// همه عنوان‌ها در لحظه ثبت snapshot می‌شوند (ADR-0005): تغییر نام مدرسه یا پلاک
+// خودرو، فاکتور تاریخی را عوض نمی‌کند.
+
+/// جزئیات فاکتور انشعابات — یک ردیف به‌ازای هر فاکتور.
+model InvoiceUtilityDetail {
+  invoiceId String @id @map("invoice_id") @db.Uuid
+
+  /// نسخه denormal خانواده فاکتور — **فقط** برای FK ترکیبی. مقدارش با CHECK دیتابیس
+  /// به `UTILITY` قفل است، پس این ردیف هرگز به فاکتور سوخت یا عادی نمی‌چسبد.
+  invoiceKind InvoiceKind @map("invoice_kind")
+
+  schoolId            String @map("school_id") @db.Uuid
+  schoolTitleSnapshot String @map("school_title_snapshot") @db.VarChar(200)
+
+  /// ناحیه **مشتق از مدرسه** است؛ کلاینت آن را نمی‌فرستد و سرور از رکورد مدرسه
+  /// می‌خواند (الزام «ناحیه خودکار» §۱۲ پرامپت).
+  districtId            String @map("district_id") @db.Uuid
+  districtTitleSnapshot String @map("district_title_snapshot") @db.VarChar(200)
+
+  utilityTypeId            String @map("utility_type_id") @db.Uuid
+  utilityTypeTitleSnapshot String @map("utility_type_title_snapshot") @db.VarChar(150)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  invoice     Invoice     @relation(fields: [invoiceId, invoiceKind], references: [id, invoiceKind], onDelete: Cascade, onUpdate: Cascade)
+  school      School      @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  district    District    @relation(fields: [districtId], references: [id], onDelete: Restrict)
+  utilityType UtilityType @relation(fields: [utilityTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([invoiceId, invoiceKind])
+  @@index([schoolId])
+  @@index([districtId])
+  @@index([utilityTypeId])
+  @@map("invoice_utility_details")
+}
+
+/// جزئیات فاکتور سوخت — یک ردیف به‌ازای هر فاکتور، به‌علاوه ماه شمسی فاکتور.
+model InvoiceFuelDetail {
+  invoiceId String @id @map("invoice_id") @db.Uuid
+
+  /// همان نقش را برای سوخت دارد؛ با CHECK به `FUEL` قفل است.
+  invoiceKind InvoiceKind @map("invoice_kind")
+
+  vehicleId           String @map("vehicle_id") @db.Uuid
+  plateNumberSnapshot String @map("plate_number_snapshot") @db.VarChar(50)
+
+  /// نوع خودرو **مشتق از خودرو** است، نه ورودی کلاینت.
+  vehicleTypeId            String @map("vehicle_type_id") @db.Uuid
+  vehicleTypeTitleSnapshot String @map("vehicle_type_title_snapshot") @db.VarChar(150)
+
+  fuelTypeId            String @map("fuel_type_id") @db.Uuid
+  fuelTypeTitleSnapshot String @map("fuel_type_title_snapshot") @db.VarChar(100)
+
+  /// ماه شمسی فاکتور؛ تاریخ هر ردیف از همین سال و ماه ساخته می‌شود.
+  jalaliYear  Int @map("jalali_year")
+  jalaliMonth Int @map("jalali_month")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  invoice     Invoice     @relation(fields: [invoiceId, invoiceKind], references: [id, invoiceKind], onDelete: Cascade, onUpdate: Cascade)
+  vehicle     Vehicle     @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  vehicleType VehicleType @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  fuelType    FuelType    @relation(fields: [fuelTypeId], references: [id], onDelete: Restrict)
+
+  entries InvoiceFuelEntry[]
+
+  @@unique([invoiceId, invoiceKind])
+  @@index([vehicleId])
+  @@index([vehicleTypeId])
+  @@index([fuelTypeId])
+  @@index([jalaliYear, jalaliMonth])
+  @@map("invoice_fuel_details")
+}
+
+/// روز سوخت‌گیری هر ردیف فاکتور سوخت.
+///
+/// یک‌به‌یک با `invoice_items` است و **مبلغ را تکرار نمی‌کند**؛ مبلغ همان
+/// `invoice_items.unit_price` است. FK ترکیبی `(invoice_item_id, invoice_id)` تضمین
+/// می‌کند ردیف تاریخ به فاکتوری جز فاکتور خودش نچسبد.
+model InvoiceFuelEntry {
+  id            String @id @default(uuid()) @db.Uuid
+  invoiceId     String @map("invoice_id") @db.Uuid
+  invoiceItemId String @unique @map("invoice_item_id") @db.Uuid
+
+  /// روز ماه شمسی (۱ تا ۳۱)
+  jalaliDay Int @map("jalali_day")
+
+  /// تاریخ کامل که **سرور** از سال/ماه فاکتور و روز ردیف ساخته است.
+  entryDate DateTime @map("entry_date") @db.Date
+
+  fuelDetail  InvoiceFuelDetail @relation(fields: [invoiceId], references: [invoiceId], onDelete: Cascade)
+  invoiceItem InvoiceItem       @relation(fields: [invoiceItemId, invoiceId], references: [id, invoiceId], onDelete: Cascade)
+
+  /// یکتایی ردیف مالی روی همین زوج ستون — لازمه رابطه یک‌به‌یک با FK ترکیبی.
+  @@unique([invoiceItemId, invoiceId])
+  @@index([invoiceId, jalaliDay])
+  @@map("invoice_fuel_entries")
 }

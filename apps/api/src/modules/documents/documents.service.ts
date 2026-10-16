@@ -88,7 +88,11 @@ export class DocumentsService {
             chapter: { select: { title: true } },
             invoiceType: { select: { titleFa: true, kind: true } },
             payment: { include: { paymentMethod: true } },
-            items: { orderBy: { rowNo: 'asc' } },
+            // روز سوخت‌گیری روی همان ردیف مالی می‌آید؛ نمایش، ردیف‌ها را دوباره جفت نمی‌کند.
+            items: { orderBy: { rowNo: 'asc' }, include: { fuelEntry: true } },
+            // جزئیات اختصاصی هر خانواده (فاز ۴) — حداکثر یکی از این دو مقدار دارد.
+            utilityDetail: true,
+            fuelDetail: true,
           },
         },
       },

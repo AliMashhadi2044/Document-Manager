@@ -15,12 +15,16 @@ export const LOOKUP_RESOURCES = {
     model: 'utilityType',
     titleFa: 'انواع انشعاب',
     /** جاهایی که این رکورد ممکن است استفاده شده باشد (برای جلوگیری از حذف). */
-    usage: [] as readonly UsageRef[],
+    usage: [
+      { model: 'invoiceUtilityDetail', field: 'utilityTypeId', titleFa: 'فاکتور انشعابات' },
+    ] as readonly UsageRef[],
   },
   'fuel-types': {
     model: 'fuelType',
     titleFa: 'انواع سوخت',
-    usage: [] as readonly UsageRef[],
+    usage: [
+      { model: 'invoiceFuelDetail', field: 'fuelTypeId', titleFa: 'فاکتور سوخت' },
+    ] as readonly UsageRef[],
   },
   'stad-request-types': {
     model: 'stadRequestType',
@@ -40,12 +44,18 @@ export const LOOKUP_RESOURCES = {
   'vehicle-types': {
     model: 'vehicleType',
     titleFa: 'انواع خودرو',
-    usage: [{ model: 'vehicle', field: 'vehicleTypeId', titleFa: 'خودرو' }] as readonly UsageRef[],
+    usage: [
+      { model: 'vehicle', field: 'vehicleTypeId', titleFa: 'خودرو' },
+      { model: 'invoiceFuelDetail', field: 'vehicleTypeId', titleFa: 'فاکتور سوخت' },
+    ] as readonly UsageRef[],
   },
   'districts': {
     model: 'district',
     titleFa: 'نواحی',
-    usage: [{ model: 'school', field: 'districtId', titleFa: 'مدرسه' }] as readonly UsageRef[],
+    usage: [
+      { model: 'school', field: 'districtId', titleFa: 'مدرسه' },
+      { model: 'invoiceUtilityDetail', field: 'districtId', titleFa: 'فاکتور انشعابات' },
+    ] as readonly UsageRef[],
   },
 } as const;
 

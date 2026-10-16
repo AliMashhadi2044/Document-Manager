@@ -3,14 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { PERMISSIONS, type Permission } from '@dm/shared';
 
 import { PERMISSIONS_KEY, PUBLIC_KEY } from './auth.decorators';
-import { AuthController } from '../../modules/auth/auth.controller';
-import { HealthController } from '../../modules/health/health.controller';
-import { LookupController } from '../../modules/base-data/lookup.controller';
-import { ChaptersController } from '../../modules/base-data/chapters.controller';
-import { ReferenceController } from '../../modules/base-data/reference.controller';
-import { BuyersController } from '../../modules/base-data/buyers.controller';
-import { VendorsController } from '../../modules/vendors/vendors.controller';
-import { DocumentsController } from '../../modules/documents/documents.controller';
+import { AppModule } from '../../app.module';
 
 /**
  * معیار پذیرش فاز ۱: **هیچ endpoint بدون اعلام دسترسی وجود ندارد.**
@@ -21,18 +14,44 @@ import { DocumentsController } from '../../modules/documents/documents.controlle
  *
  * `PermissionGuard` هم در زمان اجرا همین را fail closed می‌کند؛ این تست خطا را به
  * زمان CI جلو می‌آورد.
+ *
+ * فهرست controllerها **از گراف ماژول‌ها** خوانده می‌شود، نه از فهرستی دستی در همین
+ * فایل. فهرست دستی یعنی اولین controller فراموش‌شده، بی‌صدا از این تست بیرون می‌ماند —
+ * دقیقاً همان چیزی که این تست باید جلویش را بگیرد.
  */
 
-const CONTROLLERS = [
-  AuthController,
-  HealthController,
-  LookupController,
-  ChaptersController,
-  ReferenceController,
-  BuyersController,
-  VendorsController,
-  DocumentsController,
-];
+type Constructor = new (...args: never[]) => unknown;
+
+/** پیمایش بازگشتی `imports` و `controllers` ماژول ریشه. */
+function collectControllers(): Constructor[] {
+  const seenModules = new Set<unknown>();
+  const controllers = new Set<Constructor>();
+  const queue: unknown[] = [AppModule];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === undefined || current === null || seenModules.has(current)) continue;
+    seenModules.add(current);
+
+    // ماژول‌های پویا (`ConfigModule.forRoot(...)`) شکل `{ module, imports, controllers }` دارند.
+    const target =
+      typeof current === 'object' && current !== null && 'module' in current
+        ? (current as { module: unknown }).module
+        : current;
+    if (typeof target !== 'function') continue;
+
+    for (const controller of (Reflect.getMetadata('controllers', target) ?? []) as Constructor[]) {
+      controllers.add(controller);
+    }
+    for (const imported of (Reflect.getMetadata('imports', target) ?? []) as unknown[]) {
+      queue.push(imported);
+    }
+  }
+
+  return [...controllers];
+}
+
+const CONTROLLERS = collectControllers();
 
 interface RouteInfo {
   readonly controller: string;
@@ -74,8 +93,10 @@ function collectRoutes(): RouteInfo[] {
 describe('پوشش مجوز endpointها', () => {
   const routes = collectRoutes();
 
-  it('حداقل یک مسیر کشف شده است (خود تست سالم است)', () => {
-    expect(routes.length).toBeGreaterThan(0);
+  it('خود تست سالم است: controllerها و مسیرها کشف شده‌اند', () => {
+    // اگر پیمایش گراف ماژول بشکند، این تست سبز نمی‌ماند تا بقیه بی‌معنا سبز شوند.
+    expect(CONTROLLERS.length).toBeGreaterThanOrEqual(9);
+    expect(routes.length).toBeGreaterThan(20);
   });
 
   it('هر مسیر یا مجوز اعلام‌شده دارد یا صریحاً عمومی است', () => {

@@ -203,6 +203,9 @@ export class FinancialService {
           rowNo: item.rowNo,
           description: item.description,
           productCode: item.productCode,
+          // مقدار اینجا Prisma.Decimal است، نه عدد ممیز شناور؛ سه رقم اعشار همان
+          // مقیاس ستون NUMERIC(18,3) است و این یک مبلغ ریالی نیست.
+          // eslint-disable-next-line no-restricted-syntax
           quantity: item.quantity.toFixed(3),
           unitId: item.unitId,
           unitPrice: item.unitPrice.toString(),

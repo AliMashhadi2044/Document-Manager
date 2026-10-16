@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type Invoice } from '@prisma/client';
-import { isEditableStatus, validateIban, type DocumentStatus, type TaxMode } from '@dm/shared';
+import { isEditableStatus, validateIban, type DocumentStatus } from '@dm/shared';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AppError } from '../../common/errors/app-error';
-import { FinancialService, parseRoundingPolicy, type ItemInput } from '../financial/financial.service';
+import { FinancialService, parseRoundingPolicy } from '../financial/financial.service';
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
+import { InvoiceKindService } from './invoice-kind.service';
+import type { InvoiceDetailsBody } from './invoice.schema';
 
 export interface CreateInvoiceInput {
   readonly chapterId: string;
@@ -14,11 +16,9 @@ export interface CreateInvoiceInput {
   readonly vendorId: string | null;
   readonly invoiceNumber: string | null;
   readonly invoiceDate: string;
-  readonly taxMode: TaxMode;
-  readonly taxRateBp: number | null;
-  readonly taxAmount: string | null;
   readonly notes: string | null;
-  readonly items: readonly ItemInput[];
+  /** ساختار ردیف‌ها، وابسته به خانواده فاکتور (فاز ۴). */
+  readonly details: InvoiceDetailsBody;
   readonly payment: {
     readonly paymentMethodId: string;
     readonly vendorBankAccountId: string | null;
@@ -35,6 +35,7 @@ export class InvoicesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly financial: FinancialService,
+    private readonly kinds: InvoiceKindService,
   ) {}
 
   async create(
@@ -78,12 +79,11 @@ export class InvoicesService {
       ]);
     }
 
+    // خانواده فاکتور را **دیتابیس** تعیین می‌کند؛ از آن، ردیف‌های مالی ساخته می‌شوند.
+    const prepared = await this.kinds.prepare(link.invoiceType.kind, input.details);
+
     const policy = parseRoundingPolicy(document.roundingPolicy);
-    const computed = this.financial.computeInvoice(input.items, policy, {
-      mode: input.taxMode,
-      rateBp: input.taxRateBp,
-      amount: input.taxAmount,
-    });
+    const computed = this.financial.computeInvoice(prepared.items, policy, prepared.invoiceTax);
 
     const vendor = input.vendorId
       ? await this.prisma.vendor.findUnique({ where: { id: input.vendorId } })
@@ -134,8 +134,8 @@ export class InvoicesService {
             buyerSnapshotId: document.buyerSnapshotId,
             invoiceNumber: input.invoiceNumber,
             invoiceDate: new Date(`${input.invoiceDate}T00:00:00.000Z`),
-            taxMode: input.taxMode,
-            taxRateBp: input.taxMode === 'PERCENT' ? input.taxRateBp : null,
+            taxMode: prepared.invoiceTax.mode,
+            taxRateBp: prepared.invoiceTax.mode === 'PERCENT' ? prepared.invoiceTax.rateBp : null,
             grossAmount: computed.grossAmount,
             discountAmount: computed.discountAmount,
             netAmount: computed.netAmount,
@@ -162,7 +162,12 @@ export class InvoicesService {
             },
             ...(paymentData ? { payment: { create: paymentData } } : {}),
           },
+          // شناسه ردیف‌ها لازم است: ردیف تاریخ سوخت به ردیف مالی خودش گره می‌خورد.
+          include: { items: { select: { id: true, rowNo: true } } },
         });
+
+        // جزئیات اختصاصی در **همان** تراکنش نوشته می‌شوند؛ فاکتور بی‌جزئیات نمی‌ماند.
+        await prepared.writeDetails(tx, created);
 
         await this.financial.refreshDocumentTotals(tx, document.id);
 

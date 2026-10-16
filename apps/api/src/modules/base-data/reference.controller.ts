@@ -28,6 +28,8 @@ export class ReferenceController {
       fuelTypes,
       stadRequestTypes,
       measurementUnits,
+      districts,
+      vehicleTypes,
     ] = await Promise.all([
       this.prisma.organizationSettings.findUnique({ where: { id: 1 } }),
       this.prisma.paymentMethod.findMany({
@@ -49,6 +51,13 @@ export class ReferenceController {
         where: { isActive: true },
         orderBy: { sortOrder: 'asc' },
       }),
+      // ناحیه و نوع خودرو: والدِ فهرست‌های فرم‌های اختصاصی فاز ۴. خود مدرسه‌ها و
+      // پلاک‌ها اینجا نمی‌آیند؛ تعدادشان زیاد است و با جست‌وجوی سمت سرور گرفته می‌شوند.
+      this.prisma.district.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
+      this.prisma.vehicleType.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+      }),
     ]);
 
     return {
@@ -61,6 +70,8 @@ export class ReferenceController {
       fuelTypes,
       stadRequestTypes,
       measurementUnits,
+      districts,
+      vehicleTypes,
     };
   }
 
