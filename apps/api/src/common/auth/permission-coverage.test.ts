@@ -5,6 +5,12 @@ import { PERMISSIONS, type Permission } from '@dm/shared';
 import { PERMISSIONS_KEY, PUBLIC_KEY } from './auth.decorators';
 import { AuthController } from '../../modules/auth/auth.controller';
 import { HealthController } from '../../modules/health/health.controller';
+import { LookupController } from '../../modules/base-data/lookup.controller';
+import { ChaptersController } from '../../modules/base-data/chapters.controller';
+import { ReferenceController } from '../../modules/base-data/reference.controller';
+import { BuyersController } from '../../modules/base-data/buyers.controller';
+import { VendorsController } from '../../modules/vendors/vendors.controller';
+import { DocumentsController } from '../../modules/documents/documents.controller';
 
 /**
  * معیار پذیرش فاز ۱: **هیچ endpoint بدون اعلام دسترسی وجود ندارد.**
@@ -17,7 +23,16 @@ import { HealthController } from '../../modules/health/health.controller';
  * زمان CI جلو می‌آورد.
  */
 
-const CONTROLLERS = [AuthController, HealthController];
+const CONTROLLERS = [
+  AuthController,
+  HealthController,
+  LookupController,
+  ChaptersController,
+  ReferenceController,
+  BuyersController,
+  VendorsController,
+  DocumentsController,
+];
 
 interface RouteInfo {
   readonly controller: string;

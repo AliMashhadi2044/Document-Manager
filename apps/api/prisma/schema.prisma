@@ -27,11 +27,14 @@ model User {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  roles          UserRole[]
-  sessions       Session[]
-  securityEvents SecurityEvent[]
-  auditLogs      AuditLog[]
-  preferences    UserPreferences?
+  roles             UserRole[]
+  sessions          Session[]
+  createdDocuments  FinancialDocument[] @relation("DocumentCreatedBy")
+  createdInvoices   Invoice[]           @relation("InvoiceCreatedBy")
+  pettyCashPayments InvoicePayment[]    @relation("PettyCashHolder")
+  securityEvents    SecurityEvent[]
+  auditLogs         AuditLog[]
+  preferences       UserPreferences?
 
   @@index([isActive])
   @@map("users")
@@ -303,6 +306,8 @@ model BuyerEntity {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  documents FinancialDocument[]
+
   @@index([isActive, sortOrder])
   @@map("buyer_entities")
 }
@@ -334,6 +339,7 @@ model Vendor {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   bankAccounts VendorBankAccount[]
+  invoices     Invoice[]
 
   @@index([isActive])
   @@index([name])
@@ -370,8 +376,9 @@ model VendorBankAccount {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Restrict)
-  bank   Bank?  @relation(fields: [bankCode], references: [code], onDelete: SetNull)
+  vendor          Vendor           @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  bank            Bank?            @relation(fields: [bankCode], references: [code], onDelete: SetNull)
+  invoicePayments InvoicePayment[]
 
   @@index([vendorId, isActive])
   @@map("vendor_bank_accounts")
@@ -406,6 +413,7 @@ model BudgetChapter {
 
   category     BudgetCategory       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   invoiceTypes ChapterInvoiceType[]
+  invoices     Invoice[]
 
   @@unique([categoryId, title])
   @@index([categoryId, isActive, sortOrder])
@@ -437,6 +445,7 @@ model InvoiceType {
   defaultPaymentMethod PaymentMethod?       @relation(fields: [defaultPaymentMethodId], references: [id], onDelete: SetNull)
   chapters             ChapterInvoiceType[]
   taxRates             TaxRate[]
+  invoices             Invoice[]
 
   @@index([isActive, sortOrder])
   @@map("invoice_types")
@@ -471,7 +480,8 @@ model PaymentMethod {
   isActive  Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
 
-  invoiceTypes InvoiceType[]
+  invoiceTypes    InvoiceType[]
+  invoicePayments InvoicePayment[]
 
   @@index([isActive, sortOrder])
   @@map("payment_methods")
@@ -621,6 +631,8 @@ model StadRequestType {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  stadDocuments DocumentStadMetadata[]
+
   @@index([isActive, sortOrder])
   @@map("stad_request_types")
 }
@@ -647,6 +659,345 @@ model MeasurementUnit {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  invoiceItems InvoiceItem[]
+
   @@index([isActive, sortOrder])
   @@map("measurement_units")
+}
+
+// ═══════════════════════ فاز ۳ — سند و فاکتور ═══════════════════════
+// مرجع: docs/03-erd.md §۳ و docs/08-financial-rules.md
+//
+// سه قاعده‌ای که این بخش را از یک CRUD ساده جدا می‌کند:
+//  ۱. تمام مبالغ BigInt ریال صحیح‌اند؛ هرگز Decimal یا Float (ADR-0003).
+//  ۲. اطلاعات فروشنده و خریدار در زمان ثبت snapshot می‌شوند تا تغییر اطلاعات پایه
+//     اسناد گذشته را عوض نکند (ADR-0005، ریسک R6).
+//  ۳. سیاست گرد کردن روی خود سند قفل می‌شود، نه خوانده‌شده از تنظیمات زنده (ADR-0012).
+
+enum DocumentType {
+  NORMAL
+  STAD
+
+  @@map("document_type")
+}
+
+enum DocumentStatus {
+  DRAFT // پیش‌نویس
+  FINALIZED // ثبت‌شده
+  PENDING_ARCHIVE // در انتظار بایگانی
+  ARCHIVED // بایگانی‌شده
+  NEEDS_REVISION // نیازمند اصلاح
+  REOPENED // بازگشایی‌شده
+
+  @@map("document_status")
+}
+
+enum TaxMode {
+  PERCENT // ورود نرخ درصدی
+  AMOUNT // ورود مستقیم مبلغ
+
+  @@map("tax_mode")
+}
+
+enum RevisionTrigger {
+  FINALIZE
+  REOPEN
+  ARCHIVE
+  CORRECTION
+
+  @@map("revision_trigger")
+}
+
+// ─────────────────────── snapshotهای تغییرناپذیر ───────────────────────
+// جدول ساختارمند، نه JSON: گزارش مالیات باید روی همین اطلاعات تاریخی گروه‌بندی و
+// مرتب‌سازی کند و JSON بی‌schema این کوئری‌ها را شکننده می‌کرد (ADR-0005).
+//
+// هر فاکتور ردیف snapshot اختصاصی خودش را دارد؛ به اشتراک گذاشته نمی‌شود تا هیچ
+// مسیری برای بازنویسی ناخواسته اطلاعات تاریخی باز نماند.
+
+model VendorSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// ارجاع به رکورد زنده — برای گزارش‌گیری و پیشنهاد نوع کالا. اختیاری است چون
+  /// حذف فروشنده نباید snapshot تاریخی را از بین ببرد.
+  vendorId String? @map("vendor_id") @db.Uuid
+
+  personType         PersonType @map("person_type")
+  name               String     @db.VarChar(300)
+  representativeName String?    @map("representative_name") @db.VarChar(200)
+  economicCode       String?    @map("economic_code") @db.VarChar(30)
+  registrationNumber String?    @map("registration_number") @db.VarChar(30)
+  nationalId         String?    @map("national_id") @db.VarChar(20)
+  addressLine        String?    @map("address_line") @db.Text
+  postalCode         String?    @map("postal_code") @db.VarChar(10)
+  phone              String?    @db.VarChar(30)
+  fax                String?    @db.VarChar(30)
+
+  capturedAt DateTime @default(now()) @map("captured_at") @db.Timestamptz(3)
+
+  invoices Invoice[]
+
+  @@index([vendorId])
+  @@map("vendor_snapshots")
+}
+
+model BuyerSnapshot {
+  id            String  @id @default(uuid()) @db.Uuid
+  buyerEntityId String? @map("buyer_entity_id") @db.Uuid
+
+  personType         PersonType @map("person_type")
+  name               String     @db.VarChar(300)
+  economicCode       String?    @map("economic_code") @db.VarChar(30)
+  registrationNumber String?    @map("registration_number") @db.VarChar(30)
+  nationalId         String?    @map("national_id") @db.VarChar(20)
+  addressLine        String?    @map("address_line") @db.Text
+  postalCode         String?    @map("postal_code") @db.VarChar(10)
+  phone              String?    @db.VarChar(30)
+  fax                String?    @db.VarChar(30)
+
+  capturedAt DateTime @default(now()) @map("captured_at") @db.Timestamptz(3)
+
+  documents FinancialDocument[]
+  invoices  Invoice[]
+
+  @@index([buyerEntityId])
+  @@map("buyer_snapshots")
+}
+
+// ─────────────────────── سند مالی ───────────────────────
+
+model FinancialDocument {
+  id    String       @id @default(uuid()) @db.Uuid
+  title String       @db.VarChar(500)
+  type  DocumentType
+
+  /// سال مالی و سال شمسی دو فیلد **مستقل**اند (§۴ پرامپت).
+  fiscalYear Int @map("fiscal_year")
+  jalaliYear Int @map("jalali_year")
+
+  status DocumentStatus @default(DRAFT)
+
+  buyerEntityId   String @map("buyer_entity_id") @db.Uuid
+  buyerSnapshotId String @map("buyer_snapshot_id") @db.Uuid
+
+  /// شماره و تاریخ سند را **بایگانی** وارد می‌کند (فاز ۵).
+  /// یکتایی در هر سال مالی با ایندکس جزئی در migration اعمال می‌شود (تصمیم Q5).
+  documentNumber String?   @map("document_number") @db.VarChar(50)
+  documentDate   DateTime? @map("document_date") @db.Date
+
+  /// snapshot سیاست گرد کردن؛ پس از ثبت نهایی قفل است (ADR-0012، ریسک R14).
+  roundingPolicy Json @map("rounding_policy")
+
+  /// جمع‌های ذخیره‌شده — فقط لایه financial داخل همان تراکنش می‌نویسدشان.
+  totalGross    BigInt @default(0) @map("total_gross") @db.BigInt
+  totalDiscount BigInt @default(0) @map("total_discount") @db.BigInt
+  totalNet      BigInt @default(0) @map("total_net") @db.BigInt
+  totalTax      BigInt @default(0) @map("total_tax") @db.BigInt
+  totalAmount   BigInt @default(0) @map("total_amount") @db.BigInt
+
+  /// شاخص «دارای بازخورد» — وضعیت سند نیست (تصمیم B12).
+  openFeedbackCount Int @default(0) @map("open_feedback_count")
+
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  finalizedAt   DateTime? @map("finalized_at") @db.Timestamptz(3)
+  finalizedById String?   @map("finalized_by_id") @db.Uuid
+  archivedAt    DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  buyerEntity   BuyerEntity   @relation(fields: [buyerEntityId], references: [id], onDelete: Restrict)
+  buyerSnapshot BuyerSnapshot @relation(fields: [buyerSnapshotId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  stadMetadata DocumentStadMetadata?
+  invoices     Invoice[]
+  revisions    DocumentRevision[]
+  transitions  DocumentStatusTransition[]
+
+  /// لازم برای FK ترکیبی از invoices — ستون فقرات محدودیت یک فاکتور ستاد (ADR-0006).
+  @@unique([id, type])
+  @@index([fiscalYear, status, type, createdAt])
+  @@index([status, createdAt])
+  @@map("financial_documents")
+}
+
+model DocumentStadMetadata {
+  documentId String @id @map("document_id") @db.Uuid
+
+  /// سقف ۵۰ نویسه طبق §۹ پرامپت.
+  needNumber     String  @map("need_number") @db.VarChar(50)
+  workflowNumber String  @map("workflow_number") @db.VarChar(100)
+  requestNumber  String  @map("request_number") @db.VarChar(100)
+  requestTypeId  String? @map("request_type_id") @db.Uuid
+  notes          String? @db.Text
+
+  document    FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  requestType StadRequestType?  @relation(fields: [requestTypeId], references: [id], onDelete: SetNull)
+
+  @@map("document_stad_metadata")
+}
+
+/// نسخه کامل سند برای بازسازی وضعیت گذشته (ADR-0009).
+/// تنها جایی که JSON بی‌ساختار پذیرفته است، چون هدفش بازسازی است نه کوئری.
+model DocumentRevision {
+  id            String          @id @default(uuid()) @db.Uuid
+  documentId    String          @map("document_id") @db.Uuid
+  revisionNo    Int             @map("revision_no")
+  schemaVersion Int             @default(1) @map("schema_version")
+  trigger       RevisionTrigger
+  snapshot      Json
+  reason        String?         @db.Text
+
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  document FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, revisionNo])
+  @@index([documentId, createdAt])
+  @@map("document_revisions")
+}
+
+model DocumentStatusTransition {
+  id         String         @id @default(uuid()) @db.Uuid
+  documentId String         @map("document_id") @db.Uuid
+  fromStatus DocumentStatus @map("from_status")
+  toStatus   DocumentStatus @map("to_status")
+  action     String         @db.VarChar(50)
+  reason     String?        @db.Text
+
+  actorId   String   @map("actor_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  document FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+  @@map("document_status_transitions")
+}
+
+// ─────────────────────── فاکتور ───────────────────────
+
+model Invoice {
+  id         String @id @default(uuid()) @db.Uuid
+  documentId String @map("document_id") @db.Uuid
+
+  /// نسخه denormal نوع سند. **فقط** با FK ترکیبی نگهداری می‌شود و کد هرگز مستقل
+  /// تغییرش نمی‌دهد؛ همین ستون است که ایندکس جزئی «یک فاکتور ستاد» را ممکن می‌کند.
+  documentType DocumentType @map("document_type")
+
+  invoiceTypeId String      @map("invoice_type_id") @db.Uuid
+  /// خانواده ساختاری، denormal برای رندر و گزارش بدون وابستگی به پیکربندی فعلی.
+  invoiceKind   InvoiceKind @map("invoice_kind")
+
+  chapterId            String  @map("chapter_id") @db.Uuid
+  chapterCodeSnapshot  String? @map("chapter_code_snapshot") @db.VarChar(50)
+  chapterTitleSnapshot String  @map("chapter_title_snapshot") @db.VarChar(200)
+
+  /// فروشنده روی **همه** انواع فاکتور در دسترس و اختیاری است (تصمیم Q1).
+  vendorId         String? @map("vendor_id") @db.Uuid
+  vendorSnapshotId String? @map("vendor_snapshot_id") @db.Uuid
+  buyerSnapshotId  String  @map("buyer_snapshot_id") @db.Uuid
+
+  invoiceNumber String?  @map("invoice_number") @db.VarChar(100)
+  /// تاریخ صورتحساب — مبنای مرتب‌سازی فهرست و قاعده تاریخ در گزارش مالیات.
+  invoiceDate   DateTime @map("invoice_date") @db.Date
+
+  taxMode   TaxMode @map("tax_mode")
+  /// basis point صحیح؛ فقط در حالت PERCENT مقدار دارد.
+  taxRateBp Int?    @map("tax_rate_bp")
+
+  grossAmount    BigInt @map("gross_amount") @db.BigInt
+  discountAmount BigInt @default(0) @map("discount_amount") @db.BigInt
+  netAmount      BigInt @map("net_amount") @db.BigInt
+  taxAmount      BigInt @default(0) @map("tax_amount") @db.BigInt
+  totalAmount    BigInt @map("total_amount") @db.BigInt
+
+  customFields              Json?   @map("custom_fields")
+  customFieldsSchemaVersion Int     @default(1) @map("custom_fields_schema_version")
+  notes                     String? @db.Text
+
+  sortIndex   Int      @default(0) @map("sort_index")
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  document       FinancialDocument @relation(fields: [documentId, documentType], references: [id, type], onDelete: Cascade, onUpdate: Cascade)
+  invoiceType    InvoiceType       @relation(fields: [invoiceTypeId], references: [id], onDelete: Restrict)
+  chapter        BudgetChapter     @relation(fields: [chapterId], references: [id], onDelete: Restrict)
+  vendor         Vendor?           @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  vendorSnapshot VendorSnapshot?   @relation(fields: [vendorSnapshotId], references: [id], onDelete: Restrict)
+  buyerSnapshot  BuyerSnapshot     @relation(fields: [buyerSnapshotId], references: [id], onDelete: Restrict)
+  createdBy      User              @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items   InvoiceItem[]
+  payment InvoicePayment?
+
+  /// مرتب‌سازی پیش‌فرض فهرست فاکتورها: تاریخ صعودی با ترتیب ثانویه پایدار (§۹).
+  @@index([documentId, invoiceDate, id])
+  @@index([vendorId, invoiceDate])
+  @@index([documentId, vendorId])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id        String @id @default(uuid()) @db.Uuid
+  invoiceId String @map("invoice_id") @db.Uuid
+  rowNo     Int    @map("row_no")
+
+  productCode String? @map("product_code") @db.VarChar(100)
+  description String  @db.VarChar(1000)
+
+  /// مقدار با سه رقم اعشار (تصمیم Q11).
+  quantity  Decimal @db.Decimal(18, 3)
+  unitId    String? @map("unit_id") @db.Uuid
+  unitPrice BigInt  @map("unit_price") @db.BigInt
+
+  grossAmount    BigInt @map("gross_amount") @db.BigInt
+  discountAmount BigInt @default(0) @map("discount_amount") @db.BigInt
+  netAmount      BigInt @map("net_amount") @db.BigInt
+
+  taxMode   TaxMode @map("tax_mode")
+  taxRateBp Int?    @map("tax_rate_bp")
+  taxAmount BigInt  @default(0) @map("tax_amount") @db.BigInt
+
+  totalAmount BigInt @map("total_amount") @db.BigInt
+
+  invoice Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  unit    MeasurementUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@unique([invoiceId, rowNo])
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model InvoicePayment {
+  invoiceId String @id @map("invoice_id") @db.Uuid
+
+  paymentMethodId String            @map("payment_method_id") @db.Uuid
+  methodKind      PaymentMethodKind @map("method_kind")
+
+  /// حساب ذی‌نفع
+  vendorBankAccountId  String? @map("vendor_bank_account_id") @db.Uuid
+  /// شبا در لحظه ثبت snapshot می‌شود تا تغییر بعدی حساب، فاکتور تاریخی را عوض نکند.
+  ibanSnapshot         String? @map("iban_snapshot") @db.VarChar(26)
+  bankTitleSnapshot    String? @map("bank_title_snapshot") @db.VarChar(100)
+  accountTitleSnapshot String? @map("account_title_snapshot") @db.VarChar(200)
+
+  /// شناسه پرداخت به **فاکتور** تعلق دارد، نه به شبا (§۱۳.۱).
+  paymentIdentifier String? @map("payment_identifier") @db.VarChar(100)
+  /// قبض
+  billIdentifier    String? @map("bill_identifier") @db.VarChar(100)
+  /// تنخواه (تصمیم Q9)
+  pettyCashHolderId String? @map("petty_cash_holder_id") @db.Uuid
+  notes             String? @db.Text
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  invoice           Invoice            @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  paymentMethod     PaymentMethod      @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+  vendorBankAccount VendorBankAccount? @relation(fields: [vendorBankAccountId], references: [id], onDelete: SetNull)
+  pettyCashHolder   User?              @relation("PettyCashHolder", fields: [pettyCashHolderId], references: [id], onDelete: SetNull)
+
+  @@map("invoice_payments")
 }

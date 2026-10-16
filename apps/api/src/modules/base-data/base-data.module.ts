@@ -5,9 +5,10 @@ import { LookupController } from './lookup.controller';
 import { LookupService } from './lookup.service';
 import { ChaptersController } from './chapters.controller';
 import { ReferenceController } from './reference.controller';
+import { BuyersController } from './buyers.controller';
 
 @Module({
-  controllers: [LookupController, ChaptersController, ReferenceController],
+  controllers: [LookupController, ChaptersController, ReferenceController, BuyersController],
   providers: [LookupService, AuditService],
   exports: [LookupService],
 })

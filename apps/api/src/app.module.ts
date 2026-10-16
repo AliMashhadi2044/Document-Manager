@@ -6,11 +6,13 @@ import { validateEnv } from './common/config/env';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
 import { BigIntSerializerInterceptor } from './common/interceptors/bigint-serializer.interceptor';
+import { IdempotencyInterceptor } from './common/idempotency/idempotency.interceptor';
 import { SessionGuard } from './common/auth/session.guard';
 import { PermissionGuard } from './common/auth/permission.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { BaseDataModule } from './modules/base-data/base-data.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
+import { DocumentsModule } from './modules/documents/documents.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -24,12 +26,15 @@ import { HealthController } from './modules/health/health.controller';
     AuthModule,
     BaseDataModule,
     VendorsModule,
+    DocumentsModule,
   ],
   controllers: [HealthController],
   providers: [
     // ترتیب مهم است: ابتدا نشست و CSRF، سپس مجوز.
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
+    // ترتیب: ابتدا ضد تکرار (پیش از اجرای handler)، سپس سریالایز مبالغ.
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
     { provide: APP_INTERCEPTOR, useClass: BigIntSerializerInterceptor },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],

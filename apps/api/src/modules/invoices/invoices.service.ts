@@ -1,0 +1,322 @@
+import { Injectable } from '@nestjs/common';
+import { Prisma, type Invoice } from '@prisma/client';
+import { isEditableStatus, validateIban, type DocumentStatus, type TaxMode } from '@dm/shared';
+
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { AuditService } from '../../common/audit/audit.service';
+import { AppError } from '../../common/errors/app-error';
+import { FinancialService, parseRoundingPolicy, type ItemInput } from '../financial/financial.service';
+import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
+
+export interface CreateInvoiceInput {
+  readonly chapterId: string;
+  readonly invoiceTypeId: string;
+  readonly vendorId: string | null;
+  readonly invoiceNumber: string | null;
+  readonly invoiceDate: string;
+  readonly taxMode: TaxMode;
+  readonly taxRateBp: number | null;
+  readonly taxAmount: string | null;
+  readonly notes: string | null;
+  readonly items: readonly ItemInput[];
+  readonly payment: {
+    readonly paymentMethodId: string;
+    readonly vendorBankAccountId: string | null;
+    readonly paymentIdentifier: string | null;
+    readonly billIdentifier: string | null;
+    readonly pettyCashHolderId: string | null;
+    readonly notes: string | null;
+  } | null;
+}
+
+@Injectable()
+export class InvoicesService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+    private readonly financial: FinancialService,
+  ) {}
+
+  async create(
+    documentId: string,
+    input: CreateInvoiceInput,
+    user: AuthenticatedUser,
+  ): Promise<Invoice> {
+    const document = await this.prisma.financialDocument.findUnique({
+      where: { id: documentId },
+      include: { buyerSnapshot: true },
+    });
+    if (!document) throw AppError.notFound('سند یافت نشد');
+
+    if (!isEditableStatus(document.status as DocumentStatus)) {
+      throw AppError.conflict(
+        'DOCUMENT_NOT_EDITABLE',
+        'سند در وضعیت فعلی قابل ویرایش نیست. برای اصلاح، آن را بازگشایی کنید.',
+      );
+    }
+
+    // اتصال فصل و نوع فاکتور باید در اطلاعات پایه تعریف شده باشد. UI هم همین را
+    // نشان می‌دهد، ولی مرجع سرور است.
+    const link = await this.prisma.chapterInvoiceType.findUnique({
+      where: {
+        chapterId_invoiceTypeId: {
+          chapterId: input.chapterId,
+          invoiceTypeId: input.invoiceTypeId,
+        },
+      },
+      include: { chapter: true, invoiceType: true },
+    });
+
+    if (!link) {
+      throw AppError.validation('این نوع فاکتور برای فصل انتخاب‌شده مجاز نیست', [
+        { path: 'invoiceTypeId', message: 'نوع فاکتور با فصل سازگار نیست' },
+      ]);
+    }
+    if (!link.chapter.isActive || !link.invoiceType.isActive) {
+      throw AppError.validation('فصل یا نوع فاکتور انتخاب‌شده غیرفعال است', [
+        { path: 'chapterId', message: 'فصل یا نوع فاکتور غیرفعال است' },
+      ]);
+    }
+
+    const policy = parseRoundingPolicy(document.roundingPolicy);
+    const computed = this.financial.computeInvoice(input.items, policy, {
+      mode: input.taxMode,
+      rateBp: input.taxRateBp,
+      amount: input.taxAmount,
+    });
+
+    const vendor = input.vendorId
+      ? await this.prisma.vendor.findUnique({ where: { id: input.vendorId } })
+      : null;
+    if (input.vendorId && !vendor) {
+      throw AppError.validation('فروشنده انتخاب‌شده یافت نشد', [
+        { path: 'vendorId', message: 'فروشنده یافت نشد' },
+      ]);
+    }
+
+    const paymentData = await this.resolvePayment(input, vendor?.id ?? null);
+
+    try {
+      const invoice = await this.prisma.$transaction(async (tx) => {
+        // snapshot فروشنده: ردیف اختصاصی همین فاکتور، تغییرناپذیر (ADR-0005).
+        const vendorSnapshotId = vendor
+          ? (
+              await tx.vendorSnapshot.create({
+                data: {
+                  vendorId: vendor.id,
+                  personType: vendor.personType,
+                  name: vendor.name,
+                  representativeName: vendor.representativeName,
+                  economicCode: vendor.economicCode,
+                  registrationNumber: vendor.registrationNumber,
+                  nationalId: vendor.nationalId,
+                  addressLine: vendor.addressLine,
+                  postalCode: vendor.postalCode,
+                  phone: vendor.phone,
+                  fax: vendor.fax,
+                },
+              })
+            ).id
+          : null;
+
+        const created = await tx.invoice.create({
+          data: {
+            documentId: document.id,
+            // از خود سند خوانده می‌شود؛ FK ترکیبی سازگاری را تضمین می‌کند.
+            documentType: document.type,
+            invoiceTypeId: link.invoiceTypeId,
+            invoiceKind: link.invoiceType.kind,
+            chapterId: link.chapterId,
+            chapterCodeSnapshot: link.chapter.code,
+            chapterTitleSnapshot: link.chapter.title,
+            vendorId: vendor?.id ?? null,
+            vendorSnapshotId,
+            buyerSnapshotId: document.buyerSnapshotId,
+            invoiceNumber: input.invoiceNumber,
+            invoiceDate: new Date(`${input.invoiceDate}T00:00:00.000Z`),
+            taxMode: input.taxMode,
+            taxRateBp: input.taxMode === 'PERCENT' ? input.taxRateBp : null,
+            grossAmount: computed.grossAmount,
+            discountAmount: computed.discountAmount,
+            netAmount: computed.netAmount,
+            taxAmount: computed.taxAmount,
+            totalAmount: computed.totalAmount,
+            notes: input.notes,
+            createdById: user.id,
+            items: {
+              create: computed.items.map((item) => ({
+                rowNo: item.rowNo,
+                description: item.description,
+                productCode: item.productCode,
+                quantity: item.quantity,
+                unitId: item.unitId,
+                unitPrice: item.unitPrice,
+                grossAmount: item.grossAmount,
+                discountAmount: item.discountAmount,
+                netAmount: item.netAmount,
+                taxMode: item.taxMode,
+                taxRateBp: item.taxRateBp,
+                taxAmount: item.taxAmount,
+                totalAmount: item.totalAmount,
+              })),
+            },
+            ...(paymentData ? { payment: { create: paymentData } } : {}),
+          },
+        });
+
+        await this.financial.refreshDocumentTotals(tx, document.id);
+
+        await this.audit.record(
+          {
+            actorId: user.id,
+            action: 'INVOICE_CREATE',
+            entityType: 'invoice',
+            entityId: created.id,
+            documentId: document.id,
+            after: { id: created.id, totalAmount: created.totalAmount.toString() },
+          },
+          tx,
+        );
+
+        return created;
+      });
+
+      return invoice;
+    } catch (error) {
+      throw this.translateConstraint(error, document.type);
+    }
+  }
+
+  async remove(invoiceId: string, user: AuthenticatedUser): Promise<void> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { document: true },
+    });
+    if (!invoice) throw AppError.notFound('فاکتور یافت نشد');
+
+    if (!isEditableStatus(invoice.document.status as DocumentStatus)) {
+      throw AppError.conflict(
+        'DOCUMENT_NOT_EDITABLE',
+        'سند در وضعیت فعلی قابل ویرایش نیست',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.invoice.delete({ where: { id: invoiceId } });
+      await this.financial.refreshDocumentTotals(tx, invoice.documentId);
+
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'INVOICE_DELETE',
+          entityType: 'invoice',
+          entityId: invoiceId,
+          documentId: invoice.documentId,
+          before: { id: invoiceId, totalAmount: invoice.totalAmount.toString() },
+        },
+        tx,
+      );
+    });
+  }
+
+  /** ساخت داده پرداخت با snapshot شبا. */
+  private async resolvePayment(
+    input: CreateInvoiceInput,
+    vendorId: string | null,
+  ): Promise<Prisma.InvoicePaymentCreateWithoutInvoiceInput | null> {
+    if (!input.payment) return null;
+
+    const method = await this.prisma.paymentMethod.findUnique({
+      where: { id: input.payment.paymentMethodId },
+    });
+    if (!method || !method.isActive) {
+      throw AppError.validation('روش پرداخت انتخاب‌شده معتبر نیست', [
+        { path: 'payment.paymentMethodId', message: 'روش پرداخت معتبر نیست' },
+      ]);
+    }
+
+    const base = {
+      paymentMethod: { connect: { id: method.id } },
+      methodKind: method.kind,
+      notes: input.payment.notes,
+    };
+
+    if (method.kind === 'BENEFICIARY_ACCOUNT') {
+      if (!input.payment.vendorBankAccountId) {
+        throw AppError.validation('برای حساب ذی‌نفع، انتخاب شبا الزامی است', [
+          { path: 'payment.vendorBankAccountId', message: 'شبا انتخاب نشده است' },
+        ]);
+      }
+
+      const account = await this.prisma.vendorBankAccount.findUnique({
+        where: { id: input.payment.vendorBankAccountId },
+        include: { bank: true },
+      });
+
+      if (!account || !account.isActive) {
+        throw AppError.validation('شبای انتخاب‌شده معتبر یا فعال نیست', [
+          { path: 'payment.vendorBankAccountId', message: 'شبا معتبر نیست' },
+        ]);
+      }
+      // شبا باید متعلق به همان فروشنده فاکتور باشد.
+      if (vendorId === null || account.vendorId !== vendorId) {
+        throw AppError.validation('شبای انتخاب‌شده متعلق به فروشنده این فاکتور نیست', [
+          { path: 'payment.vendorBankAccountId', message: 'شبا متعلق به این فروشنده نیست' },
+        ]);
+      }
+      if (!validateIban(account.ibanNormalized).valid) {
+        throw AppError.validation('شبای ذخیره‌شده معتبر نیست', [
+          { path: 'payment.vendorBankAccountId', message: 'شبا معتبر نیست' },
+        ]);
+      }
+
+      return {
+        ...base,
+        vendorBankAccount: { connect: { id: account.id } },
+        ibanSnapshot: account.ibanNormalized,
+        bankTitleSnapshot: account.bank?.titleFa ?? null,
+        accountTitleSnapshot: account.accountTitle,
+        paymentIdentifier: input.payment.paymentIdentifier,
+      };
+    }
+
+    if (method.kind === 'BILL') {
+      return {
+        ...base,
+        billIdentifier: input.payment.billIdentifier,
+        paymentIdentifier: input.payment.paymentIdentifier,
+      };
+    }
+
+    return {
+      ...base,
+      ...(input.payment.pettyCashHolderId
+        ? { pettyCashHolder: { connect: { id: input.payment.pettyCashHolderId } } }
+        : {}),
+    };
+  }
+
+  /**
+   * ترجمه قیدهای دیتابیس به پیام فارسی.
+   *
+   * قید همچنان مرجع است؛ این فقط خطای خام را قابل فهم می‌کند.
+   *
+   * نکته: Prisma برای نقض ایندکس یکتای جزئی، **نام ستون** را گزارش می‌دهد
+   * (`target: ["document_id"]`)، نه نام ایندکس را. پس تشخیص از ترکیب ستون و نوع سند
+   * انجام می‌شود، نه از نام ایندکس.
+   */
+  private translateConstraint(error: unknown, documentType: 'NORMAL' | 'STAD'): unknown {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const target = error.meta?.['target'];
+      const columns = Array.isArray(target) ? target.map(String) : [String(target ?? '')];
+
+      if (documentType === 'STAD' && columns.includes('document_id')) {
+        return AppError.conflict(
+          'STAD_SINGLE_INVOICE',
+          'سند سامانه ستاد فقط می‌تواند یک فاکتور داشته باشد',
+        );
+      }
+    }
+    return error;
+  }
+}

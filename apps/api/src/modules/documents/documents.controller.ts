@@ -1,0 +1,167 @@
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { z } from 'zod';
+
+import {
+  CurrentUser,
+  RequirePermission,
+  type AuthenticatedUser,
+} from '../../common/auth/auth.decorators';
+import { ZodBody } from '../../common/validation/zod.pipe';
+import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
+import { listQuerySchema } from '../../common/query/list-query';
+import { DocumentsService } from './documents.service';
+import { InvoicesService } from '../invoices/invoices.service';
+import { createInvoiceSchema } from '../invoices/invoice.schema';
+
+const stadSchema = z.object({
+  // سقف ۵۰ نویسه طبق §۹ پرامپت.
+  needNumber: z.string().trim().min(1, 'شماره نیاز الزامی است').max(50),
+  workflowNumber: z.string().trim().min(1, 'شماره گردش الزامی است').max(100),
+  requestNumber: z.string().trim().min(1, 'شماره درخواست الزامی است').max(100),
+  requestTypeId: z.string().uuid().nullable().default(null),
+  notes: z.string().trim().max(2000).nullable().default(null),
+});
+
+const createDocumentSchema = z
+  .object({
+    title: z.string().trim().min(1, 'شرح سند الزامی است').max(500),
+    type: z.enum(['NORMAL', 'STAD']),
+    fiscalYear: z.coerce.number().int().min(1300).max(1500),
+    jalaliYear: z.coerce.number().int().min(1300).max(1500),
+    buyerEntityId: z.string().uuid('مجموعه خریدار را انتخاب کنید'),
+    stad: stadSchema.nullable().default(null),
+  })
+  .superRefine((value, ctx) => {
+    if (value.type === 'STAD' && value.stad === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['stad'],
+        message: 'برای سند سامانه ستاد، اطلاعات ستاد الزامی است',
+      });
+    }
+  });
+
+const reasonSchema = z.object({
+  reason: z.string().trim().min(1, 'ثبت دلیل الزامی است').max(2000),
+});
+
+@ApiTags('documents')
+@Controller('documents')
+export class DocumentsController {
+  constructor(
+    private readonly documents: DocumentsService,
+    private readonly invoices: InvoicesService,
+  ) {}
+
+  @RequirePermission('document:read')
+  @Get()
+  @ApiOperation({ summary: 'فهرست اسناد، محدود به دامنه دسترسی نقش کاربر' })
+  async list(
+    @Query(new ZodBody(listQuerySchema)) query: ReturnType<typeof listQuerySchema.parse>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.documents.list(query, user);
+  }
+
+  @RequirePermission('document:read')
+  @Get(':id')
+  @ApiOperation({ summary: 'جزئیات سند با فاکتورهای مرتب‌شده بر اساس تاریخ صورتحساب' })
+  async get(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.documents.get(id, user);
+  }
+
+  @RequirePermission('document:read_history')
+  @Get(':id/history')
+  @ApiOperation({ summary: 'تاریخچه تغییرات سند' })
+  async history(@Param('id') id: string) {
+    return this.documents.history(id);
+  }
+
+  @RequirePermission('document:read_history')
+  @Get(':id/revisions')
+  @ApiOperation({ summary: 'نسخه‌های ثبت‌شده سند' })
+  async revisions(@Param('id') id: string) {
+    return this.documents.revisions(id);
+  }
+
+  @RequirePermission('document:create')
+  @Post()
+  @ApiOperation({ summary: 'ایجاد سند جدید' })
+  async create(
+    @Body(new ZodBody(createDocumentSchema)) body: z.infer<typeof createDocumentSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.documents.create(body, user);
+  }
+
+  @RequirePermission('document:update')
+  @Patch(':id')
+  async update(
+    @Param('id') id: string,
+    @Body(new ZodBody(z.object({ title: z.string().trim().min(1).max(500) }).partial()))
+    body: { title?: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.documents.update(id, body, user);
+  }
+
+  @RequirePermission('document:finalize')
+  @Idempotent()
+  @Post(':id/finalize')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'ثبت نهایی سند — تراکنشی، با بازمحاسبه کامل مالی. هدر Idempotency-Key الزامی است.',
+  })
+  async finalize(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    const document = await this.documents.finalize(id, user);
+    return {
+      document,
+      // پیشنهاد چاپ پس از ثبت (§۱۸) — مشروط، نه الزام ثابت.
+      suggestedReport: { key: 'TAX_REPORT', titleFa: 'خروجی مالیات' },
+    };
+  }
+
+  @RequirePermission('document:reopen')
+  @Idempotent()
+  @Post(':id/reopen')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'بازگشایی سند با ثبت علت الزامی' })
+  async reopen(
+    @Param('id') id: string,
+    @Body(new ZodBody(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.documents.reopen(id, body.reason, user);
+  }
+
+  @RequirePermission('document:send_to_archive')
+  @Idempotent()
+  @Post(':id/send-to-archive')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'ارجاع سند به بایگانی' })
+  async sendToArchive(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.documents.sendToArchive(id, user);
+  }
+
+  @RequirePermission('invoice:create')
+  @Post(':id/invoices')
+  @ApiOperation({ summary: 'افزودن فاکتور به سند' })
+  async addInvoice(
+    @Param('id') documentId: string,
+    @Body(new ZodBody(createInvoiceSchema)) body: z.infer<typeof createInvoiceSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.create(documentId, body, user);
+  }
+
+  @RequirePermission('invoice:delete')
+  @Delete('invoices/:invoiceId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeInvoice(
+    @Param('invoiceId') invoiceId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    await this.invoices.remove(invoiceId, user);
+  }
+}
