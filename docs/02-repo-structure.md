@@ -29,7 +29,7 @@ Document-Manager/
 │  │  └─ test/                   ← تست یکپارچه (Testcontainers)
 │  │
 │  └─ web/                       ← React + Vite
-│     ├─ index.html  vite.config.ts  tailwind.config.ts
+│     ├─ index.html  vite.config.ts  postcss.config.js
 │     ├─ src/{app,shared,features}
 │     └─ e2e/                    ← Playwright
 │

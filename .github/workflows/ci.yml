@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# اجرای هم‌زمان چند commit روی یک شاخه بی‌فایده است؛ قبلی لغو می‌شود.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: کیفیت و آزمون
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dm
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: document_manager
+          # همان ترتیب مرتب‌سازی محیط توسعه؛ وگرنه نتیجه مرتب‌سازی فارسی فرق می‌کند.
+          POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U dm -d document_manager"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://dm:ci_only_password@localhost:5433/document_manager?schema=public
+      # کلید نشست فقط برای همین اجرا ساخته می‌شود؛ هیچ مقدار ثابتی در مخزن نیست.
+      API_PORT: '3100'
+      WEB_PORT: '5180'
+      WEB_ORIGIN: http://localhost:5180
+      LOG_LEVEL: warn
+      SEED_ADMIN_PASSWORD: CiOnly!2345
+      DEV_USER_PASSWORD: CiOnly!2345
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: ساخت کلید نشست یکبارمصرف
+        run: echo "SESSION_SECRET=$(node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))")" >> "$GITHUB_ENV"
+
+      - name: نصب وابستگی‌ها
+        run: npm ci
+
+      - name: بررسی آسیب‌پذیری وابستگی‌های production
+        # معیار فاز ۹: هیچ آسیب‌پذیری بالا یا بحرانی در آنچه به production می‌رود.
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: نصب مرورگر Playwright
+        # هم برای آزمون E2E و هم برای تولید PDF در خود سرویس.
+        run: npx playwright install --with-deps chromium
+
+      - name: خط لوله کیفیت
+        run: node scripts/ci.mjs --with-db
+
+      - name: بارگذاری گزارش آزمون
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+
+import { reportFontFaceCss } from './report-font';
 import {
   layoutReport,
   renderReportHtml,
@@ -317,7 +319,8 @@ export class ReportsService {
 
   /** HTML چاپی همان اجرا. */
   renderHtml(report: LaidOutReport): string {
-    return renderReportHtml(report);
+    // قلم همراه خود سند می‌رود؛ خروجی نباید به قلم‌های نصب‌شده روی ماشین وابسته باشد.
+    return renderReportHtml(report, { fontFaceCss: reportFontFaceCss() });
   }
 
   /**

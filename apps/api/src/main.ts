@@ -1,5 +1,8 @@
 import 'reflect-metadata';
 
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
 import { Logger, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -36,7 +39,9 @@ async function bootstrap(): Promise<void> {
           scriptSrc: ["'self'"],
           styleSrc: ["'self'"],
           imgSrc: ["'self'", 'blob:', 'data:'],
-          fontSrc: ["'self'"],
+          // data: برای قلم جاسازی‌شده در خروجی HTML گزارش لازم است؛ آن سند باید
+          // خودبسنده باشد چون همان HTML برای تولید PDF با شبکه قطع هم استفاده می‌شود.
+          fontSrc: ["'self'", 'data:'],
           objectSrc: ["'none'"],
           frameAncestors: ["'none'"],
           baseUri: ["'self'"],
@@ -71,10 +76,32 @@ async function bootstrap(): Promise<void> {
     SwaggerModule.setup('api/docs', app, document);
   }
 
+  // رابط وب از همان origin سرو می‌شود (بدون CORS و بدون کوکی cross-site).
+  //
+  // مسیر پیش‌فرض، خروجی build در کنار همین سرویس است؛ در تصویر Docker فایل‌ها آنجا
+  // کپی می‌شوند. اگر پوشه نباشد، سرویس بدون رابط بالا می‌آید و صریحاً هشدار می‌دهد —
+  // نه اینکه با ۴۰۴ های گنگ کار کند.
+  const webRoot = resolve(process.env.WEB_DIST ?? join(__dirname, '..', 'public'));
+  const logger = new Logger('Bootstrap');
+
+  if (existsSync(join(webRoot, 'index.html'))) {
+    // دارایی‌های با نام هش‌دار برای همیشه کش می‌شوند؛ index.html هرگز.
+    app.useStaticAssets(webRoot, { index: false, maxAge: '1y', immutable: true });
+
+    const expressApp = app.getHttpAdapter().getInstance();
+    expressApp.get(/^(?!\/api\/).*/, (_request: unknown, response: { sendFile: (path: string, options: object) => void }) => {
+      response.sendFile(join(webRoot, 'index.html'), { maxAge: 0 });
+    });
+
+    logger.log(`رابط وب از ${webRoot} سرو می‌شود`);
+  } else if (isProduction) {
+    logger.warn(`رابط وب پیدا نشد (${webRoot}); فقط API سرو می‌شود`);
+  }
+
   const port = config.get('API_PORT', { infer: true });
   await app.listen(port);
 
-  new Logger('Bootstrap').log(`سرویس روی پورت ${port} بالا آمد`);
+  logger.log(`سرویس روی پورت ${port} بالا آمد`);
 }
 
 void bootstrap();

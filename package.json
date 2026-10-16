@@ -26,16 +26,38 @@
     "explain:phase8": "node --env-file=apps/api/.env scripts/explain-phase8.mjs",
     "docker:up": "docker compose -f infrastructure/docker-compose.dev.yml up -d",
     "docker:down": "docker compose -f infrastructure/docker-compose.dev.yml down",
-    "docker:logs": "docker compose -f infrastructure/docker-compose.dev.yml logs -f"
+    "docker:logs": "docker compose -f infrastructure/docker-compose.dev.yml logs -f",
+    "ci": "node scripts/ci.mjs",
+    "ci:full": "node scripts/ci.mjs --with-db",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report",
+    "verify:phase9": "node scripts/verify-phase9.mjs",
+    "backup": "node --env-file-if-exists=apps/api/.env scripts/backup.mjs",
+    "restore:test": "node --env-file-if-exists=apps/api/.env scripts/restore-test.mjs",
+    "perf:phase9": "node --env-file=apps/api/.env scripts/perf-phase9.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.0",
     "@eslint/js": "9.17.0",
-    "@types/node": "22.10.2",
-    "@vitest/coverage-v8": "2.1.8",
+    "@playwright/test": "1.64.1",
+    "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.0.5",
     "eslint": "9.17.0",
     "fast-check": "^3.23.2",
     "typescript": "5.7.2",
-    "typescript-eslint": "8.18.1",
-    "vitest": "2.1.8"
+    "typescript-eslint": "8.71.2",
+    "vitest": "5.0.5"
+  },
+  "overrides": {
+    "express": "^4.22.3",
+    "multer": "^2.4.0",
+    "js-yaml": "^4.3.2",
+    "lodash": "^4.18.1",
+    "fast-xml-parser": "^5.11.2",
+    "body-parser": "^1.20.6",
+    "qs": "^6.16.1",
+    "uuid": "^11.1.1",
+    "file-type": "^21.3.1",
+    "postcss": "^8.5.30"
   }
 }

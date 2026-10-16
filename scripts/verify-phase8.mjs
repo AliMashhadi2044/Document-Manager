@@ -549,11 +549,19 @@ async function main() {
   const narrowFile = await admin.binary('POST', '/analytics/vendors/export', narrowRequest);
   const narrow = await readSheet(narrowFile.bytes);
   const narrowHeader = narrow.rows.findIndex((row) => row.values.includes('نام'));
+  // قاعده‌ای که سنجیده می‌شود: «فایل دقیقاً همان چیزی را دارد که کوئری برگردانده».
+  //
+  // تعداد **ثابت** اینجا نوشته نمی‌شود: ردیف‌های با نام فرمولی را آزمون‌های دیگر هم
+  // می‌سازند و هر عدد ثابتی با گذر زمان به یک شکست دروغین تبدیل می‌شود. چیزی که
+  // واقعاً باید برقرار باشد، برابری تعداد ردیف فایل با rowCount و باریک‌تر بودن
+  // نتیجه از خروجی بدون فیلتر است.
+  const narrowDataRows = narrow.rows.length - narrowHeader - 1 - 1; // منهای ردیف جمع
   check(
     'فیلتر باریک در خروجی هم اعمال شده است',
-    Number(narrowFile.rowCount) === 1 &&
-      narrow.rows.length - narrowHeader - 1 === 2, // یک ردیف داده + یک ردیف جمع
-    `rowCount=${narrowFile.rowCount} rows=${narrow.rows.length - narrowHeader - 1}`,
+    Number(narrowFile.rowCount) >= 1 &&
+      narrowDataRows === Number(narrowFile.rowCount) &&
+      Number(narrowFile.rowCount) < Number(file.rowCount),
+    `rowCount=${narrowFile.rowCount} dataRows=${narrowDataRows} wide=${file.rowCount}`,
   );
 
   const archivistExport = await bayegan.binary(

@@ -62,14 +62,24 @@ export function ReportTable({
                 const isActive = activeSort?.field === column.key;
 
                 return (
-                  <th key={column.key} className="whitespace-nowrap px-3 py-2 text-start text-xs">
+                  // `aria-sort` فقط روی خود سرستون مجاز است، نه روی دکمه داخلش؛
+                  // روی دکمه یک ویژگی ARIA نامعتبر است و ابزار کمکی نادیده‌اش می‌گیرد.
+                  <th
+                    key={column.key}
+                    scope="col"
+                    aria-sort={
+                      sortable && isActive
+                        ? activeSort.dir === 'asc'
+                          ? 'ascending'
+                          : 'descending'
+                        : undefined
+                    }
+                    className="whitespace-nowrap px-3 py-2 text-start text-xs"
+                  >
                     {sortable ? (
                       <button
                         type="button"
                         onClick={() => toggleSort(column.key)}
-                        aria-sort={
-                          isActive ? (activeSort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
-                        }
                         className="inline-flex items-center gap-1 font-medium text-foreground hover:text-primary"
                       >
                         {column.titleFa}

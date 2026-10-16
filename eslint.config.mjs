@@ -66,6 +66,10 @@ export default tseslint.config(
       '**/coverage/**',
       'apps/api/prisma/migrations/**',
       'apps/web/dist/**',
+      // خروجی کامپایل اسکریپت‌های seed برای تصویر production — کد تولیدی است، نه منبع.
+      '**/dist-seed/**',
+      'playwright-report/**',
+      'test-results/**',
     ],
   },
 
@@ -178,10 +182,30 @@ export default tseslint.config(
 
   /** اسکریپت‌های seed و ابزار: چاپ در خروجی بخشی از کارشان است. */
   {
-    files: ['apps/api/prisma/**/*.ts', 'packages/*/scripts/**/*.mjs', 'scripts/**/*.mjs'],
+    files: [
+      'apps/api/prisma/**/*.ts',
+      'packages/*/scripts/**/*.mjs',
+      'scripts/**/*.mjs',
+      'infrastructure/**/*.mjs',
+    ],
     rules: {
       'no-console': 'off',
       // متغیرهای سراسری Node در این اسکریپت‌ها طبیعی‌اند؛ تایپ‌چک مرجع نبودِ متغیر است.
+      'no-undef': 'off',
+    },
+  },
+
+  /**
+   * آزمون E2E و پیکربندی ابزارها: کد آزمون‌اند، نه کد تولیدی.
+   *
+   * `no-undef` اینجا خاموش است چون این فایل‌ها در محیط Node اجرا می‌شوند و
+   * مرجعِ وجود متغیر، تایپ‌چک است نه این قاعده.
+   */
+  {
+    files: ['e2e/**/*.ts', 'playwright.config.ts', 'vitest.setup.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', ...SECURITY_BANS],
+      'no-console': 'off',
       'no-undef': 'off',
     },
   },

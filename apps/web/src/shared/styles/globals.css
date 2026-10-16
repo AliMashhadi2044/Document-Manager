@@ -1,6 +1,45 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/*
+ * Tailwind 4: پیکربندی به جای فایل JS در همین CSS است.
+ *
+ * @source صریح است چون این فایل چند پوشه پایین‌تر از ریشه بسته قرار دارد و تشخیص
+ * خودکار منبع، فایل index.html را از دست می‌دهد.
+ */
+@source '../../../index.html';
+@source '../../**/*.{ts,tsx}';
+
+/* تم تاریک با نشان data-theme روی ریشه کنترل می‌شود، نه با class. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/*
+ * inline عمدی است: بدون آن، Tailwind مقدار متغیر را در زمان ساخت کپی می‌کند و
+ * تغییر تم در زمان اجرا بی‌اثر می‌شود. با inline، ابزار مستقیم hsl(var(--…)) را
+ * می‌نویسد و همان متغیرهای پایین کار می‌کنند.
+ */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+
+  --font-sans: 'Vazirmatn Variable', Vazirmatn, Tahoma, system-ui, sans-serif;
+}
 
 /*
  * توکن‌های سیستم طراحی.
@@ -30,8 +69,16 @@
     --destructive: 0 72% 46%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 152 58% 34%;
-    --warning: 36 92% 42%;
+    /*
+     * روشنایی این دو عمداً پایین است.
+     *
+     * نشان‌های وضعیت روی زمینه ۱۰٪ همین رنگ می‌نشینند (`bg-success/10 text-success`).
+     * با مقدار قبلی (۳۴٪ و ۴۲٪) نسبت کنتراست روی همان زمینه ۳٫۸۶ و ۲٫۸۳ بود — زیر حد
+     * ۴٫۵:۱ استاندارد WCAG AA برای متن کوچک، و axe هم همین را رد کرد. مقادیر فعلی
+     * ۴٫۷۰ و ۴٫۹۱ می‌دهند.
+     */
+    --success: 152 58% 30%;
+    --warning: 36 92% 30%;
 
     --radius: 0.5rem;
   }
@@ -54,11 +101,17 @@
     --border: 220 14% 24%;
     --input: 220 14% 28%;
 
-    --primary: 212 82% 58%;
+    /* روی زمینه ۱۰٪ خودش ۴٫۷۲ می‌دهد؛ با ۵۸٪ قبلی ۴٫۲۳ بود و زیر حد AA. */
+    --primary: 212 82% 62%;
     --primary-foreground: 222 30% 10%;
 
-    --destructive: 0 70% 58%;
-    --destructive-foreground: 0 0% 100%;
+    /* پیام خطا با زمینه ۱۰٪ قرمز: با ۵۸٪ قبلی ۳٫۶۴ بود، حالا ۴٫۸۰. */
+    --destructive: 0 70% 68%;
+    /*
+     * و چون خودِ قرمز در تم تاریک روشن است، متنِ روی سطح پُرِ قرمز (نشان اعلان و
+     * دکمه حذف) باید تیره باشد نه سفید؛ سفید روی آن ۲٫۹۳ می‌داد. حالا ۶٫۰۱.
+     */
+    --destructive-foreground: 0 60% 12%;
 
     --success: 152 48% 48%;
     --warning: 36 86% 58%;

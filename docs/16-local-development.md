@@ -124,6 +124,44 @@ npm run explain:phase8
 (حتی اگر با خطا متوقف شود). اجرایش چند ثانیه طول می‌کشد و پایگاه داده توسعه را
 دست‌نخورده تحویل می‌دهد.
 
+### آزمون زنده فاز ۹ — چک‌لیست امنیتی
+
+```bash
+npm run verify:phase9                                   # روی سرویس توسعه
+PROD_BASE=http://localhost:3200/api/v1 npm run verify:phase9   # همراه تصویر production
+```
+
+بدون `PROD_BASE`، دو بندی که فقط در production معنا دارند (بسته بودن Swagger و
+نبودن شمارنده کوئری) **رد شده** گزارش می‌شوند، نه سبز.
+
+### آزمون E2E
+
+```bash
+npx playwright install chromium   # یک‌بار؛ پس از هر npm ci لازم می‌شود
+npm run test:e2e
+```
+
+Playwright خودش API و رابط را بالا می‌آورد (نسخه **ساخته‌شده**، نه dev server) مگر
+اینکه از قبل در حال اجرا باشند.
+
+### خط لوله کیفیت — همان چیزی که CI اجرا می‌کند
+
+```bash
+npm run ci        # بدون مرحله‌های نیازمند پایگاه داده
+npm run ci:full   # به‌علاوه مهاجرت، داده مرجع و E2E
+```
+
+### کارایی و پشتیبان‌گیری
+
+```bash
+npm run perf:phase9                              # می‌سازد، می‌سنجد، پاک می‌کند
+PG_CONTAINER=dm-postgres npm run backup          # پشتیبان
+PG_CONTAINER=dm-postgres npm run restore:test    # بازیابی واقعی در پایگاه داده موقت
+```
+
+`PG_CONTAINER` روی این ماشین لازم است: کلاینت postgres نصب نیست و ابزارها داخل
+همان کانتینر دیتابیس اجرا می‌شوند.
+
 ## ۳. سه نکته مربوط به این ماشین
 
 این موارد در راه‌اندازی واقعی روی ماشین شما کشف شدند و در پیکربندی اعمال شده‌اند:
@@ -168,6 +206,11 @@ docker compose -f infrastructure/docker-compose.dev.yml --profile storage up -d
 | `npm run typecheck` | بررسی تایپ همه workspaceها |
 | `npm run build:shared` | ساخت پکیج مشترک (CJS + ESM) |
 | `npm run docker:up` / `docker:down` | بالا/پایین بردن سرویس‌ها |
+| `npm run test:e2e` | آزمون E2E روی نسخه ساخته‌شده |
+| `npm run ci` / `ci:full` | همان خط لوله CI، روی این ماشین |
+| `npm run backup` | پشتیبان پایگاه داده (قالب custom) |
+| `npm run restore:test` | آزمون واقعی بازیابی |
+| `npm run perf:phase9` | سنجش کارایی روی داده حجیم |
 | `npm run -w @dm/api db:migrate` | ساخت و اعمال migration |
 | `npm run -w @dm/api db:reset` | بازسازی کامل دیتابیس (داده‌ها پاک می‌شوند) |
 

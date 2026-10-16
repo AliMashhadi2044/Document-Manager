@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-seed/
 build/
 coverage/
 .turbo/
@@ -28,3 +29,5 @@ infrastructure/.data/
 
 # خروجی ساخت TypeScript
 *.tsbuildinfo
+
+backups/

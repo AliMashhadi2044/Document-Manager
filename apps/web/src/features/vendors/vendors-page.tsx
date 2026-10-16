@@ -5,6 +5,7 @@ import { Button } from '../../shared/ui/button';
 import { Input } from '../../shared/ui/input';
 import { DataTable, type Column } from '../../shared/ui/data-table';
 import { ApiError } from '../../shared/api/client';
+import { useCurrentUser } from '../auth/auth.api';
 import { useCreateVendor, useValidateIban, useVendors, type VendorRow } from './vendors.api';
 
 /**
@@ -17,6 +18,11 @@ export function VendorsPage(): JSX.Element {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
+
+  const { data: user } = useCurrentUser();
+  // ناظر فروشنده را می‌بیند ولی نمی‌سازد؛ دکمه‌ای که به ۴۰۳ ختم می‌شود فقط کاربر را
+  // سردرگم می‌کند. مرجع همچنان سرور است، نه این شرط.
+  const canCreate = user?.permissions.includes('vendor:write') ?? false;
 
   const list = useVendors(page, search);
 
@@ -108,7 +114,9 @@ export function VendorsPage(): JSX.Element {
         onPageChange={setPage}
         emptyTitle="فروشنده‌ای ثبت نشده است"
         emptyDescription="برای شروع، اولین فروشنده را اضافه کنید."
-        emptyAction={<Button onClick={() => setShowForm(true)}>افزودن فروشنده</Button>}
+        emptyAction={
+          canCreate ? <Button onClick={() => setShowForm(true)}>افزودن فروشنده</Button> : undefined
+        }
         toolbar={
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-64 flex-1">
@@ -123,9 +131,11 @@ export function VendorsPage(): JSX.Element {
                 hint="جست‌وجو فقط بر اساس نام نیست؛ شناسه‌های هویتی هم بررسی می‌شوند."
               />
             </div>
-            <Button onClick={() => setShowForm((value) => !value)}>
-              {showForm ? 'بستن فرم' : 'افزودن فروشنده'}
-            </Button>
+            {canCreate ? (
+              <Button onClick={() => setShowForm((value) => !value)}>
+                {showForm ? 'بستن فرم' : 'افزودن فروشنده'}
+              </Button>
+            ) : null}
           </div>
         }
       />

@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // ریشه، خودِ apps/api است چون seed از `src/modules/reporting/data-dictionary`
+    // استفاده می‌کند؛ خروجی در dist/seed/prisma/seed قرار می‌گیرد و entrypoint هم
+    // همان مسیر را صدا می‌زند.
+    "rootDir": ".",
+    "outDir": "./dist-seed",
+    "noEmit": false
+  },
+  "include": ["prisma/seed/**/*.ts", "prisma/seed/**/*.json", "src/**/*.ts"],
+  "exclude": ["dist", "dist-seed", "node_modules", "**/*.test.ts"]
+}

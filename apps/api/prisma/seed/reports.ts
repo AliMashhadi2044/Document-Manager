@@ -1,10 +1,13 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { PrismaClient } from '@prisma/client';
 import { templateV1Schema, validateTemplate } from '@dm/report-engine';
 
 import { allowedValuePaths, collectionFields } from '../../src/modules/reporting/data-dictionary';
+// قالب به‌صورت import خوانده می‌شود، نه با خواندن فایل از روی مسیر.
+//
+// دلیلش دو شکل اجراست: همین فایل هم با tsx (ماژول ESM) اجرا می‌شود و هم به CommonJS
+// کامپایل می‌شود تا در تصویر production بدون tsx قابل اجرا باشد. `import.meta.url`
+// در حالت دوم اصلاً مجاز نیست، و مسیر نسبی به cwd هم در دو حالت یکی نمی‌ماند.
+import taxReportTemplate from './templates/tax-report.json';
 
 /**
  * گزارش مالیات به‌صورت **داده**، نه کد (docs/09 §۹).
@@ -17,12 +20,8 @@ import { allowedValuePaths, collectionFields } from '../../src/modules/reporting
  * seed‌شده یعنی خطایی که تازه موقع اجرای گزارش توسط کاربر پیدا می‌شود.
  */
 
-const here = dirname(fileURLToPath(import.meta.url));
-
 export async function seedReports(prisma: PrismaClient): Promise<void> {
-  const raw: unknown = JSON.parse(
-    readFileSync(join(here, 'templates', 'tax-report.json'), 'utf8'),
-  );
+  const raw: unknown = taxReportTemplate;
 
   const parsed = templateV1Schema.safeParse(raw);
   if (!parsed.success) {
