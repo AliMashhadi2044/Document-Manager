@@ -124,7 +124,7 @@ export function ProductTypeDialog({
                           : ''}
                       </p>
                     </div>
-                    <span className="tabular-nums">{formatMoney(purchase.totalAmount)}</span>
+                    <span className="money">{formatMoney(purchase.totalAmount)}</span>
                   </li>
                 ))}
               </ul>

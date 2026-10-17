@@ -83,8 +83,8 @@ export function ItemsFields({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-border">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+      <div className="overflow-hidden rounded-xl border border-border">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-3">
           <div>
             <h4 className="text-sm font-medium">ردیف‌های فاکتور</h4>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -130,8 +130,8 @@ export function ItemsFields({
 
         <div className="divide-y divide-border">
           {draft.items.map((item, index) => (
-            <div key={item.key} className="space-y-3 p-4">
-              <div className="grid gap-3 md:grid-cols-12">
+            <div key={item.key} className="space-y-3 p-4 transition-colors hover:bg-muted/20">
+              <div className="grid gap-x-4 gap-y-3 md:grid-cols-12">
                 <div className="md:col-span-4">
                   <Input
                     label={`شرح ردیف ${toPersianDigits(String(index + 1))}`}
@@ -238,7 +238,9 @@ export function ItemsFields({
         />
       )}
 
-      <dl className="grid gap-3 rounded-md border border-border bg-muted/30 p-4 text-sm sm:grid-cols-4">
+      {/* نوار جمع، چسبیده به پایین فرم: هنگام ویرایش ردیف‌ها، عددی که تغییر می‌کند
+          باید جلوی چشم بماند، نه اینکه کاربر برای دیدنش پایین برود. */}
+      <dl className="sticky bottom-0 z-10 grid gap-3 rounded-xl border border-border bg-card/95 p-4 text-sm shadow-[var(--shadow-soft)] backdrop-blur-sm sm:grid-cols-4">
         <Preview label="مبلغ کالا" value={preview?.totals.gross} />
         <Preview label="تخفیف" value={preview?.totals.discount} />
         <Preview label="مالیات و عوارض" value={preview?.totals.tax} />
@@ -294,9 +296,9 @@ function Preview({
   strong?: boolean;
 }): JSX.Element {
   return (
-    <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={strong ? 'mt-0.5 font-bold tabular-nums' : 'mt-0.5 tabular-nums'}>
+    <div className={strong ? 'rounded-lg bg-primary/10 px-3 py-1.5' : 'px-3 py-1.5'}>
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className={strong ? 'money mt-0.5 font-bold text-primary' : 'money mt-0.5'}>
         {value === undefined ? '—' : formatMoney(value.toString(), { withUnit: false })}
       </dd>
     </div>

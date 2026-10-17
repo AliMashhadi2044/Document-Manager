@@ -7,16 +7,18 @@ import { DataTable, type Column } from '../../shared/ui/data-table';
 import { formatIsoAsJalali, formatMoney, toPersianDigits } from '../../shared/format/money';
 import { useDocuments, type DocumentRow } from './documents.api';
 import { useCurrentUser } from '../auth/auth.api';
+import { Badge, type BadgeTone } from '../../shared/ui/badge';
 import { DocumentDetailView } from './document-detail';
 import { CreateDocumentForm } from './create-document-form';
 
-const STATUS_STYLES: Record<DocumentStatus, string> = {
-  DRAFT: 'bg-muted text-muted-foreground',
-  FINALIZED: 'bg-primary/10 text-primary',
-  PENDING_ARCHIVE: 'bg-warning/10 text-warning',
-  ARCHIVED: 'bg-success/10 text-success',
-  NEEDS_REVISION: 'bg-destructive/10 text-destructive',
-  REOPENED: 'bg-warning/10 text-warning',
+/** آهنگ رنگی هر وضعیت. نقشه **کامل** است: افزودن وضعیت تازه، اینجا خطای تایپ می‌دهد. */
+const STATUS_TONES: Record<DocumentStatus, BadgeTone> = {
+  DRAFT: 'neutral',
+  FINALIZED: 'primary',
+  PENDING_ARCHIVE: 'warning',
+  ARCHIVED: 'success',
+  NEEDS_REVISION: 'danger',
+  REOPENED: 'warning',
 };
 
 export function DocumentsPage({
@@ -95,21 +97,29 @@ export function DocumentsPage({
     },
     {
       key: 'total',
-      header: 'جمع کل',
+      // واحد یک‌بار در سرستون می‌آید، نه در هر سلول: تکرار «ریال» در هر ردیف،
+      // ستون را پهن و مبلغ را دو خطی می‌کند، بی‌آنکه چیزی به کاربر بگوید.
+      header: 'جمع کل (ریال)',
       align: 'end',
       width: '13rem',
       sortKey: 'totalAmount',
-      cell: (row) => <span className="tabular-nums">{formatMoney(row.totalAmount)}</span>,
+      cell: (row) => (
+        <span className="money" title={formatMoney(row.totalAmount)}>
+          {formatMoney(row.totalAmount, { withUnit: false })}
+        </span>
+      ),
     },
     {
       key: 'status',
       header: 'وضعیت',
       align: 'center',
-      width: '8rem',
+      // جای کافی برای بلندترین برچسب («در انتظار بایگانی»)؛ با عرض کمتر نشان به دو
+      // خط می‌شکند و ارتفاع ردیف‌ها ناهماهنگ می‌شود.
+      width: '10.5rem',
       cell: (row) => (
-        <span className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLES[row.status]}`}>
+        <Badge tone={STATUS_TONES[row.status]} dot>
           {DOCUMENT_STATUS_LABELS[row.status]}
-        </span>
+        </Badge>
       ),
     },
     {

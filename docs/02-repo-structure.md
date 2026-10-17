@@ -26,12 +26,16 @@ Document-Manager/
 │  │  │  ├─ main.ts  app.module.ts
 │  │  │  ├─ common/              ← guardها، pipeها، interceptorها، فیلتر خطا، bigint serializer
 │  │  │  └─ modules/<module>/    ← هر ماژول با index.ts عمومی
-│  │  └─ test/                   ← تست یکپارچه (Testcontainers)
+│  │  └─ tsconfig.seed.json      ← کامپایل اسکریپت‌های seed برای تصویر production
 │  │
 │  └─ web/                       ← React + Vite
 │     ├─ index.html  vite.config.ts  postcss.config.js
-│     ├─ src/{app,shared,features}
-│     └─ e2e/                    ← Playwright
+│     │  سیستم طراحی: shared/ui (icon, card, badge, menu, charts, field)
+│     │  و توکن‌های رنگ در shared/styles/globals.css — docs/20
+│     └─ src/{app,shared,features}
+│
+├─ e2e/                          ← آزمون E2E (Playwright) روی نسخه ساخته‌شده
+├─ scripts/                      ← هارنس‌های زنده، خط لوله CI، پشتیبان و کارایی
 │
 ├─ packages/
 │  ├─ shared/                    ← هسته مشترک کلاینت و سرور (بدون وابستگی به Nest یا React)

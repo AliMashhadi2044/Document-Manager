@@ -84,19 +84,19 @@ export function AmountDetailsDialog({
                         {invoice.chapterTitle} · {formatIsoAsJalali(invoice.invoiceDate)}
                       </span>
                     </td>
-                    <td className="px-2 py-1.5 text-end tabular-nums">
+                    <td className="px-2 py-1.5 text-end money">
                       {formatMoney(invoice.grossAmount, { withUnit: false })}
                     </td>
-                    <td className="px-2 py-1.5 text-end tabular-nums">
+                    <td className="px-2 py-1.5 text-end money">
                       {formatMoney(invoice.discountAmount, { withUnit: false })}
                     </td>
-                    <td className="px-2 py-1.5 text-end tabular-nums">
+                    <td className="px-2 py-1.5 text-end money">
                       {formatMoney(invoice.netAmount, { withUnit: false })}
                     </td>
-                    <td className="px-2 py-1.5 text-end tabular-nums">
+                    <td className="px-2 py-1.5 text-end money">
                       {formatMoney(invoice.taxAmount, { withUnit: false })}
                     </td>
-                    <td className="px-2 py-1.5 text-end tabular-nums">
+                    <td className="px-2 py-1.5 text-end money">
                       {formatMoney(invoice.totalAmount, { withUnit: false })}
                     </td>
                   </tr>
@@ -105,19 +105,19 @@ export function AmountDetailsDialog({
               <tfoot>
                 <tr className="font-bold">
                   <td className="px-2 py-2">جمع ردیف گزارش</td>
-                  <td className="px-2 py-2 text-end tabular-nums">
+                  <td className="px-2 py-2 text-end money">
                     {formatMoney(data.totals.gross, { withUnit: false })}
                   </td>
-                  <td className="px-2 py-2 text-end tabular-nums">
+                  <td className="px-2 py-2 text-end money">
                     {formatMoney(data.totals.discount, { withUnit: false })}
                   </td>
-                  <td className="px-2 py-2 text-end tabular-nums">
+                  <td className="px-2 py-2 text-end money">
                     {formatMoney(data.totals.net, { withUnit: false })}
                   </td>
-                  <td className="px-2 py-2 text-end tabular-nums">
+                  <td className="px-2 py-2 text-end money">
                     {formatMoney(data.totals.tax, { withUnit: false })}
                   </td>
-                  <td className="px-2 py-2 text-end tabular-nums">
+                  <td className="px-2 py-2 text-end money">
                     {formatMoney(data.totals.total, { withUnit: false })}
                   </td>
                 </tr>

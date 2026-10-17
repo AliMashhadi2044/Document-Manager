@@ -115,7 +115,7 @@ export function ReportTable({
                     key={column.key}
                     className={[
                       'px-3 py-1.5',
-                      column.type === 'money' ? 'text-end tabular-nums' : '',
+                      column.type === 'money' ? 'text-end money' : '',
                       column.type === 'text' ? 'max-w-80 truncate' : 'whitespace-nowrap',
                     ].join(' ')}
                     title={column.type === 'text' ? String(row[column.key] ?? '') : undefined}
@@ -140,7 +140,7 @@ export function ReportTable({
                 {result.columns.map((column, index) => (
                   <td
                     key={column.key}
-                    className={`px-3 py-2 ${column.type === 'money' ? 'text-end tabular-nums' : ''}`}
+                    className={`px-3 py-2 ${column.type === 'money' ? 'text-end money' : ''}`}
                   >
                     {column.key in result.totals
                       ? formatMoney(result.totals[column.key] as string, { withUnit: false })

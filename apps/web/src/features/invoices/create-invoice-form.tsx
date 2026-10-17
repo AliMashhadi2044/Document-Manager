@@ -12,6 +12,7 @@ import {
 
 import { apiFetch, ApiError } from '../../shared/api/client';
 import { Button } from '../../shared/ui/button';
+import { Card, CardHeader } from '../../shared/ui/card';
 import { Input } from '../../shared/ui/input';
 import { formatServerMessage } from '../../shared/format/money';
 import { Select } from '../../shared/ui/select';
@@ -175,16 +176,20 @@ export function CreateInvoiceForm({
   };
 
   return (
-    <section className="rounded-lg border border-border bg-card p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold">افزودن فاکتور</h3>
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          بستن
-        </Button>
-      </div>
+    <Card>
+      <CardHeader
+        icon="plus"
+        title="افزودن فاکتور"
+        description="فصل و نوع فاکتور، شکل بقیه فرم را تعیین می‌کنند."
+        action={
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            بستن
+          </Button>
+        }
+      />
 
-      <div className="mt-4 space-y-5">
-        <div className="grid gap-4 md:grid-cols-2">
+      <div className="space-y-6 p-5">
+        <div className="grid gap-x-5 gap-y-4 md:grid-cols-2">
           <Select
             label="فصل"
             required
@@ -233,7 +238,7 @@ export function CreateInvoiceForm({
           </p>
         ) : (
           <>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-x-5 gap-y-4 md:grid-cols-3">
               <SearchableSelect
                 label="فروشنده"
                 search={vendorSearch}
@@ -332,7 +337,7 @@ export function CreateInvoiceForm({
           </>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
 

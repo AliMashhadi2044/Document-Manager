@@ -106,6 +106,14 @@ export interface DashboardDto {
     readonly total: string;
     readonly tax: string;
   }[];
+  /** روند ماه‌های **شمسی** یک سال مالی؛ ماه بدون فاکتور هم با مقدار صفر می‌آید. */
+  readonly byMonth: readonly {
+    readonly month: number;
+    readonly label: string;
+    readonly invoiceCount: number;
+    readonly total: string;
+    readonly tax: string;
+  }[];
 }
 
 export const analyticsKeys = {

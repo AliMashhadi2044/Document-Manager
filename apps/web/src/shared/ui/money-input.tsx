@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from 'react';
 
 import { cn } from './cn';
+import { CONTROL_CLASS, HELP_CLASS, LABEL_CLASS, NUMERIC_CLASS, borderClass } from './field';
 import { groupDigits, toPersianDigits } from '../format/money';
 
 /**
@@ -36,7 +37,7 @@ export function MoneyInput({
   return (
     <div className="space-y-1.5">
       {label ? (
-        <label htmlFor={inputId} className="block text-sm font-medium text-foreground">
+        <label htmlFor={inputId} className={LABEL_CLASS}>
           {label}
           {required ? (
             <span className="text-destructive ms-1" aria-hidden="true">
@@ -56,23 +57,19 @@ export function MoneyInput({
         aria-describedby={error ? errorId : undefined}
         value={value}
         onChange={(event) => onChange(normalizeAmountInput(event.target.value))}
-        className={cn(
-          'block w-full rounded-md border bg-card px-3 py-2 text-sm tabular-nums',
-          'disabled:cursor-not-allowed disabled:opacity-60',
-          error ? 'border-destructive' : 'border-input',
-        )}
+        className={cn(CONTROL_CLASS, NUMERIC_CLASS, borderClass(Boolean(error)))}
       />
 
       {error ? (
-        <p id={errorId} role="alert" className="text-xs text-destructive">
+        <p id={errorId} role="alert" className={cn(HELP_CLASS, 'text-destructive')}>
           {error}
         </p>
       ) : value ? (
-        <p className="text-xs text-muted-foreground tabular-nums">
+        <p className={cn(HELP_CLASS, 'money text-muted-foreground')}>
           {toPersianDigits(groupDigits(value))} ریال
         </p>
       ) : hint ? (
-        <p className="text-xs text-muted-foreground">{hint}</p>
+        <p className={cn(HELP_CLASS, 'text-muted-foreground')}>{hint}</p>
       ) : null}
     </div>
   );

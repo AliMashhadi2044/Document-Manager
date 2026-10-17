@@ -1,6 +1,7 @@
 import { forwardRef, useId, type InputHTMLAttributes, type ReactNode } from 'react';
 
 import { cn } from './cn';
+import { CONTROL_CLASS, HELP_CLASS, LABEL_CLASS, borderClass } from './field';
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: ReactNode;
@@ -21,7 +22,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   return (
     <div className="space-y-1.5">
       {label ? (
-        <label htmlFor={inputId} className="block text-sm font-medium text-foreground">
+        <label htmlFor={inputId} className={LABEL_CLASS}>
           {label}
           {required ? (
             <span className="text-destructive ms-1" aria-hidden="true">
@@ -38,24 +39,18 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         aria-invalid={error ? true : undefined}
         // پیام خطا به‌صورت برنامه‌ای به ورودی گره می‌خورد تا صفحه‌خوان آن را بخواند.
         aria-describedby={cn(error ? errorId : undefined, hint ? hintId : undefined) || undefined}
-        className={cn(
-          'block w-full rounded-md border bg-card px-3 py-2 text-sm',
-          'placeholder:text-muted-foreground',
-          'disabled:cursor-not-allowed disabled:opacity-60',
-          error ? 'border-destructive' : 'border-input',
-          className,
-        )}
+        className={cn(CONTROL_CLASS, borderClass(Boolean(error)), className)}
         {...props}
       />
 
       {hint && !error ? (
-        <p id={hintId} className="text-xs text-muted-foreground">
+        <p id={hintId} className={cn(HELP_CLASS, 'text-muted-foreground')}>
           {hint}
         </p>
       ) : null}
 
       {error ? (
-        <p id={errorId} role="alert" className="text-xs text-destructive">
+        <p id={errorId} role="alert" className={cn(HELP_CLASS, 'text-destructive')}>
           {error}
         </p>
       ) : null}

@@ -8,8 +8,12 @@ import { ReferenceController } from './reference.controller';
 import { BuyersController } from './buyers.controller';
 import { SchoolsController } from './schools.controller';
 import { VehiclesController } from './vehicles.controller';
+import { OrganizationController } from './organization.controller';
+import { FilesModule } from '../files/files.module';
 
 @Module({
+  // نشان سازمان در همان فضای ذخیره‌سازی پیوست‌ها می‌ماند؛ سرویسش از ماژول فایل می‌آید.
+  imports: [FilesModule],
   controllers: [
     LookupController,
     ChaptersController,
@@ -17,6 +21,7 @@ import { VehiclesController } from './vehicles.controller';
     BuyersController,
     SchoolsController,
     VehiclesController,
+    OrganizationController,
   ],
   providers: [LookupService, AuditService],
   exports: [LookupService],

@@ -170,7 +170,7 @@ export function FuelFields({
           <tbody>
             {draft.entries.map((entry, index) => (
               <tr key={entry.key} className="border-t border-border align-top">
-                <td className="px-3 py-2 tabular-nums">{toPersianDigits(String(index + 1))}</td>
+                <td className="px-3 py-2 money">{toPersianDigits(String(index + 1))}</td>
                 <td className="px-3 py-2">
                   <Select
                     aria-label={`روز ردیف ${index + 1}`}
@@ -221,7 +221,7 @@ export function FuelFields({
               <td className="px-3 py-2 font-medium" colSpan={2}>
                 جمع
               </td>
-              <td className="px-3 py-2 font-bold tabular-nums" colSpan={3}>
+              <td className="px-3 py-2 font-bold money" colSpan={3}>
                 {totals ? formatMoney(totals.total.toString()) : '—'}
               </td>
             </tr>

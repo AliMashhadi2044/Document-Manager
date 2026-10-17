@@ -440,7 +440,7 @@ function InvoiceCard({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium tabular-nums">
+          <span className="text-sm font-medium money">
             {formatMoney(invoice.totalAmount)}
           </span>
           {onRemove ? (
@@ -525,25 +525,25 @@ function InvoiceCard({
                       : item.description}
                   </td>
                   <td className="px-3 py-2 text-center">{formatQuantity(item.quantity)}</td>
-                  <td className="px-3 py-2 text-end tabular-nums">
+                  <td className="px-3 py-2 text-end money">
                     {formatMoney(item.unitPrice, { withUnit: false })}
                   </td>
-                  <td className="px-3 py-2 text-end tabular-nums">
+                  <td className="px-3 py-2 text-end money">
                     {formatMoney(item.grossAmount, { withUnit: false })}
                   </td>
-                  <td className="px-3 py-2 text-end tabular-nums">
+                  <td className="px-3 py-2 text-end money">
                     {formatMoney(item.discountAmount, { withUnit: false })}
                   </td>
-                  <td className="px-3 py-2 text-end tabular-nums">
+                  <td className="px-3 py-2 text-end money">
                     {formatMoney(item.netAmount, { withUnit: false })}
                   </td>
                   <td className="px-3 py-2 text-center">
                     {item.taxMode === 'PERCENT' ? formatRateBp(item.taxRateBp) : 'دستی'}
                   </td>
-                  <td className="px-3 py-2 text-end tabular-nums">
+                  <td className="px-3 py-2 text-end money">
                     {formatMoney(item.taxAmount, { withUnit: false })}
                   </td>
-                  <td className="px-3 py-2 text-end font-medium tabular-nums">
+                  <td className="px-3 py-2 text-end font-medium money">
                     {formatMoney(item.totalAmount, { withUnit: false })}
                   </td>
                 </tr>
@@ -554,20 +554,20 @@ function InvoiceCard({
                 <td className="px-3 py-2" colSpan={4}>
                   جمع فاکتور
                 </td>
-                <td className="px-3 py-2 text-end tabular-nums">
+                <td className="px-3 py-2 text-end money">
                   {formatMoney(invoice.grossAmount, { withUnit: false })}
                 </td>
-                <td className="px-3 py-2 text-end tabular-nums">
+                <td className="px-3 py-2 text-end money">
                   {formatMoney(invoice.discountAmount, { withUnit: false })}
                 </td>
-                <td className="px-3 py-2 text-end tabular-nums">
+                <td className="px-3 py-2 text-end money">
                   {formatMoney(invoice.netAmount, { withUnit: false })}
                 </td>
                 <td />
-                <td className="px-3 py-2 text-end tabular-nums">
+                <td className="px-3 py-2 text-end money">
                   {formatMoney(invoice.taxAmount, { withUnit: false })}
                 </td>
-                <td className="px-3 py-2 text-end tabular-nums">
+                <td className="px-3 py-2 text-end money">
                   {formatMoney(invoice.totalAmount, { withUnit: false })}
                 </td>
               </tr>
@@ -591,7 +591,7 @@ function Field({
   return (
     <div>
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={strong ? 'mt-0.5 font-bold tabular-nums' : 'mt-0.5 tabular-nums'}>{value}</dd>
+      <dd className={strong ? 'mt-0.5 font-bold money' : 'mt-0.5 money'}>{value}</dd>
     </div>
   );
 }

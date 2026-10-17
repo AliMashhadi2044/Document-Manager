@@ -10,7 +10,28 @@ import { gotoSection, login } from './helpers';
  * «هشدار» نیستند؛ آزمون را رد می‌کنند. اگر موردی آگاهانه پذیرفته شود، باید با دلیل
  * در همین فایل کنار گذاشته شود تا پنهان نماند.
  */
+/**
+ * صبر تا پایان همه انیمیشن‌ها.
+ *
+ * بدون این، axe ممکن است وسط انیمیشن ورودی صفحه اندازه بگیرد؛ در آن لحظه متن
+ * شفافیت کامل ندارد و رنگش با زمینه ترکیب شده، پس کنتراست **گذرا** زیر حد گزارش
+ * می‌شود. آن یک حالت ماندگار نیست و رفعش با تیره‌تر کردن رنگ، پاک کردن صورت مسئله
+ * است. چیزی که باید سنجیده شود، رنگ نهایی صفحه است.
+ */
+async function settle(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    document.getAnimations().every((animation) => {
+      if (animation.playState !== 'running') return true;
+      // انیمیشن بی‌پایان (درخشش اسکلت بارگذاری) هرگز تمام نمی‌شود؛ انتظار برایش
+      // یعنی قفل شدن آزمون. چنین انیمیشنی هم روی رنگ متن اثر ندارد.
+      return animation.effect?.getComputedTiming().iterations === Infinity;
+    }),
+  );
+}
+
 async function violations(page: Page): Promise<unknown[]> {
+  await settle(page);
+
   const result = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
@@ -87,5 +108,43 @@ test.describe('دسترس‌پذیری تم تاریک', () => {
     // تم «مطابق سیستم» است، پس سیستمِ تاریک یعنی صفحه تاریک.
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     expect(await violations(page)).toEqual([]);
+  });
+});
+
+/**
+ * تنظیمات ظاهر در سربرگ.
+ *
+ * این آزمون سه چیز را با هم می‌سنجد که هر کدام جداگانه ممکن است درست به‌نظر برسند:
+ * منو با صفحه‌کلید قابل استفاده است، انتخاب تم **اثر واقعی** روی ریشه سند می‌گذارد،
+ * و انتخاب پس از بارگذاری دوباره صفحه باقی می‌ماند.
+ */
+test.describe('تنظیمات ظاهر', () => {
+  test('تم تاریک انتخاب و ماندگار می‌شود', async ({ page }) => {
+    await login(page, 'admin');
+
+    await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
+    await page.getByRole('menuitemradio', { name: /تاریک/ }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+    await page.keyboard.press('Escape');
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+    // و برگرداندنش هم کار می‌کند — وگرنه کاربر در تمی گیر می‌افتد که نمی‌خواهد.
+    await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
+    await page.getByRole('menuitemradio', { name: /روشن/ }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  });
+
+  test('منوی ظاهر با Escape بسته می‌شود و فوکوس برمی‌گردد', async ({ page }) => {
+    await login(page, 'admin');
+
+    const trigger = page.getByRole('button', { name: 'تنظیمات ظاهر' });
+    await trigger.click();
+    await expect(page.getByRole('menu', { name: 'تنظیمات ظاهر' })).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu', { name: 'تنظیمات ظاهر' })).toHaveCount(0);
+    await expect(trigger).toBeFocused();
   });
 });

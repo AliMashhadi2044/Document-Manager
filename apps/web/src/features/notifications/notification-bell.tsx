@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { Button } from '../../shared/ui/button';
+import { Icon } from '../../shared/ui/icon';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { formatIsoAsJalali, toPersianDigits } from '../../shared/format/money';
 import {
@@ -46,13 +47,20 @@ export function NotificationBell({ onOpenDocument }: { onOpenDocument?: (documen
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-label={count > 0 ? `اعلان‌ها، ${count} خوانده‌نشده` : 'اعلان‌ها'}
-        className="relative rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
+        className="relative inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
-        اعلان‌ها
+        <Icon name="bell" />
         {count > 0 ? (
-          <span className="absolute -top-2 -start-2 min-w-5 rounded-full bg-destructive px-1.5 py-0.5 text-[11px] font-bold text-destructive-foreground">
-            {toPersianDigits(String(count))}
-          </span>
+          <>
+            {/*
+              عدد خوانده‌نشده‌ها روی آیکون می‌نشیند. حلقه هم‌رنگ سربرگ دور نشان،
+              آن را از آیکون جدا می‌کند؛ بدون آن، عدد و آیکون در هم می‌روند.
+            */}
+            <span className="absolute -top-0.5 -start-0.5 min-w-4 rounded-full bg-destructive px-1 py-px text-center text-[10px] font-bold leading-4 text-destructive-foreground ring-2 ring-card">
+              {toPersianDigits(String(count))}
+            </span>
+            <span className="sr-only">خوانده‌نشده</span>
+          </>
         ) : null}
       </button>
 
@@ -60,7 +68,7 @@ export function NotificationBell({ onOpenDocument }: { onOpenDocument?: (documen
         <div
           role="dialog"
           aria-label="اعلان‌ها"
-          className="absolute end-0 z-20 mt-2 w-[min(28rem,90vw)] rounded-lg border border-border bg-card p-4 shadow-lg"
+          className="absolute end-0 z-50 mt-2 w-[min(28rem,90vw)] rounded-xl border border-border bg-popover p-4 shadow-[var(--shadow-lift)] animate-[var(--animate-rise)]"
         >
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold">اعلان‌ها</h3>

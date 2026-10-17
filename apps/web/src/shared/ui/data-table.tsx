@@ -76,9 +76,11 @@ export function DataTable<T>({
     <div className="space-y-3">
       {toolbar}
 
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-[var(--shadow-soft)]">
         <table className="w-full border-collapse text-sm">
-          <thead className="bg-muted/60">
+          {/* سرستون چسبان: در جدول بلند، بدون آن کاربر بعد از چند ردیف نمی‌داند
+              هر ستون چیست. */}
+          <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
             <tr>
               {columns.map((column) => {
                 const sortable = column.sortKey !== undefined && onSortChange !== undefined;
@@ -91,7 +93,7 @@ export function DataTable<T>({
                     style={column.width ? { width: column.width } : undefined}
                     className={cn(
                       cellPadding,
-                      'border-b border-border font-medium text-muted-foreground',
+                      'whitespace-nowrap border-b border-border text-xs font-medium text-muted-foreground',
                       alignClass(column.align),
                     )}
                     aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
@@ -135,10 +137,19 @@ export function DataTable<T>({
               : rows.map((row) => (
                   <tr
                     key={rowKey(row)}
-                    className="border-b border-border last:border-0 hover:bg-muted/40"
+                    className="border-b border-border transition-colors last:border-0 hover:bg-muted/40"
                   >
                     {columns.map((column) => (
-                      <td key={column.key} className={cn(cellPadding, alignClass(column.align))}>
+                      <td
+                        key={column.key}
+                        className={cn(
+                          cellPadding,
+                          alignClass(column.align),
+                          // ستون‌های عددی هم‌عرض و کمی جمع‌تر؛ مبلغ بلند باید در
+                          // ستون جا شود و ارقام ردیف‌ها زیر هم بنشینند.
+                          column.align === 'end' || column.align === 'center' ? 'money' : null,
+                        )}
+                      >
                         {column.cell(row)}
                       </td>
                     ))}

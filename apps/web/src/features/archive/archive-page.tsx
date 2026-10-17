@@ -7,13 +7,15 @@ import { DataTable, type Column } from '../../shared/ui/data-table';
 import { formatIsoAsJalali, formatMoney, toPersianDigits } from '../../shared/format/money';
 import { ApiError } from '../../shared/api/client';
 import { useArchiveInbox, type ArchiveInboxFilters, type ArchiveInboxRow } from './archive.api';
+import { Badge, type BadgeTone } from '../../shared/ui/badge';
 import { ArchiveWorkspace } from './archive-workspace';
 import type { CurrentUser } from '../auth/auth.api';
 
-const STATUS_STYLES: Partial<Record<DocumentStatus, string>> = {
-  PENDING_ARCHIVE: 'bg-warning/10 text-warning',
-  ARCHIVED: 'bg-success/10 text-success',
-  NEEDS_REVISION: 'bg-destructive/10 text-destructive',
+/** فقط وضعیت‌هایی که در کارتابل بایگانی ممکن‌اند؛ بقیه خنثی نمایش داده می‌شوند. */
+const STATUS_TONES: Partial<Record<DocumentStatus, BadgeTone>> = {
+  PENDING_ARCHIVE: 'warning',
+  ARCHIVED: 'success',
+  NEEDS_REVISION: 'danger',
 };
 
 /**
@@ -114,22 +116,24 @@ export function ArchivePage({ user }: { user: CurrentUser }): JSX.Element {
     },
     {
       key: 'total',
-      header: 'جمع کل',
+      header: 'جمع کل (ریال)',
       align: 'end',
       sortKey: 'totalAmount',
-      cell: (row) => formatMoney(row.totalAmount),
+      cell: (row) => (
+        <span title={formatMoney(row.totalAmount)}>
+          {formatMoney(row.totalAmount, { withUnit: false })}
+        </span>
+      ),
     },
     {
       key: 'status',
       header: 'وضعیت',
       align: 'center',
-      width: '8rem',
+      width: '10.5rem',
       cell: (row) => (
-        <span
-          className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLES[row.status] ?? 'bg-muted text-muted-foreground'}`}
-        >
+        <Badge tone={STATUS_TONES[row.status] ?? 'neutral'} dot>
           {DOCUMENT_STATUS_LABELS[row.status]}
-        </span>
+        </Badge>
       ),
     },
   ];

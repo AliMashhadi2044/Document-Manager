@@ -158,7 +158,7 @@ function Preview({
   return (
     <div>
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={strong ? 'mt-0.5 font-bold tabular-nums' : 'mt-0.5 tabular-nums'}>
+      <dd className={strong ? 'mt-0.5 font-bold money' : 'mt-0.5 money'}>
         {value === undefined ? '—' : formatMoney(value.toString(), { withUnit: false })}
       </dd>
     </div>

@@ -5,6 +5,9 @@ import { DOCUMENT_TYPE_LABELS, type DocumentType } from '@dm/shared';
 import { apiFetch, ApiError } from '../../shared/api/client';
 import { Button } from '../../shared/ui/button';
 import { Input } from '../../shared/ui/input';
+import { Select } from '../../shared/ui/select';
+import { Card, CardHeader } from '../../shared/ui/card';
+import { NUMERIC_CLASS } from '../../shared/ui/field';
 import type { PageResult } from '../base-data/base-data.api';
 import { useCreateDocument } from './documents.api';
 
@@ -47,11 +50,15 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
   const openYears = (bootstrap.data?.fiscalYears ?? []).filter((year) => !year.isClosed);
 
   return (
-    <section className="rounded-lg border border-border bg-card p-6">
-      <h3 className="text-sm font-semibold">ایجاد سند جدید</h3>
+    <Card>
+      <CardHeader
+        icon="plus"
+        title="ایجاد سند جدید"
+        description="نوع سند، مجموعه خریدار و سال مالی پس از ایجاد قابل تغییر نیستند."
+      />
 
       <form
-        className="mt-4 grid gap-4 md:grid-cols-2"
+        className="grid gap-x-5 gap-y-4 p-5 md:grid-cols-2"
         onSubmit={(event) => {
           event.preventDefault();
           setMessage(null);
@@ -111,39 +118,30 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium" htmlFor="buyer">
-            مجموعه خریدار <span className="text-destructive">*</span>
-          </label>
-          <select
-            id="buyer"
-            required
-            value={buyerEntityId}
-            onChange={(event) => setBuyerEntityId(event.target.value)}
-            className="mt-1.5 block w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
-          >
-            <option value="">انتخاب کنید…</option>
-            {buyers.data?.items.map((buyer) => (
-              <option key={buyer.id} value={buyer.id}>
-                {buyer.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Select
+          id="buyer"
+          label="مجموعه خریدار"
+          required
+          value={buyerEntityId}
+          onChange={(event) => setBuyerEntityId(event.target.value)}
+          options={(buyers.data?.items ?? []).map((buyer) => ({
+            value: buyer.id,
+            label: buyer.name,
+          }))}
+        />
 
+        {/* قابل انتخاب از فهرست و قابل تایپ دستی (§۹ پرامپت). */}
         <div>
-          <label className="block text-sm font-medium" htmlFor="fiscalYear">
-            سال مالی <span className="text-destructive">*</span>
-          </label>
-          {/* قابل انتخاب از فهرست و قابل تایپ دستی (§۹ پرامپت). */}
-          <input
+          <Input
             id="fiscalYear"
-            list="fiscal-years"
-            inputMode="numeric"
+            label="سال مالی"
             required
+            inputMode="numeric"
+            list="fiscal-years"
+            className={NUMERIC_CLASS}
             value={fiscalYear}
             onChange={(event) => setFiscalYear(event.target.value)}
-            className="mt-1.5 block w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+            hint="از فهرست سال‌های باز انتخاب یا دستی وارد کنید."
           />
           <datalist id="fiscal-years">
             {openYears.map((year) => (
@@ -152,16 +150,15 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
           </datalist>
         </div>
 
-        <div>
-          <Input
-            label="سال شمسی"
-            required
-            inputMode="numeric"
-            value={jalaliYear}
-            onChange={(event) => setJalaliYear(event.target.value)}
-            hint="مستقل از سال مالی است."
-          />
-        </div>
+        <Input
+          label="سال شمسی"
+          required
+          inputMode="numeric"
+          className={NUMERIC_CLASS}
+          value={jalaliYear}
+          onChange={(event) => setJalaliYear(event.target.value)}
+          hint="مستقل از سال مالی است."
+        />
 
         {/* فیلدهای شرطی سند ستاد — در همان مرحله ایجاد (§۹). */}
         {type === 'STAD' ? (
@@ -186,24 +183,16 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
               value={requestNumber}
               onChange={(event) => setRequestNumber(event.target.value)}
             />
-            <div>
-              <label className="block text-sm font-medium" htmlFor="requestType">
-                نوع درخواست
-              </label>
-              <select
-                id="requestType"
-                value={requestTypeId}
-                onChange={(event) => setRequestTypeId(event.target.value)}
-                className="mt-1.5 block w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
-              >
-                <option value="">انتخاب کنید…</option>
-                {bootstrap.data?.stadRequestTypes.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              id="requestType"
+              label="نوع درخواست"
+              value={requestTypeId}
+              onChange={(event) => setRequestTypeId(event.target.value)}
+              options={(bootstrap.data?.stadRequestTypes ?? []).map((item) => ({
+                value: item.id,
+                label: item.title,
+              }))}
+            />
             <div className="md:col-span-2">
               <Input
                 label="توضیحات ستاد"
@@ -219,15 +208,15 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
             role="status"
             className={
               message === 'سند ایجاد شد.'
-                ? 'rounded-md bg-success/10 p-3 text-sm text-success md:col-span-2'
-                : 'rounded-md bg-destructive/10 p-3 text-sm text-destructive md:col-span-2'
+                ? 'rounded-lg bg-success/10 p-3 text-sm text-success md:col-span-2'
+                : 'rounded-lg bg-destructive/10 p-3 text-sm text-destructive md:col-span-2'
             }
           >
             {message}
           </p>
         ) : null}
 
-        <div className="flex gap-2 md:col-span-2">
+        <div className="flex gap-2 border-t border-border pt-4 md:col-span-2">
           <Button type="submit" loading={create.isPending} disabled={!title.trim() || !buyerEntityId}>
             ایجاد سند
           </Button>
@@ -236,6 +225,6 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
           </Button>
         </div>
       </form>
-    </section>
+    </Card>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import { cn } from './cn';
+import { CONTROL_CLASS, LABEL_CLASS, borderClass } from './field';
 
 export interface SearchableOption {
   readonly value: string;
@@ -89,7 +90,7 @@ export function SearchableSelect({
   return (
     <div className="space-y-1.5" ref={containerRef}>
       {label ? (
-        <label htmlFor={inputId} className="block text-sm font-medium text-foreground">
+        <label htmlFor={inputId} className={LABEL_CLASS}>
           {label}
           {required ? (
             <span className="text-destructive ms-1" aria-hidden="true">
@@ -141,18 +142,14 @@ export function SearchableSelect({
               setOpen(false);
             }
           }}
-          className={cn(
-            'block w-full rounded-md border bg-card px-3 py-2 text-sm',
-            'placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60',
-            error ? 'border-destructive' : 'border-input',
-          )}
+          className={cn(CONTROL_CLASS, borderClass(Boolean(error)))}
         />
 
         {open ? (
           <ul
             id={listId}
             role="listbox"
-            className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border border-border bg-card py-1 shadow-lg"
+            className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-border bg-popover py-1 shadow-[var(--shadow-lift)]"
           >
             {loading ? (
               <li className="px-3 py-2 text-sm text-muted-foreground">در حال جست‌وجو…</li>

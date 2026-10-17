@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { JALALI_MONTH_NAMES, jalaliToIsoDate } from '@dm/shared';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
@@ -142,7 +143,57 @@ export class DashboardService {
         total: (row._sum.totalAmount ?? 0n).toString(),
         tax: (row._sum.taxAmount ?? 0n).toString(),
       })),
+      byMonth: await this.monthlySeries(where, fiscalYear ?? (await this.latestFiscalYear(user))),
     };
+  }
+
+  /**
+   * روند ماهانه فاکتورها در یک سال **شمسی**.
+   *
+   * چرا دوازده کوئری و نه یک `groupBy`: PostgreSQL تقویم شمسی ندارد و ماه‌های شمسی
+   * با ماه‌های میلادی هم‌مرز نیستند، پس `date_trunc('month', ...)` ماهِ اشتباه
+   * می‌دهد. اینجا مرز هر ماه با همان کتابخانه تقویم پروژه حساب و به‌صورت بازه تاریخ
+   * به دیتابیس داده می‌شود — نتیجه، دقیقاً ماه شمسی است.
+   *
+   * تعداد کوئری **ثابت** است (دوازده، موازی) و با حجم داده رشد نمی‌کند؛ ستون
+   * `invoice_date` هم ایندکس دارد.
+   */
+  private async monthlySeries(where: object, jalaliYear: number | null) {
+    if (jalaliYear === null) return [];
+
+    const months = Array.from({ length: 12 }, (_, index) => {
+      const month = index + 1;
+      const from = new Date(`${jalaliToIsoDate({ year: jalaliYear, month, day: 1 })}T00:00:00.000Z`);
+      const to =
+        month === 12
+          ? new Date(`${jalaliToIsoDate({ year: jalaliYear + 1, month: 1, day: 1 })}T00:00:00.000Z`)
+          : new Date(`${jalaliToIsoDate({ year: jalaliYear, month: month + 1, day: 1 })}T00:00:00.000Z`);
+      return { month, from, to };
+    });
+
+    const rows = await Promise.all(
+      months.map((range) =>
+        this.prisma.invoice.aggregate({
+          where: { document: where, invoiceDate: { gte: range.from, lt: range.to } },
+          _sum: { totalAmount: true, taxAmount: true },
+          _count: { _all: true },
+        }),
+      ),
+    );
+
+    return months.map((range, index) => ({
+      month: range.month,
+      label: JALALI_MONTH_NAMES[range.month - 1] ?? String(range.month),
+      invoiceCount: rows[index]?._count._all ?? 0,
+      total: (rows[index]?._sum.totalAmount ?? 0n).toString(),
+      tax: (rows[index]?._sum.taxAmount ?? 0n).toString(),
+    }));
+  }
+
+  /** تازه‌ترین سال مالی در دامنه کاربر — مبنای روند ماهانه وقتی سالی انتخاب نشده. */
+  private async latestFiscalYear(user: AuthenticatedUser): Promise<number | null> {
+    const years = await this.fiscalYears(user);
+    return years[0] ?? null;
   }
 
   /** سال‌های مالی موجود در دامنه دسترسی کاربر — برای فیلتر داشبورد. */

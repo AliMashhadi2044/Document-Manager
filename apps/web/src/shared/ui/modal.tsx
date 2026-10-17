@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 
 /**
  * گفت‌وگوی پوشا (modal) روی پایه `<dialog>`.
@@ -20,6 +20,7 @@ export function Modal({
   children: ReactNode;
 }): JSX.Element {
   const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const element = dialog.current;
@@ -29,6 +30,9 @@ export function Modal({
   return (
     <dialog
       ref={dialog}
+      // نام دسترس‌پذیر گفت‌وگو از عنوانش می‌آید؛ بدون این، صفحه‌خوان فقط «گفت‌وگو»
+      // می‌گوید و کاربر نمی‌داند کدام گفت‌وگو باز شده است.
+      aria-labelledby={titleId}
       // کلیک روی پس‌زمینه و کلید Esc هر دو به یک مسیر بستن می‌رسند.
       onCancel={(event) => {
         event.preventDefault();
@@ -37,9 +41,11 @@ export function Modal({
       onClick={(event) => {
         if (event.target === dialog.current) onClose();
       }}
-      className="m-auto w-[min(56rem,92vw)] rounded-lg border border-border bg-card p-6 text-foreground backdrop:bg-black/50"
+      className="m-auto w-[min(56rem,92vw)] rounded-2xl border border-border bg-card p-6 text-foreground shadow-[var(--shadow-lift)] backdrop:bg-foreground/40 backdrop:backdrop-blur-sm"
     >
-      <h3 className="mb-4 truncate text-sm font-semibold">{title}</h3>
+      <h3 id={titleId} className="mb-4 truncate text-base font-semibold">
+        {title}
+      </h3>
       {children}
     </dialog>
   );

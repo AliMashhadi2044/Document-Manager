@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { Badge, type BadgeTone } from '../../shared/ui/badge';
 import { Button } from '../../shared/ui/button';
 import { Input } from '../../shared/ui/input';
 import { Select } from '../../shared/ui/select';
@@ -19,11 +20,11 @@ import {
 } from './feedback.api';
 import type { CurrentUser } from '../auth/auth.api';
 
-const STATUS_STYLES: Record<FeedbackStatus, string> = {
-  OPEN: 'bg-destructive/10 text-destructive',
-  ANSWERED: 'bg-warning/10 text-warning',
-  RESOLVED: 'bg-success/10 text-success',
-  REJECTED: 'bg-muted text-muted-foreground',
+const STATUS_TONES: Record<FeedbackStatus, BadgeTone> = {
+  OPEN: 'danger',
+  ANSWERED: 'warning',
+  RESOLVED: 'success',
+  REJECTED: 'neutral',
 };
 
 /** نوع‌هایی که بدون انتخاب فاکتور معنا دارند؛ بقیه به فاکتور گره خورده‌اند. */
@@ -206,9 +207,9 @@ function FeedbackCard({
             {formatIsoAsJalali(feedback.createdAt)}
           </p>
         </div>
-        <span className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLES[feedback.status]}`}>
+        <Badge tone={STATUS_TONES[feedback.status]} dot>
           {FEEDBACK_STATUS_LABELS[feedback.status]}
-        </span>
+        </Badge>
       </div>
 
       {feedback.replies.length > 0 ? (

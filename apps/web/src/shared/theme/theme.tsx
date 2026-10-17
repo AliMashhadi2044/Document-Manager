@@ -11,7 +11,7 @@ import {
 export const THEME_MODES = ['light', 'dark', 'system'] as const;
 export type ThemeMode = (typeof THEME_MODES)[number];
 
-export const PRIMARY_COLORS = ['default', 'teal', 'indigo', 'slate'] as const;
+export const PRIMARY_COLORS = ['default', 'violet', 'blue', 'teal', 'rose'] as const;
 export type PrimaryColor = (typeof PRIMARY_COLORS)[number];
 
 export const THEME_MODE_LABELS: Record<ThemeMode, string> = {
@@ -21,10 +21,26 @@ export const THEME_MODE_LABELS: Record<ThemeMode, string> = {
 };
 
 export const PRIMARY_COLOR_LABELS: Record<PrimaryColor, string> = {
-  default: 'آبی سازمانی',
+  default: 'نیلی',
+  violet: 'بنفش',
+  blue: 'آبی',
   teal: 'فیروزه‌ای',
-  indigo: 'بنفش',
-  slate: 'خاکستری',
+  rose: 'سرخابی',
+};
+
+/**
+ * نمونه رنگ برای دکمه انتخاب رنگ.
+ *
+ * این مقدارها **تکرار** توکن‌های CSS نیستند بلکه فقط پیش‌نمایش‌اند: رنگ واقعی رابط
+ * همیشه از `--primary` می‌آید و با تم روشن/تاریک عوض می‌شود، ولی نمونه باید در هر
+ * دو تم یکسان و قابل تشخیص بماند.
+ */
+export const PRIMARY_COLOR_SWATCHES: Record<PrimaryColor, string> = {
+  default: 'hsl(243 68% 56%)',
+  violet: 'hsl(277 68% 56%)',
+  blue: 'hsl(212 72% 48%)',
+  teal: 'hsl(179 75% 32%)',
+  rose: 'hsl(345 70% 52%)',
 };
 
 interface ThemeContextValue {

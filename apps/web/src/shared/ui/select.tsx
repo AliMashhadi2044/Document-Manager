@@ -1,6 +1,7 @@
 import { useId, type ReactNode, type SelectHTMLAttributes } from 'react';
 
 import { cn } from './cn';
+import { CONTROL_CLASS, HELP_CLASS, LABEL_CLASS, borderClass } from './field';
 
 export interface SelectOption {
   readonly value: string;
@@ -42,7 +43,7 @@ export function Select({
   return (
     <div className="space-y-1.5">
       {label ? (
-        <label htmlFor={selectId} className="block text-sm font-medium text-foreground">
+        <label htmlFor={selectId} className={LABEL_CLASS}>
           {label}
           {required ? (
             <span className="text-destructive ms-1" aria-hidden="true">
@@ -57,12 +58,8 @@ export function Select({
         required={required}
         aria-invalid={error ? true : undefined}
         aria-describedby={cn(error ? errorId : undefined, hint ? hintId : undefined) || undefined}
-        className={cn(
-          'block w-full rounded-md border bg-card px-3 py-2 text-sm',
-          'disabled:cursor-not-allowed disabled:opacity-60',
-          error ? 'border-destructive' : 'border-input',
-          className,
-        )}
+        // فضای انتهای کنترل برای فلش بومی مرورگر باز می‌ماند تا متن گزینه زیرش نرود.
+        className={cn(CONTROL_CLASS, 'pe-8', borderClass(Boolean(error)), className)}
         {...props}
       >
         {placeholder === null ? null : <option value="">{placeholder}</option>}
@@ -74,13 +71,13 @@ export function Select({
       </select>
 
       {hint && !error ? (
-        <p id={hintId} className="text-xs text-muted-foreground">
+        <p id={hintId} className={cn(HELP_CLASS, 'text-muted-foreground')}>
           {hint}
         </p>
       ) : null}
 
       {error ? (
-        <p id={errorId} role="alert" className="text-xs text-destructive">
+        <p id={errorId} role="alert" className={cn(HELP_CLASS, 'text-destructive')}>
           {error}
         </p>
       ) : null}
