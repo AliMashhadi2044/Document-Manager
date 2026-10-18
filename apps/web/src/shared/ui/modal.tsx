@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 
+import { cn } from './cn';
+
 /**
  * گفت‌وگوی پوشا (modal) روی پایه `<dialog>`.
  *
@@ -41,7 +43,11 @@ export function Modal({
       onClick={(event) => {
         if (event.target === dialog.current) onClose();
       }}
-      className="m-auto w-[min(56rem,92vw)] rounded-2xl border border-border bg-card p-6 text-foreground shadow-[var(--shadow-lift)] backdrop:bg-foreground/40 backdrop:backdrop-blur-sm"
+      className={cn(
+        'm-auto w-[min(56rem,92vw)] rounded-2xl border border-border bg-card p-6 text-foreground',
+        'shadow-[var(--shadow-lift)] animate-[var(--animate-dialog)]',
+        'backdrop:bg-foreground/40 backdrop:backdrop-blur-sm backdrop:animate-[backdrop-in_0.24s_ease-out_both]',
+      )}
     >
       <h3 id={titleId} className="mb-4 truncate text-base font-semibold">
         {title}

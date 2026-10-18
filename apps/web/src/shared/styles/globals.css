@@ -58,6 +58,12 @@
   --animate-rise: rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-shimmer: shimmer 1.6s linear infinite;
   --animate-draw: draw 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* باز شدن منو و گفت‌وگو: کمی بزرگ‌شدن از نقطه لنگر، نه ظاهر شدن ناگهانی. */
+  --animate-pop: pop 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-dialog: dialog-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* حلقه‌ای که از نشان اعلان بیرون می‌زند و محو می‌شود. */
+  --animate-ping-ring: ping-ring 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-float: float 6s ease-in-out infinite;
 }
 
 /*
@@ -139,6 +145,22 @@
     --accent: 24 85% 45%;
   }
 
+  :root[data-primary='cyan'] {
+    --primary: 192 78% 30%;
+    --accent: 212 72% 44%;
+  }
+  :root[data-primary='emerald'] {
+    --primary: 152 82% 26%;
+    --accent: 192 78% 32%;
+  }
+  :root[data-primary='amber'] {
+    --primary: 35 78% 30%;
+    --accent: 12 72% 44%;
+  }
+  :root[data-primary='fuchsia'] {
+    --primary: 300 70% 42%;
+    --accent: 265 70% 52%;
+  }
   :root[data-theme='dark'] {
     --background: 226 30% 9%;
     --foreground: 214 30% 93%;
@@ -199,13 +221,43 @@
     --accent: 24 85% 70%;
   }
 
+  :root[data-theme='dark'][data-primary='cyan'] {
+    --primary: 192 80% 72%;
+    --primary-foreground: 192 60% 10%;
+    --accent: 212 85% 74%;
+  }
+  :root[data-theme='dark'][data-primary='emerald'] {
+    --primary: 152 80% 72%;
+    --primary-foreground: 152 60% 10%;
+    --accent: 192 80% 70%;
+  }
+  :root[data-theme='dark'][data-primary='amber'] {
+    --primary: 35 80% 72%;
+    --primary-foreground: 35 60% 10%;
+    --accent: 12 85% 72%;
+  }
+  :root[data-theme='dark'][data-primary='fuchsia'] {
+    --primary: 300 80% 72%;
+    --primary-foreground: 300 60% 12%;
+    --accent: 265 85% 76%;
+  }
   * {
     @apply border-border;
   }
 
   html {
-    /* اعداد لاتین در رابط با فونت فارسی هم‌تراز بمانند. */
-    font-variant-numeric: tabular-nums;
+    /*
+     * ارقام با عرض **طبیعی** خودشان، نه عرض جدولی.
+     *
+     * `tabular-nums` هر رقم را به عرض پهن‌ترین رقم می‌کشد. برای ارقام لاتین تفاوتش
+     * کم است، ولی ارقام فارسی وزیرمتن در حالت جدولی حدود ۳۰٪ پهن‌تر می‌شوند و یک
+     * مبلغ ده‌رقمی، ستون را می‌شکند و دو خطی می‌شود.
+     *
+     * نکته‌ای که با اندازه‌گیری روشن شد: `letter-spacing` روی رشته ارقام فارسی در
+     * Chromium **هیچ اثری ندارد** (کل رشته به‌عنوان یک خوشه شکل‌دهی می‌شود)، پس
+     * راه جمع‌تر کردن عدد، تنها همین انتخاب عرض ارقام است.
+     */
+    font-variant-numeric: proportional-nums;
     scroll-behavior: smooth;
   }
 
@@ -271,21 +323,97 @@
   }
 
   /*
-   * فاصله ارقام در جدول‌های مالی.
+   * مبالغ و ارقام.
    *
-   * `tabular-nums` عرض هر رقم را یکسان می‌کند تا ستون‌های عددی زیر هم بنشینند، و
-   * فاصله منفی حروف، ارقام فارسی را که ذاتاً بازند کمی جمع می‌کند — بدون این،
-   * یک مبلغ ده‌رقمی در ستون جا نمی‌شود.
+   * عرض طبیعی ارقام (نه جدولی) و **بدون شکستن خط**: مبلغ، یک واحد معنایی است و
+   * نصفش در خط بعد، خوانده نمی‌شود. هم‌ترازی ستون‌های عددی از راست‌چین بودن ستون
+   * می‌آید، نه از هم‌عرض بودن تک‌تک ارقام.
    */
   .money {
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.01em;
+    font-variant-numeric: proportional-nums;
+    white-space: nowrap;
   }
 
   /* سطح شیشه‌ای برای نوار کناری و header — عمق بدون خط اضافه. */
   .surface {
     background: hsl(var(--card) / 0.86);
     backdrop-filter: blur(12px);
+  }
+}
+
+/*
+ * گذار دایره‌ای تم.
+ *
+ * مرورگر به‌صورت پیش‌فرض عکسِ قبل را محو و عکسِ بعد را ظاهر می‌کند؛ آن انیمیشن اینجا
+ * خاموش می‌شود چون خودمان عکس تازه را با یک دایره در حال بزرگ شدن آشکار می‌کنیم
+ * (`theme.tsx`). بدون `animation: none`، دو انیمیشن روی هم می‌افتند و نتیجه کدر
+ * به‌نظر می‌رسد.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 0;
+}
+
+/* تم تازه روی تم قبلی می‌نشیند و دایره، آن را آشکار می‌کند. */
+::view-transition-new(root) {
+  z-index: 1;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ping-ring {
+  0% {
+    opacity: 0.75;
+    transform: scale(0.7);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
   }
 }
 

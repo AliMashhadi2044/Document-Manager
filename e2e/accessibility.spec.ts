@@ -109,6 +109,24 @@ test.describe('دسترس‌پذیری تم تاریک', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     expect(await violations(page)).toEqual([]);
   });
+
+  /**
+   * رنگ اصلی غیرپیش‌فرض، در تم تاریک.
+   *
+   * هر رنگ اصلی مقدار جداگانه‌ای برای تم روشن و تاریک دارد و کنتراست همه‌شان جداگانه
+   * حساب شده است. این آزمون یکی از رنگ‌های تازه را واقعاً روی صفحه می‌سنجد؛ محاسبه
+   * درست ولی توکنِ اشتباه نوشته‌شده، فقط همین‌جا پیدا می‌شود.
+   */
+  test('رنگ اصلی کهربایی در تم تاریک', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('dm.theme.primary', 'amber');
+    });
+
+    await login(page, 'admin');
+    await gotoSection(page, 'داشبورد');
+    await expect(page.locator('html')).toHaveAttribute('data-primary', 'amber');
+    expect(await violations(page)).toEqual([]);
+  });
 });
 
 /**
@@ -146,5 +164,55 @@ test.describe('تنظیمات ظاهر', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menu', { name: 'تنظیمات ظاهر' })).toHaveCount(0);
     await expect(trigger).toBeFocused();
+  });
+});
+
+/**
+ * رفتارهای پوسته که کاربر هر روز با آن‌ها روبه‌رو می‌شود.
+ */
+test.describe('پوسته برنامه', () => {
+  test('تغییر تم از گذار دایره‌ای مرورگر استفاده می‌کند', async ({ page }) => {
+    // پیش از بارگذاری برنامه، فراخوانی API گذار را علامت‌گذاری می‌کنیم.
+    //
+    // ادعای «انیمیشن قشنگ است» قابل آزمون نیست، ولی این قابل آزمون است: تغییر تم
+    // باید از مسیر View Transitions برود، نه یک جایگزینی ناگهانی کلاس.
+    await page.addInitScript(() => {
+      const original = document.startViewTransition?.bind(document);
+      if (!original) return;
+      (window as unknown as { __viewTransitions: number }).__viewTransitions = 0;
+      document.startViewTransition = ((callback: () => void) => {
+        (window as unknown as { __viewTransitions: number }).__viewTransitions += 1;
+        return original(callback);
+      }) as typeof document.startViewTransition;
+    });
+
+    await login(page, 'admin');
+    await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
+    await page.getByRole('menuitemradio', { name: /تاریک/ }).click();
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    const started = await page.evaluate(
+      () => (window as unknown as { __viewTransitions: number }).__viewTransitions,
+    );
+    expect(started, 'تغییر تم بدون گذار انجام شد').toBeGreaterThan(0);
+
+    // برگرداندن تم تا اجراهای بعدی از حالت تمیز شروع کنند.
+    await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
+    await page.getByRole('menuitemradio', { name: /روشن/ }).click();
+  });
+
+  test('آخرین بخش پس از بارگذاری دوباره باز می‌ماند', async ({ page }) => {
+    await login(page, 'admin');
+
+    await gotoSection(page, 'فروشندگان');
+    await expect(page.getByRole('heading', { name: 'فروشندگان' })).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'فروشندگان' })).toBeVisible();
+
+    // و برگشت به بخش پیش‌فرض هم باید ماندگار باشد، وگرنه کاربر در یک بخش گیر می‌کند.
+    await gotoSection(page, 'اسناد');
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'اسناد' })).toBeVisible();
   });
 });

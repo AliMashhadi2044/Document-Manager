@@ -463,3 +463,120 @@ export function RankedBars({
     </ul>
   );
 }
+
+/**
+ * خط روند کوچک (sparkline) برای داخل کارت‌های آمار.
+ *
+ * بدون محور و بدون برچسب — عمداً. کارِ این نمودار «خواندن عدد» نیست، نشان دادن
+ * **شکل** تغییر است در کنار عددی که همان‌جا نوشته شده. افزودن محور به چیزی به این
+ * اندازه، فقط شلوغی است.
+ */
+export function Sparkline({
+  values,
+  title,
+  tone = 'var(--color-chart-1)',
+  className,
+}: {
+  values: readonly (string | number)[];
+  title: string;
+  tone?: string;
+  className?: string;
+}): JSX.Element | null {
+  const gradientId = useId().replace(/:/g, '');
+  const numbers = values.map(toBigInt);
+  const max = numbers.reduce((top, value) => (value > top ? value : top), 0n);
+
+  if (numbers.length < 2) return null;
+
+  const width = 120;
+  const height = 32;
+  const step = width / (numbers.length - 1);
+  const points = numbers.map((value, index) => ({
+    x: index * step,
+    y: height - 2 - ratioOf(value, max) * (height - 6),
+  }));
+
+  const line = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
+  const last = points[points.length - 1];
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className={cn('h-8 w-full', className)}
+      role="img"
+      aria-label={title}
+      preserveAspectRatio="none"
+    >
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={tone} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={tone} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={`0,${height} ${line} ${width},${height}`} fill={`url(#${gradientId})`} />
+      <polyline
+        points={line}
+        fill="none"
+        stroke={tone}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      {last ? (
+        <circle cx={last.x} cy={last.y} r="2.5" fill={tone} vectorEffect="non-scaling-stroke" />
+      ) : null}
+    </svg>
+  );
+}
+
+/**
+ * عقربه نیم‌دایره‌ای برای نمایش یک **نسبت**.
+ *
+ * نیم‌دایره، نه دایره کامل: دایره کامل یعنی «سهم از یک کل» و اینجا منظور «چقدر از
+ * حداکثر» است. کمان با `stroke-dasharray` ساخته می‌شود و با تغییر مقدار، نرم حرکت
+ * می‌کند.
+ */
+export function Gauge({
+  ratio,
+  label,
+  value,
+  title,
+  tone = 'var(--color-chart-1)',
+}: {
+  /** عددی بین ۰ و ۱. */
+  ratio: number;
+  label: string;
+  value: string;
+  title: string;
+  tone?: string;
+}): JSX.Element {
+  const radius = 54;
+  const circumference = Math.PI * radius;
+  const clamped = Math.min(Math.max(ratio, 0), 1);
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg viewBox="0 0 140 78" className="h-20 w-36" role="img" aria-label={title}>
+        <path
+          d={`M 16 70 A ${radius} ${radius} 0 0 1 124 70`}
+          fill="none"
+          stroke="hsl(var(--muted))"
+          strokeWidth="12"
+          strokeLinecap="round"
+        />
+        <path
+          d={`M 16 70 A ${radius} ${radius} 0 0 1 124 70`}
+          fill="none"
+          stroke={tone}
+          strokeWidth="12"
+          strokeLinecap="round"
+          strokeDasharray={`${clamped * circumference} ${circumference}`}
+          style={{ transition: 'stroke-dasharray 0.7s cubic-bezier(0.22, 1, 0.36, 1)' }}
+        />
+      </svg>
+      <p className="money -mt-3 text-lg font-bold">{value}</p>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+    </div>
+  );
+}

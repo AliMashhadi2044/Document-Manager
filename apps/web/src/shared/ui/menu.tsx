@@ -1,4 +1,13 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  forwardRef,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
 import { cn } from './cn';
 
@@ -8,31 +17,34 @@ import { cn } from './cn';
  * چیزی که یک `div` ساده ندارد و اینجا هست:
  *  - بسته شدن با کلیک بیرون و با Escape،
  *  - برگشتن فوکوس به دکمه باز‌کننده هنگام بستن (وگرنه فوکوس به ابتدای صفحه می‌پرد)،
- *  - پیمایش گزینه‌ها با جهت‌نماها و بستن با Tab،
+ *  - بسته شدن خودکار پس از انتخاب یک گزینه،
  *  - `aria-expanded` و `aria-haspopup` روی دکمه و نقش `menu` روی فهرست.
  *
  * جهت باز شدن با `align` کنترل می‌شود و پیش‌فرض آن `start` است — در چیدمان راست‌چین
  * یعنی چسبیده به راستِ دکمه.
  */
-export function Menu({
-  trigger,
-  children,
-  align = 'start',
-  label,
-  className,
-  panelClassName,
-}: {
+
+const MenuContext = createContext<{ close: () => void } | null>(null);
+
+export interface MenuProps {
   /** محتوای دکمه باز‌کننده. */
   trigger: ReactNode;
   children: ReactNode;
   align?: 'start' | 'end';
   /** نام منو برای ابزار کمکی. */
   label: string;
+  /** راهنمای کوتاه روی دکمه برای کاربر ماوس؛ aria-label کارِ صفحه‌خوان را می‌کند. */
+  triggerTitle?: string;
   className?: string;
   panelClassName?: string;
-}): JSX.Element {
+}
+
+export const Menu = forwardRef<HTMLDivElement, MenuProps>(function Menu(
+  { trigger, children, align = 'start', label, triggerTitle, className, panelClassName },
+  ref,
+) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
 
@@ -58,40 +70,59 @@ export function Menu({
   }, [open]);
 
   return (
-    <div ref={containerRef} className={cn('relative', className)}>
+    <div
+      ref={(node) => {
+        containerRef.current = node;
+        // ref بیرونی هم باید همین گره را بگیرد: مصرف‌کننده برای محاسبه نقطه شروع
+        // گذار تم به مختصات همین دکمه نیاز دارد.
+        if (typeof ref === 'function') {
+          ref(node);
+        } else if (ref !== null) {
+          (ref as { current: HTMLDivElement | null }).current = node;
+        }
+      }}
+      className={cn('relative', className)}
+    >
       <button
         ref={triggerRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        title={triggerTitle}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className={cn(
+          'inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground',
+          'transition-all duration-150 hover:bg-muted hover:text-foreground active:scale-95',
+          open && 'bg-muted text-foreground',
+        )}
       >
         {trigger}
       </button>
 
       {open ? (
-        <div
-          id={panelId}
-          role="menu"
-          aria-label={label}
-          onKeyDown={(event) => {
-            if (event.key === 'Tab') setOpen(false);
-          }}
-          className={cn(
-            'absolute z-50 mt-2 min-w-56 rounded-xl border border-border bg-popover p-1.5',
-            'shadow-[var(--shadow-lift)] animate-[var(--animate-rise)]',
-            align === 'start' ? 'start-0' : 'end-0',
-            panelClassName,
-          )}
-        >
-          {children}
-        </div>
+        <MenuContext.Provider value={{ close: () => setOpen(false) }}>
+          <div
+            id={panelId}
+            role="menu"
+            aria-label={label}
+            onKeyDown={(event) => {
+              if (event.key === 'Tab') setOpen(false);
+            }}
+            className={cn(
+              'absolute z-50 mt-2 min-w-56 origin-top rounded-xl border border-border bg-popover p-1.5',
+              'shadow-[var(--shadow-lift)] animate-[var(--animate-pop)]',
+              align === 'start' ? 'start-0' : 'end-0',
+              panelClassName,
+            )}
+          >
+            {children}
+          </div>
+        </MenuContext.Provider>
       ) : null}
     </div>
   );
-}
+});
 
 export function MenuLabel({ children }: { children: ReactNode }): JSX.Element {
   return <p className="px-2.5 pb-1 pt-2 text-[11px] font-medium text-muted-foreground">{children}</p>;
@@ -112,15 +143,25 @@ export function MenuItem({
   selected?: boolean;
   className?: string;
 }): JSX.Element {
+  const menu = useContext(MenuContext);
+
   return (
     <button
       type="button"
       role="menuitemradio"
       aria-checked={selected}
-      onClick={onSelect}
+      onClick={() => {
+        // ترتیب مهم است: اول بستن، بعد اجرای کنش.
+        //
+        // کنش می‌تواند یک گذار بصری شروع کند (مثل موج تغییر تم). اگر بستن منو بعد از
+        // آن صف شود، منو در تصویر «پس از گذار» هنوز باز است و با پایان موج ناگهان
+        // ناپدید می‌شود.
+        menu?.close();
+        onSelect();
+      }}
       className={cn(
         'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-sm',
-        'transition-colors hover:bg-muted',
+        'transition-colors hover:bg-muted active:bg-muted/70',
         selected ? 'bg-primary/10 text-primary' : 'text-foreground',
         className,
       )}

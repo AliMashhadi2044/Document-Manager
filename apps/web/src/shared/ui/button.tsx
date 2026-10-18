@@ -13,10 +13,12 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
-  secondary: 'bg-muted text-foreground hover:bg-muted/70 border border-border',
+  primary:
+    'bg-primary text-primary-foreground shadow-[var(--shadow-soft)] hover:bg-primary/90 hover:shadow-[var(--shadow-lift)]',
+  secondary: 'border border-border bg-muted text-foreground hover:bg-muted/70',
   ghost: 'bg-transparent text-foreground hover:bg-muted',
-  destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+  destructive:
+    'bg-destructive text-destructive-foreground shadow-[var(--shadow-soft)] hover:bg-destructive/90',
 };
 
 const SIZES: Record<Size, string> = {
@@ -37,8 +39,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled === true || loading}
       aria-busy={loading}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-md font-medium',
-        'transition-colors disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex items-center justify-center gap-2 rounded-lg font-medium',
+        // بازخورد فشردن: دکمه زیر انگشت کمی جمع می‌شود. بدون آن، روی صفحه لمسی
+        // معلوم نیست کلیک گرفته شده یا نه.
+        'transition-[background-color,box-shadow,transform] duration-150',
+        'active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50',
         VARIANTS[variant],
         SIZES[size],
         className,

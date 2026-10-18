@@ -10,7 +10,10 @@ import { Select } from '../../shared/ui/select';
 import { Card, CardBody, CardHeader } from '../../shared/ui/card';
 import { Badge, type BadgeTone } from '../../shared/ui/badge';
 import { Icon, type IconName } from '../../shared/ui/icon';
-import { AreaChart, BarChart, DonutChart, RankedBars } from '../../shared/ui/charts';
+import { AreaChart, BarChart, DonutChart, Gauge, RankedBars, Sparkline } from '../../shared/ui/charts';
+import { DashboardHero } from './dashboard-hero';
+import { DocumentPipeline } from './document-pipeline';
+import type { CurrentUser } from '../auth/auth.api';
 import { ErrorState } from '../../shared/ui/states';
 import { DashboardSkeleton } from './dashboard-skeleton';
 import { ApiError } from '../../shared/api/client';
@@ -52,7 +55,15 @@ const STATUS_TONES: Record<DocumentStatus, BadgeTone> = {
  * زمانی، بعد ترکیب‌ها و در آخر رتبه‌بندی‌ها. کاربری که فقط ده ثانیه نگاه می‌کند،
  * همان ده ثانیه را به مهم‌ترین اعداد می‌دهد.
  */
-export function DashboardPage(): JSX.Element {
+export function DashboardPage({
+  user,
+  onCreateDocument,
+  onOpenReports,
+}: {
+  user: CurrentUser;
+  onCreateDocument?: (() => void) | undefined;
+  onOpenReports?: (() => void) | undefined;
+}): JSX.Element {
   const [fiscalYear, setFiscalYear] = useState<number | null>(null);
   const years = useFiscalYears();
   const dashboard = useDashboard(fiscalYear);
@@ -74,6 +85,7 @@ export function DashboardPage(): JSX.Element {
   }
 
   const data = dashboard.data;
+  const canCreateDocument = user.permissions.includes('document:create');
 
   const statusData = data.byStatus.map((row) => ({
     label: statusLabel(row.status),
@@ -92,15 +104,44 @@ export function DashboardPage(): JSX.Element {
     0n,
   );
 
+  const monthTotals = (data.byMonth ?? []).map((row) => row.total);
+  const monthCounts = (data.byMonth ?? []).map((row) => row.invoiceCount);
+
+  // سهم مالیات و عوارض از مبلغ نهایی. محاسبه با bigint انجام می‌شود و فقط نسبتِ
+  // حاصل — که همیشه بین صفر و یک است — به عدد ممیز شناور می‌رسد (ADR-0003).
+  const totalAmount = BigInt(data.totals.total || '0');
+  const taxAmount = BigInt(data.totals.tax || '0');
+  const taxShare = totalAmount === 0n ? 0 : Number((taxAmount * 10_000n) / totalAmount) / 10_000;
+
+  const discountAmount = BigInt(data.totals.discount || '0');
+  const grossAmount = BigInt(data.totals.gross || '0');
+  const discountShare =
+    grossAmount === 0n ? 0 : Number((discountAmount * 10_000n) / grossAmount) / 10_000;
+
+  /**
+   * درصد خوانا.
+   *
+   * زیر ۱۰٪ یک رقم اعشار می‌گیرد: سهمی که گرد شود به «۰٪»، به کاربر می‌گوید «هیچ»
+   * در حالی که مقدارش صفر نیست — و این در یک سامانه مالی، اطلاعات غلط است.
+   */
+  const percent = (share: number): string => {
+    const value = share * 100;
+    const text = value > 0 && value < 10 ? value.toFixed(1) : String(Math.round(value));
+    return `${toPersianDigits(text)}٪`;
+  };
+
   return (
     <div className="space-y-4">
-      {/* ───────────── نوار عنوان و فیلتر ───────────── */}
+      {/* ───────────── خوشامد و کنش‌های پرتکرار ───────────── */}
+      <DashboardHero
+        user={user}
+        onCreateDocument={canCreateDocument ? onCreateDocument : undefined}
+        onOpenReports={onOpenReports}
+      />
+
+      {/* ───────────── فیلتر سال مالی ───────────── */}
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            همه اعداد در دامنه دسترسی شما و با کوئری تجمیعی سرور حساب شده‌اند.
-          </p>
-        </div>
+        <p className="text-sm font-medium">نمای کلی</p>
 
         <div className="w-48">
           <Select
@@ -126,6 +167,8 @@ export function DashboardPage(): JSX.Element {
           value={toPersianDigits(String(data.documentCount))}
           caption={`${toPersianDigits(String(data.invoiceCount))} فاکتور`}
           tone="primary"
+          spark={monthCounts}
+          sparkTitle="روند تعداد فاکتورهای ماهانه"
         />
         <StatTile
           icon="money"
@@ -133,6 +176,8 @@ export function DashboardPage(): JSX.Element {
           value={formatMoney(data.totals.total, { withUnit: false })}
           caption="ریال، شامل مالیات و عوارض"
           tone="info"
+          spark={monthTotals}
+          sparkTitle="روند مبلغ ماهانه"
         />
         <StatTile
           icon="clock"
@@ -150,6 +195,18 @@ export function DashboardPage(): JSX.Element {
         />
       </section>
 
+      {/* ───────────── مسیر سند ───────────── */}
+      <Card>
+        <CardHeader
+          icon="layers"
+          title="مسیر سند"
+          description="ترتیب مرحله‌ها از پیش‌نویس تا بایگانی؛ مرحله‌ای که بیشترین سند را دارد، برجسته است."
+        />
+        <CardBody className="pt-3">
+          <DocumentPipeline byStatus={data.byStatus} />
+        </CardBody>
+      </Card>
+
       {/* ───────────── تفکیک مبالغ ───────────── */}
       <Card>
         <CardHeader
@@ -157,12 +214,33 @@ export function DashboardPage(): JSX.Element {
           title="تفکیک مبالغ"
           description="از مبلغ کالا تا مبلغ نهایی؛ همان ترتیبی که در محاسبه فاکتور طی می‌شود."
         />
-        <CardBody className="grid gap-3 pt-3 sm:grid-cols-3 xl:grid-cols-5">
-          <AmountCell title="مبلغ کالا" value={data.totals.gross} />
-          <AmountCell title="تخفیف" value={data.totals.discount} sign="−" />
-          <AmountCell title="خالص" value={data.totals.net} />
-          <AmountCell title="مالیات و عوارض" value={data.totals.tax} sign="+" />
-          <AmountCell title="جمع کل" value={data.totals.total} emphasis />
+        <CardBody className="grid gap-5 pt-3 lg:grid-cols-[1fr_auto]">
+          {/* مبالغ این سامانه می‌توانند از ۲^۵۳ هم بزرگ‌تر باشند؛ پنج ستون در عرض
+              متوسط یعنی عددِ بریده. ستون‌ها فقط روی صفحه خیلی پهن پنج‌تا می‌شوند. */}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+            <AmountCell title="مبلغ کالا" value={data.totals.gross} />
+            <AmountCell title="تخفیف" value={data.totals.discount} sign="−" />
+            <AmountCell title="خالص" value={data.totals.net} />
+            <AmountCell title="مالیات و عوارض" value={data.totals.tax} sign="+" />
+            <AmountCell title="جمع کل" value={data.totals.total} emphasis />
+          </div>
+
+          {/* دو نسبتی که از خود اعداد بالا درمی‌آیند و خواندنشان از روی ارقام سخت است. */}
+          <div className="flex items-center justify-center gap-6 border-border lg:border-s lg:ps-6">
+            <Gauge
+              ratio={taxShare}
+              title="سهم مالیات و عوارض از مبلغ نهایی"
+              label="سهم مالیات"
+              value={percent(taxShare)}
+            />
+            <Gauge
+              ratio={discountShare}
+              title="سهم تخفیف از مبلغ کالا"
+              label="سهم تخفیف"
+              value={percent(discountShare)}
+              tone="var(--color-chart-3)"
+            />
+          </div>
         </CardBody>
       </Card>
 
@@ -315,15 +393,20 @@ function StatTile({
   value,
   caption,
   tone,
+  spark,
+  sparkTitle,
 }: {
   icon: IconName;
   title: string;
   value: string;
   caption: string;
   tone: keyof typeof TILE_TONES;
+  /** روند ماهانه برای خط کوچک زیر کاشی؛ نبودنش کاشی را خراب نمی‌کند. */
+  spark?: readonly (string | number)[];
+  sparkTitle?: string;
 }): JSX.Element {
   return (
-    <Card interactive className="p-4">
+    <Card interactive className="overflow-hidden p-4">
       <div className="flex items-start gap-3">
         <span
           className={cn(
@@ -333,7 +416,7 @@ function StatTile({
         >
           <Icon name={icon} />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-xs text-muted-foreground">{title}</p>
           <p className="money mt-0.5 truncate text-xl font-bold" title={value}>
             {value}
@@ -341,6 +424,12 @@ function StatTile({
           <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{caption}</p>
         </div>
       </div>
+
+      {spark && spark.length > 1 ? (
+        <div className="-mx-4 -mb-4 mt-3">
+          <Sparkline values={spark} title={sparkTitle ?? title} />
+        </div>
+      ) : null}
     </Card>
   );
 }

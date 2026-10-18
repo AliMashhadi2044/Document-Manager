@@ -53,7 +53,8 @@ export function ArchivePage({ user }: { user: CurrentUser }): JSX.Element {
       cell: (row) => (
         <button
           type="button"
-          className="text-start font-medium text-primary hover:underline"
+          title={row.title}
+          className="block max-w-[28ch] truncate text-start font-medium text-primary hover:underline"
           onClick={() => setSelected(row.id)}
         >
           {row.title}

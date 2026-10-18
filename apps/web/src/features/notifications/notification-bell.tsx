@@ -47,15 +47,24 @@ export function NotificationBell({ onOpenDocument }: { onOpenDocument?: (documen
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-label={count > 0 ? `اعلان‌ها، ${count} خوانده‌نشده` : 'اعلان‌ها'}
-        className="relative inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className={
+          count > 0
+            ? 'relative inline-flex size-9 items-center justify-center rounded-lg text-destructive transition-all duration-150 hover:bg-muted active:scale-95'
+            : 'relative inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-all duration-150 hover:bg-muted hover:text-foreground active:scale-95'
+        }
       >
         <Icon name="bell" />
         {count > 0 ? (
           <>
             {/*
-              عدد خوانده‌نشده‌ها روی آیکون می‌نشیند. حلقه هم‌رنگ سربرگ دور نشان،
-              آن را از آیکون جدا می‌کند؛ بدون آن، عدد و آیکون در هم می‌روند.
+              دو لایه روی هم: حلقه‌ای که بیرون می‌زند و محو می‌شود (نبض)، و خودِ عدد.
+              نبض فقط وقتی هست که اعلان خوانده‌نشده‌ای باشد — انیمیشن همیشگی، بعد از
+              چند دقیقه دیگر دیده نمی‌شود و فقط حواس را پرت می‌کند.
             */}
+            <span
+              aria-hidden="true"
+              className="absolute -top-0.5 -start-0.5 size-4 rounded-full bg-destructive/70 animate-[var(--animate-ping-ring)] motion-reduce:hidden"
+            />
             <span className="absolute -top-0.5 -start-0.5 min-w-4 rounded-full bg-destructive px-1 py-px text-center text-[10px] font-bold leading-4 text-destructive-foreground ring-2 ring-card">
               {toPersianDigits(String(count))}
             </span>

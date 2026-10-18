@@ -136,10 +136,39 @@ const GROUPS: readonly SectionGroup[] = [
   },
 ];
 
+const LAST_SECTION_KEY = 'dm.shell.section';
+
+/**
+ * آخرین بخشِ باز، از اجرای قبلی.
+ *
+ * این برنامه مسیر‌یابی URL ندارد، پس بارگذاری دوباره صفحه کاربر را به بخش پیش‌فرض
+ * برمی‌گرداند — همان چیزی که بعد از هر refresh آزاردهنده است. مقدار ذخیره‌شده
+ * **اعتبارسنجی** می‌شود: کلید ناشناس یا بخشی که کاربر دیگر مجوزش را ندارد، نادیده
+ * گرفته می‌شود و اثری بر دسترسی ندارد (مرجع دسترسی همچنان سرور است).
+ */
+function readLastSection(allowed: readonly SectionKey[]): SectionKey | null {
+  try {
+    const stored = window.localStorage.getItem(LAST_SECTION_KEY);
+    return stored !== null && (allowed as readonly string[]).includes(stored)
+      ? (stored as SectionKey)
+      : null;
+  } catch {
+    // حالت خصوصی مرورگر یا مسدود بودن ذخیره‌سازی؛ یک ترجیح نمایشی است، نه داده.
+    return null;
+  }
+}
+
 export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
-  const [section, setSection] = useState<SectionKey>('documents');
+  const [section, setSection] = useState<SectionKey>(() => {
+    const permitted = GROUPS.flatMap((group) => group.items)
+      .filter((item) => item.permission === undefined || user.permissions.includes(item.permission))
+      .map((item) => item.key);
+    return readLastSection(permitted) ?? 'documents';
+  });
   /** سندی که از اعلان باز می‌شود؛ تا پیش از مسیر‌یابی واقعی، همین کافی است. */
   const [documentFromNotification, setDocumentFromNotification] = useState<string | null>(null);
+  /** درخواست «سند تازه» از داشبورد: بخش اسناد با فرم باز، نه فقط فهرست. */
+  const [createDocumentRequested, setCreateDocumentRequested] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const logout = useLogout();
 
@@ -164,6 +193,13 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
   const go = (key: SectionKey): void => {
     setSection(key);
     setDrawerOpen(false);
+    try {
+      window.localStorage.setItem(LAST_SECTION_KEY, key);
+    } catch {
+      // ذخیره نشدن ترجیح، نباید جلوی پیمایش را بگیرد.
+    }
+    // بدون این، کاربری که وسط یک فهرست بلند بوده، بخش تازه را از وسطش می‌بیند.
+    window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
   const navigation = (
@@ -183,18 +219,24 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
                     onClick={() => go(item.key)}
                     aria-current={isCurrent ? 'page' : undefined}
                     className={cn(
-                      'group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                      'group relative flex w-full items-center gap-3 rounded-lg py-2 pe-3 ps-5 text-sm',
+                      'transition-all duration-150 active:scale-[0.98]',
                       isCurrent
                         ? 'bg-primary/10 font-medium text-primary'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                     )}
                   >
-                    {/* نشانه‌ی بخش فعال در لبه، علاوه بر رنگ — رنگ به‌تنهایی کافی نیست. */}
+                    {/*
+                      نشانه‌ی بخش فعال، علاوه بر رنگ — رنگ به‌تنهایی برای کاربر
+                      کوررنگ کافی نیست. **درون** خود آیتم می‌نشیند نه بیرونش،
+                      وگرنه در چیدمان راست‌چین به لبه پنجره می‌چسبد.
+                    */}
                     <span
                       aria-hidden="true"
                       className={cn(
-                        'absolute -start-3 h-5 w-1 rounded-e-full bg-primary transition-opacity',
-                        isCurrent ? 'opacity-100' : 'opacity-0',
+                        'absolute start-1.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-primary',
+                        'transition-all duration-200',
+                        isCurrent ? 'opacity-100' : 'h-0 opacity-0',
                       )}
                     />
                     <Icon name={item.icon} className="shrink-0" />
@@ -211,6 +253,16 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[17rem_1fr]">
+      {/*
+        پرش به محتوا: برای کاربر صفحه‌کلید، اولین Tab در هر صفحه نباید عبور از کل
+        منو باشد. پیوند تا وقتی فوکوس نگیرد دیده نمی‌شود.
+      */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-[60] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:text-primary-foreground"
+      >
+        پرش به محتوای اصلی
+      </a>
       {/* ───────────── نوار کناری (دسکتاپ) ───────────── */}
       <aside className="sticky top-0 hidden h-dvh flex-col border-e border-border bg-card lg:flex">
         <BrandHeader />
@@ -269,6 +321,7 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
               <Button
                 variant="ghost"
                 size="sm"
+                title="خروج از حساب"
                 loading={logout.isPending}
                 onClick={() => logout.mutate()}
               >
@@ -281,6 +334,8 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
 
         {/* ───────────── محتوا ───────────── */}
         <main
+          id="main-content"
+          tabIndex={-1}
           className={cn(
             'mx-auto w-full flex-1 px-4 py-6 sm:px-6',
             // گزارش‌گیری و طراح گزارش ستون‌های زیادی دارند و در عرض معمول خفه می‌شوند.
@@ -294,12 +349,23 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
               <DocumentsPage
                 openDocumentId={documentFromNotification}
                 onOpenedDocument={() => setDocumentFromNotification(null)}
+                startCreating={createDocumentRequested}
+                onStartedCreating={() => setCreateDocumentRequested(false)}
               />
             ) : null}
             {section === 'archive' ? <ArchivePage user={user} /> : null}
             {section === 'reports' ? <ReportsPage user={user} /> : null}
             {section === 'report-templates' ? <ReportTemplatesPage user={user} /> : null}
-            {section === 'dashboard' ? <DashboardPage /> : null}
+            {section === 'dashboard' ? (
+              <DashboardPage
+                user={user}
+                onCreateDocument={() => {
+                  setCreateDocumentRequested(true);
+                  go('documents');
+                }}
+                onOpenReports={() => go('reports')}
+              />
+            ) : null}
             {section === 'overview' ? <ProjectOverview user={user} /> : null}
             {section === 'lookups' ? <LookupManager /> : null}
             {section === 'chapters' ? <ChaptersView /> : null}

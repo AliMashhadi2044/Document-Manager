@@ -25,9 +25,14 @@ export function DocumentsPage({
   /** سندی که از بیرون (اعلان) باید باز شود. */
   openDocumentId = null,
   onOpenedDocument,
+  /** درخواست بیرونی برای باز کردن مستقیم فرم ایجاد (از دکمه داشبورد). */
+  startCreating = false,
+  onStartedCreating,
 }: {
   openDocumentId?: string | null;
   onOpenedDocument?: () => void;
+  startCreating?: boolean;
+  onStartedCreating?: () => void;
 } = {}): JSX.Element {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -48,6 +53,12 @@ export function DocumentsPage({
     }
   }, [openDocumentId, onOpenedDocument]);
 
+  useEffect(() => {
+    if (!startCreating) return;
+    setCreating(true);
+    onStartedCreating?.();
+  }, [startCreating, onStartedCreating]);
+
   if (selected) {
     return <DocumentDetailView documentId={selected} onBack={() => setSelected(null)} />;
   }
@@ -56,10 +67,13 @@ export function DocumentsPage({
     {
       key: 'title',
       header: 'شرح سند',
+      // عنوان بلند در یک خط کوتاه می‌شود و متن کاملش در tooltip می‌آید: ردیف‌های
+      // دو خطی، ارتفاع جدول را ناهماهنگ و پویش چشمی ستون‌های عددی را سخت می‌کنند.
       cell: (row) => (
         <button
           type="button"
-          className="text-start font-medium text-primary hover:underline"
+          title={row.title}
+          className="block max-w-[28ch] truncate text-start font-medium text-primary hover:underline"
           onClick={() => setSelected(row.id)}
         >
           {row.title}

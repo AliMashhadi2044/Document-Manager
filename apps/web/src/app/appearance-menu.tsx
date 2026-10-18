@@ -38,10 +38,24 @@ const MODE_ICONS: Record<ThemeMode, 'sun' | 'moon' | 'monitor'> = {
 export function AppearanceMenu({ canManageBranding }: { canManageBranding: boolean }): JSX.Element {
   const { mode, setMode, primary, setPrimary, resolved } = useTheme();
   const [brandingOpen, setBrandingOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * مرکز دکمه ظاهر — نقطه‌ای که موج تغییر تم از آن باز می‌شود.
+   *
+   * مرکزِ **دکمه** گرفته می‌شود نه مرکزِ گزینه‌ای که کاربر زد: موج باید از همان
+   * چیزی شروع شود که کاربر آن را «دکمه تم» می‌شناسد، و منو همان لحظه بسته می‌شود.
+   */
+  const originFromButton = (): { x: number; y: number } | undefined => {
+    const rect = anchorRef.current?.getBoundingClientRect();
+    if (!rect) return undefined;
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  };
 
   return (
     <>
       <Menu
+        ref={anchorRef}
         align="end"
         label="تنظیمات ظاهر"
         trigger={
@@ -50,10 +64,15 @@ export function AppearanceMenu({ canManageBranding }: { canManageBranding: boole
             <span className="sr-only">تنظیمات ظاهر</span>
           </>
         }
+        triggerTitle="تنظیمات ظاهر"
       >
         <MenuLabel>تم</MenuLabel>
         {THEME_MODES.map((item) => (
-          <MenuItem key={item} selected={mode === item} onSelect={() => setMode(item)}>
+          <MenuItem
+            key={item}
+            selected={mode === item}
+            onSelect={() => setMode(item, originFromButton())}
+          >
             <Icon name={MODE_ICONS[item]} />
             <span className="flex-1">{THEME_MODE_LABELS[item]}</span>
             {item === 'system' ? (
@@ -67,7 +86,7 @@ export function AppearanceMenu({ canManageBranding }: { canManageBranding: boole
 
         <MenuSeparator />
         <MenuLabel>رنگ اصلی</MenuLabel>
-        <div className="flex flex-wrap gap-1.5 px-2.5 pb-2 pt-1">
+        <div className="grid grid-cols-5 gap-1.5 px-2.5 pb-2 pt-1">
           {PRIMARY_COLORS.map((item) => (
             <button
               key={item}
@@ -78,11 +97,13 @@ export function AppearanceMenu({ canManageBranding }: { canManageBranding: boole
               title={PRIMARY_COLOR_LABELS[item]}
               className={
                 primary === item
-                  ? 'size-7 rounded-full ring-2 ring-foreground ring-offset-2 ring-offset-popover'
-                  : 'size-7 rounded-full ring-1 ring-border transition-transform hover:scale-110'
+                  ? 'flex size-7 items-center justify-center rounded-full ring-2 ring-foreground ring-offset-2 ring-offset-popover'
+                  : 'size-7 rounded-full ring-1 ring-border transition-transform duration-150 hover:scale-110 active:scale-95'
               }
               style={{ background: PRIMARY_COLOR_SWATCHES[item] }}
-            />
+            >
+              {primary === item ? <Icon name="check" size={14} className="text-white" /> : null}
+            </button>
           ))}
         </div>
 

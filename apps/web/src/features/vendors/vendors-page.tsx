@@ -32,10 +32,14 @@ export function VendorsPage(): JSX.Element {
       header: 'نام / عنوان',
       sortKey: 'name',
       cell: (row) => (
-        <div>
-          <div className="font-medium">{row.name}</div>
+        <div className="max-w-[32ch]">
+          <div className="truncate font-medium" title={row.name}>
+            {row.name}
+          </div>
           {row.representativeName ? (
-            <div className="text-xs text-muted-foreground">نماینده: {row.representativeName}</div>
+            <div className="truncate text-xs text-muted-foreground" title={row.representativeName}>
+              نماینده: {row.representativeName}
+            </div>
           ) : null}
         </div>
       ),
