@@ -57,6 +57,33 @@ test.describe('چرخه کامل سند', () => {
     const preview = page.getByText('۳٬۰۰۰٬۰۰۰', { exact: false }).first();
     await expect(preview).toBeVisible();
 
+    /*
+     * جمع ردیف یک ورودیِ فقط‌خواندنی است، نه یک خط متن: باید `readOnly` باشد (و نه
+     * `disabled`، که فوکوس و خواندنش را از بین می‌برد) و مقدارش همان چیزی باشد که
+     * موتور محاسبه می‌دهد.
+     */
+    const rowTotal = page.getByLabel('جمع ردیف');
+    await expect(rowTotal).toHaveJSProperty('readOnly', true);
+    await expect(rowTotal).toHaveJSProperty('disabled', false);
+    await expect(rowTotal).toHaveValue('۳٬۳۰۰٬۰۰۰');
+
+    /*
+     * درصد اعشاری: «۹٫۵» باید ۹٫۵ درصد بماند.
+     *
+     * نرخ به‌صورت basis point صحیح نگه داشته می‌شود؛ پیش از این، ممیز در همان لحظهٔ
+     * تایپ ناپدید می‌شد و «۹٫۵» عملاً «۹۵» — یعنی ۹۵ درصد — ثبت می‌شد. `fill` این را
+     * نمی‌گیرد، چون یک‌باره مقدار را می‌گذارد؛ باید رقم‌به‌رقم تایپ شود.
+     */
+    const percent = page.getByLabel('درصد مالیات');
+    await percent.fill('');
+    await percent.pressSequentially('9.5');
+    await expect(percent).toHaveValue('9.5');
+    await expect(rowTotal).toHaveValue('۳٬۲۸۵٬۰۰۰');
+
+    // بازگشت به ۱۰٪، تا بقیهٔ ادعاهای این آزمون همان مبالغ قبلی بمانند.
+    await percent.fill('10');
+    await expect(rowTotal).toHaveValue('۳٬۳۰۰٬۰۰۰');
+
     // روش پرداخت اختیاری **نیست**: سرور در ثبت نهایی آن را لازم می‌داند.
     await pickOption(page, 'روش پرداخت', { text: 'تنخواه' });
 

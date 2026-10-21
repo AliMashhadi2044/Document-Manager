@@ -11,6 +11,7 @@ import { Button } from '../../shared/ui/button';
 import { Input } from '../../shared/ui/input';
 import { MoneyInput } from '../../shared/ui/money-input';
 import { Select } from '../../shared/ui/select';
+import { Icon } from '../../shared/ui/icon';
 import { formatMoney, toPersianDigits } from '../../shared/format/money';
 import { TaxFields, type TaxDraft } from './tax-fields';
 import { safePreview, type RoundingPolicyRef } from './invoice-preview';
@@ -129,104 +130,146 @@ export function ItemsFields({
         </div>
 
         <div className="divide-y divide-border">
-          {draft.items.map((item, index) => (
-            <div key={item.key} className="space-y-3 p-4 transition-colors hover:bg-muted/20">
-              <div className="grid gap-x-4 gap-y-3 md:grid-cols-12">
-                <div className="md:col-span-4">
-                  <Input
-                    label={`شرح ردیف ${toPersianDigits(String(index + 1))}`}
-                    required
-                    value={item.description}
-                    onChange={(event) =>
-                      update(draft, onChange, index, { description: event.target.value })
-                    }
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Input
-                    label="کد کالا"
-                    value={item.productCode}
-                    onChange={(event) =>
-                      update(draft, onChange, index, { productCode: event.target.value })
-                    }
-                  />
-                </div>
-                <div className="md:col-span-1">
-                  <Input
-                    label="تعداد"
-                    required
-                    inputMode="decimal"
-                    value={item.quantity}
-                    onChange={(event) =>
-                      update(draft, onChange, index, { quantity: event.target.value })
-                    }
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Select
-                    label="واحد"
-                    value={item.unitId}
-                    onChange={(nextValue) =>
-                      update(draft, onChange, index, { unitId: nextValue })
-                    }
-                    options={units.map((unit) => ({ value: unit.id, label: unit.title }))}
-                    placeholder="—"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <MoneyInput
-                    label="مبلغ واحد"
-                    required
-                    value={item.unitPrice}
-                    onChange={(unitPrice) => update(draft, onChange, index, { unitPrice })}
-                  />
-                </div>
-                <div className="flex items-end md:col-span-1">
-                  <Button
+          {draft.items.map((item, index) => {
+            const line = preview?.lines[index];
+
+            return (
+              <div key={item.key} className="space-y-3 p-4 transition-colors hover:bg-muted/20">
+                {/*
+                  نوار سرِ ردیف: شمارهٔ ردیف و دکمهٔ حذف.
+
+                  حذف پیش از این یک دکمهٔ برچسب‌دار **میان فیلدها** بود؛ هم جای یک فیلد
+                  را می‌گرفت و هم در ردیفی که کاربر داشت مبلغ می‌زد، درست کنار دستش
+                  بود. اینجا از شبکهٔ فیلدها بیرون است و به شمارهٔ ردیف چسبیده —
+                  جایی که کاربر وقتی می‌رود که بخواهد خودِ ردیف را بردارد.
+                */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    ردیف {toPersianDigits(String(index + 1))}
+                  </span>
+
+                  <button
                     type="button"
-                    size="sm"
-                    variant="ghost"
                     disabled={draft.items.length === 1}
+                    aria-label={`حذف ردیف ${toPersianDigits(String(index + 1))}`}
+                    title={
+                      draft.items.length === 1
+                        ? 'فاکتور باید دست‌کم یک ردیف داشته باشد'
+                        : `حذف ردیف ${toPersianDigits(String(index + 1))}`
+                    }
                     onClick={() =>
                       onChange({
                         ...draft,
                         items: draft.items.filter((_, position) => position !== index),
                       })
                     }
+                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-all duration-150 hover:bg-destructive/10 hover:text-destructive active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
                   >
-                    حذف
-                  </Button>
+                    <Icon name="trash" size={15} />
+                  </button>
                 </div>
-              </div>
 
-              <div className="grid gap-3 md:grid-cols-12">
-                <div className="md:col-span-3">
-                  <MoneyInput
-                    label="تخفیف ردیف"
-                    value={item.discountAmount}
-                    onChange={(discountAmount) => update(draft, onChange, index, { discountAmount })}
-                  />
-                </div>
-                {perLineTax ? (
-                  <div className="md:col-span-6">
-                    <TaxFields
-                      label="مالیات این ردیف"
-                      draft={item.tax}
-                      onChange={(tax) => update(draft, onChange, index, { tax })}
+                {/* شناسنامهٔ کالا */}
+                <div className="grid gap-x-4 gap-y-3 md:grid-cols-12">
+                  <div className="md:col-span-5">
+                    <Input
+                      label={`شرح ردیف ${toPersianDigits(String(index + 1))}`}
+                      required
+                      value={item.description}
+                      onChange={(event) =>
+                        update(draft, onChange, index, { description: event.target.value })
+                      }
                     />
                   </div>
-                ) : null}
-                <div className="flex items-end text-xs text-muted-foreground md:col-span-3">
-                  {preview?.lines[index]
-                    ? `خالص ${formatMoney(preview.lines[index]?.net.toString() ?? '0')} · مالیات ${formatMoney(
-                        preview.lines[index]?.tax.toString() ?? '0',
-                        { withUnit: false },
-                      )}`
-                    : null}
+                  <div className="md:col-span-3">
+                    <Input
+                      label="کد کالا"
+                      value={item.productCode}
+                      onChange={(event) =>
+                        update(draft, onChange, index, { productCode: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Input
+                      label="تعداد"
+                      required
+                      inputMode="decimal"
+                      value={item.quantity}
+                      onChange={(event) =>
+                        update(draft, onChange, index, { quantity: event.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Select
+                      label="واحد"
+                      value={item.unitId}
+                      onChange={(nextValue) => update(draft, onChange, index, { unitId: nextValue })}
+                      options={units.map((unit) => ({ value: unit.id, label: unit.title }))}
+                      placeholder="—"
+                    />
+                  </div>
+                </div>
+
+                {/* پول: از مبلغ واحد تا جمع ردیف، به ترتیبِ خودِ محاسبه */}
+                <div className="grid gap-x-4 gap-y-3 md:grid-cols-12">
+                  <div className={perLineTax ? 'md:col-span-3' : 'md:col-span-4'}>
+                    <MoneyInput
+                      label="مبلغ واحد"
+                      required
+                      value={item.unitPrice}
+                      onChange={(unitPrice) => update(draft, onChange, index, { unitPrice })}
+                    />
+                  </div>
+
+                  <div className={perLineTax ? 'md:col-span-3' : 'md:col-span-4'}>
+                    <MoneyInput
+                      label="تخفیف ردیف"
+                      value={item.discountAmount}
+                      onChange={(discountAmount) =>
+                        update(draft, onChange, index, { discountAmount })
+                      }
+                    />
+                  </div>
+
+                  {perLineTax ? (
+                    <div className="md:col-span-3">
+                      <TaxFields
+                        label="مالیات ردیف"
+                        draft={item.tax}
+                        onChange={(tax) => update(draft, onChange, index, { tax })}
+                      />
+                    </div>
+                  ) : null}
+
+                  {/*
+                    جمع ردیف هم یک ورودیِ **فقط‌خواندنی** است و نه یک خط متن:
+                    هم‌تراز با بقیهٔ فیلدهای پول می‌نشیند، قابل انتخاب و کپی است، و
+                    `readOnly` به صفحه‌خوان می‌گوید که این مقدار محاسبه می‌شود نه
+                    این‌که کاربر پرش کند. `disabled` نیست، چون کنترل غیرفعال نه فوکوس
+                    می‌گیرد و نه خوانده می‌شود.
+                  */}
+                  <div className={perLineTax ? 'md:col-span-3' : 'md:col-span-4'}>
+                    <Input
+                      label="جمع ردیف"
+                      readOnly
+                      tabIndex={0}
+                      value={line ? formatMoney(line.total.toString(), { withUnit: false }) : '—'}
+                      className="money bg-muted/40"
+                      hint={
+                        line
+                          ? `خالص ${formatMoney(line.net.toString(), {
+                              withUnit: false,
+                            })} · مالیات ${formatMoney(line.tax.toString(), { withUnit: false })}`
+                          : 'با پر شدن مبلغ واحد محاسبه می‌شود'
+                      }
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
