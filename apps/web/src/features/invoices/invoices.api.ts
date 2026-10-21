@@ -100,7 +100,9 @@ export function useVendorSearch(search: string) {
 export interface VendorBankAccountOption {
   readonly id: string;
   readonly iban: string;
-  readonly accountTitle: string;
+  /** می‌تواند خالی باشد؛ برچسب گزینه نباید به آن تکیه کند. */
+  readonly accountTitle: string | null;
+  readonly bankTitle: string | null;
   readonly isDefault: boolean;
   readonly isActive: boolean;
 }

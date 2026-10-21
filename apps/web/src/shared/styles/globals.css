@@ -60,7 +60,7 @@
   --animate-draw: draw 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
   /* باز شدن منو و گفت‌وگو: کمی بزرگ‌شدن از نقطه لنگر، نه ظاهر شدن ناگهانی. */
   --animate-pop: pop 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-dialog: dialog-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-dialog: dialog-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) backwards;
   /* حلقه‌ای که از نشان اعلان بیرون می‌زند و محو می‌شود. */
   --animate-ping-ring: ping-ring 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
   --animate-float: float 6s ease-in-out infinite;

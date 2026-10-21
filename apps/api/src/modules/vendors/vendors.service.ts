@@ -68,6 +68,9 @@ export type BankAccountInput = z.infer<typeof bankAccountInputSchema>;
 
 const VENDOR_SORTABLE = ['name', 'createdAt', 'updatedAt'] as const;
 
+export type BankAccountWithBank = VendorBankAccount & { bankTitle: string | null };
+export type VendorWithAccounts = Vendor & { bankAccounts: BankAccountWithBank[] };
+
 @Injectable()
 export class VendorsService {
   constructor(
@@ -114,13 +117,32 @@ export class VendorsService {
     return toPageResult(mapped, total, query);
   }
 
-  async get(id: string): Promise<Vendor & { bankAccounts: VendorBankAccount[] }> {
+  /**
+   * جزئیات فروشنده همراه شباهایش.
+   *
+   * نام بانک از جدول بانک‌ها می‌آید و نه از ورودی کاربر: کد بانک از پیشوند شبا
+   * استخراج شده است، پس تنها جای درستِ عنوانش همان جدول است. این فقط تشخیص
+   * پیشوند است و تأیید مالکیت یا فعال بودن حساب نیست.
+   */
+  async get(id: string): Promise<VendorWithAccounts> {
     const vendor = await this.prisma.vendor.findUnique({
       where: { id },
-      include: { bankAccounts: { orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }] } },
+      include: {
+        bankAccounts: {
+          orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+          include: { bank: { select: { titleFa: true } } },
+        },
+      },
     });
     if (!vendor) throw AppError.notFound('فروشنده یافت نشد');
-    return vendor;
+
+    return {
+      ...vendor,
+      bankAccounts: vendor.bankAccounts.map(({ bank, ...account }) => ({
+        ...account,
+        bankTitle: bank?.titleFa ?? null,
+      })),
+    };
   }
 
   /**

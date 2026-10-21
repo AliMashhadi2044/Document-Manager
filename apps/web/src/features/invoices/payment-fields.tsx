@@ -84,7 +84,11 @@ export function PaymentFields({
               }
               options={(accounts.data ?? []).map((account) => ({
                 value: account.id,
-                label: `${account.accountTitle} — ${toPersianDigits(account.iban)}`,
+                // عنوان حساب اختیاری است؛ بدون این بازگشت، برچسب گزینه «null — IR…»
+                // می‌شد. نام بانک همان چیزی است که کاربر حساب را با آن می‌شناسد.
+                label: `${account.accountTitle ?? account.bankTitle ?? 'حساب'} — ${toPersianDigits(
+                  account.iban,
+                )}`,
               }))}
               hint={
                 accounts.data && accounts.data.length === 0

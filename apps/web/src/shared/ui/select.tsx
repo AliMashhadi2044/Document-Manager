@@ -795,6 +795,19 @@ function ManageButton({
  * اگر پایین صفحه جا نباشد فهرست بالای دکمه باز می‌شود، و با اسکرول یا تغییر
  * اندازه دوباره محاسبه می‌گردد.
  */
+function isContainingBlock(element: Element): boolean {
+  const style = getComputedStyle(element);
+  return (
+    style.transform !== 'none' ||
+    style.filter !== 'none' ||
+    style.perspective !== 'none' ||
+    style.contain.includes('paint') ||
+    style.contain.includes('layout') ||
+    style.willChange.includes('transform') ||
+    style.willChange.includes('filter')
+  );
+}
+
 function useAnchoredPosition(
   anchorRef: RefObject<HTMLElement>,
   open: boolean,
@@ -808,17 +821,30 @@ function useAnchoredPosition(
 
     const rect = anchor.getBoundingClientRect();
     const gap = 6;
+    const edge = 8;
     const panelMax = 360;
     const below = window.innerHeight - rect.bottom - gap;
     const above = rect.top - gap;
     const openUp = below < 220 && above > below;
-    const width = Math.max(rect.width, 220);
-    const maxHeight = Math.min(panelMax, Math.max(openUp ? above : below, 160));
+    const width = Math.min(Math.max(rect.width, 220), window.innerWidth - 2 * edge);
+    const maxHeight = Math.min(panelMax, Math.max(openUp ? above : below, 160) - edge);
+    const left = Math.min(
+      Math.max(edge, rect.left),
+      Math.max(edge, window.innerWidth - width - edge),
+    );
 
-    if (container === document.body) {
+    /*
+      ترجیح همیشه `fixed` است: عنصرِ `fixed` در جریان چیدمانِ ظرف نمی‌نشیند، پس
+      ارتفاع گفت‌وگو را بالا نمی‌برد و داخلش اسکرول نمی‌سازد — از کادر بیرون می‌زند،
+      که همان رفتار درست است.
+
+      فقط اگر ظرف خودش ظرفِ چینشِ عناصر `fixed` باشد (ترانسفورم، فیلتر، contain)
+      ناچار به مختصات نسبی برمی‌گردیم، وگرنه فهرست چند صد پیکسل آن‌طرف‌تر باز می‌شود.
+    */
+    if (container === document.body || !isContainingBlock(container)) {
       setStyle({
         position: 'fixed',
-        left: rect.left,
+        left,
         width,
         maxHeight,
         ...(openUp ? { bottom: window.innerHeight - rect.top + gap } : { top: rect.bottom + gap }),
@@ -829,7 +855,7 @@ function useAnchoredPosition(
     const host = container.getBoundingClientRect();
     setStyle({
       position: 'absolute',
-      left: rect.left - host.left + container.scrollLeft,
+      left: left - host.left + container.scrollLeft,
       width,
       maxHeight,
       ...(openUp

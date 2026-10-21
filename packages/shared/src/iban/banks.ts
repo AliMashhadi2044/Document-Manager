@@ -1,12 +1,21 @@
 /**
  * کد سه‌رقمی بانک‌های ایران در ساختار شبا.
  *
- * این فهرست **داده مرجع** است، نه منطق برنامه: تشخیص بانک از روی پیشوند شبا با
- * جست‌وجو در همین جدول انجام می‌شود، پس افزودن یا تغییر بانک نیازی به تغییر کد ندارد.
+ * این **داده مرجع** است، نه منطق برنامه: تشخیص بانک از روی پیشوند شبا با جست‌وجو
+ * در همین فهرست انجام می‌شود، پس افزودن یا تغییر بانک نیازی به تغییر کد ندارد.
+ *
+ * چرا در بستهٔ مشترک و نه در seed سرور: رابط کاربری هم باید **بدون رفت‌وبرگشت به
+ * سرور** و حین تایپ بگوید شبا مال کدام بانک است؛ جدول بانک‌های پایگاه داده از همین
+ * فهرست پر می‌شود، پس یک منبع حقیقت بیشتر وجود ندارد.
  *
  * یادآوری: تشخیص بانک **تأیید مالکیت یا فعال بودن حساب نیست**.
  */
-export const IRAN_BANKS: ReadonlyArray<{ code: string; titleFa: string }> = [
+export interface IranBank {
+  readonly code: string;
+  readonly titleFa: string;
+}
+
+export const IRAN_BANKS: readonly IranBank[] = [
   { code: '010', titleFa: 'بانک مرکزی جمهوری اسلامی ایران' },
   { code: '011', titleFa: 'بانک صنعت و معدن' },
   { code: '012', titleFa: 'بانک ملت' },
@@ -45,3 +54,23 @@ export const IRAN_BANKS: ReadonlyArray<{ code: string; titleFa: string }> = [
   { code: '090', titleFa: 'بانک مهر اقتصاد' },
   { code: '095', titleFa: 'مؤسسه اعتباری نور' },
 ];
+
+const BY_CODE = new Map(IRAN_BANKS.map((bank) => [bank.code, bank]));
+
+/** بانکِ یک کد سه‌رقمی، یا `null` اگر کد ناشناخته باشد. */
+export function bankByCode(code: string | null | undefined): IranBank | null {
+  if (!code) return null;
+  return BY_CODE.get(code) ?? null;
+}
+
+/**
+ * کد بانک از روی شبای ناقص.
+ *
+ * عمداً به شبای کامل نیاز ندارد: کد بانک در رقم‌های ۳ تا ۵ (پس از دو رقم کنترلی)
+ * می‌نشیند، پس به‌محض تایپ پنجمین رقم می‌توان بانک را نشان داد و لازم نیست کاربر تا
+ * رقم بیست‌وچهارم منتظر بماند.
+ */
+export function bankCodeFromDigits(digits: string): string | null {
+  if (digits.length < 5) return null;
+  return digits.slice(2, 5);
+}

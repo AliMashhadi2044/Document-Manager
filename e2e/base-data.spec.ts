@@ -104,6 +104,21 @@ test.describe('فصل‌های بودجه', () => {
     );
     expect((popover?.y ?? 0) - (anchor?.y ?? 0), 'فهرست زیر دکمه‌اش باز نشد').toBeGreaterThan(0);
 
+    /*
+     * و باید از کادر **بیرون بزند**، نه اینکه داخل گفت‌وگو اسکرول بسازد: فهرست
+     * `fixed` است و در جریان چیدمان گفت‌وگو نمی‌نشیند.
+     */
+    const overflow = await page.evaluate(() => {
+      const element = document.querySelector('dialog[open]');
+      if (!element) return null;
+      return { scroll: element.scrollHeight, client: element.clientHeight };
+    });
+    expect(overflow, 'گفت‌وگوی باز پیدا نشد').toBeTruthy();
+    expect(
+      (overflow?.scroll ?? 0) - (overflow?.client ?? 0),
+      'باز شدن فهرست، داخل گفت‌وگو اسکرول ساخت',
+    ).toBeLessThanOrEqual(1);
+
     await list.getByRole('option').first().click();
     await page.getByRole('button', { name: 'اتصال', exact: true }).click();
     await expect(page.getByText('نوع فاکتور به فصل متصل شد.')).toBeVisible();

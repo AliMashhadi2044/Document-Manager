@@ -11,7 +11,7 @@
 
 import type { PrismaClient } from '@prisma/client';
 
-import { IRAN_BANKS } from './banks';
+import { IRAN_BANKS } from '@dm/shared';
 
 export async function seedBanks(prisma: PrismaClient): Promise<void> {
   for (const bank of IRAN_BANKS) {

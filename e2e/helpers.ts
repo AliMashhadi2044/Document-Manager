@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { isValidIban } from '@dm/shared';
 
 /**
  * کاربران آزمون — همان‌هایی که `npm run db:seed:dev-users` می‌سازد.
@@ -76,6 +77,42 @@ export async function pickOption(
 /** شناسه یکتا برای داده آزمون تا اجرای دوباره، داده قبلی را نبیند. */
 export function unique(prefix: string): string {
   return `${prefix} ${Date.now().toString().slice(-8)}`;
+}
+
+/**
+ * یک شبای معتبر و یکتا برای هر اجرا.
+ *
+ * شبا در پایگاه داده **یکتای سراسری** است، پس یک شماره ثابت فقط بار اول ثبت
+ * می‌شود و اجرای بعدی به خطای تکراری می‌خورد. شماره حساب از زمان ساخته می‌شود و
+ * رقم کنترلی با همان MOD-97-10ی که سامانه بررسی می‌کند به‌دست می‌آید؛ درستی‌اش را
+ * `isValidIban` همین‌جا تأیید می‌کند تا یک مولد خراب، به‌جای خودش، رابط را متهم نکند.
+ */
+export function uniqueIban(bankCode = '012'): string {
+  const account = Date.now().toString().padStart(19, '0').slice(-19);
+  const bban = bankCode + account;
+
+  for (let candidate = 2; candidate <= 98; candidate += 1) {
+    const iban = `IR${String(candidate).padStart(2, '0')}${bban}`;
+    if (mod97(iban) === 1n) {
+      if (!isValidIban(iban)) throw new Error(`شبای ساخته‌شده معتبر نیست: ${iban}`);
+      return iban;
+    }
+  }
+
+  throw new Error('ساخت شبای معتبر ناموفق بود');
+}
+
+function mod97(iban: string): bigint {
+  const rearranged = iban.slice(4) + iban.slice(0, 4);
+  let remainder = 0n;
+
+  for (const char of rearranged) {
+    const code = char.charCodeAt(0);
+    const value = code >= 48 && code <= 57 ? BigInt(code - 48) : BigInt(code - 55);
+    remainder = (remainder * (value >= 10n ? 100n : 10n) + value) % 97n;
+  }
+
+  return remainder;
 }
 
 /** تبدیل ارقام فارسی به ASCII — رابط برای نمایش فارسی‌سازی می‌کند. */
