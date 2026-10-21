@@ -29,8 +29,10 @@ import {
 import {
   LookupService,
   lookupInputSchema,
+  reorderSchema,
   type LookupInput,
   type LookupRecord,
+  type ReorderInput,
 } from './lookup.service';
 
 const updateSchema = lookupInputSchema.partial();
@@ -87,6 +89,23 @@ export class LookupController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<LookupRecord> {
     return this.lookups.create(assertResource(resource), body, user.id);
+  }
+
+  /**
+   * ترتیب تازهٔ ردیف‌های دیده‌شده.
+   *
+   * پیش از `:resource/:id` تعریف شده است؛ وگرنه `reorder` به‌عنوان یک شناسه خوانده می‌شود.
+   */
+  @RequirePermission('base_data:write')
+  @Patch(':resource/reorder')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'جابه‌جایی ترتیب نمایش موارد' })
+  async reorder(
+    @Param('resource') resource: string,
+    @Body(new ZodBody(reorderSchema)) body: ReorderInput,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    await this.lookups.reorder(assertResource(resource), body.ids, user.id);
   }
 
   @RequirePermission('base_data:write')

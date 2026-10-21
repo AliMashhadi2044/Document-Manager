@@ -19,8 +19,10 @@ import { OrganizationMark } from '../features/organization/organization-mark';
 import {
   useOrganization,
   useRemoveLogo,
+  useUpdateOrganization,
   useUploadLogo,
 } from '../features/organization/organization.api';
+import { YearInput } from '../shared/ui/year-input';
 
 const MODE_ICONS: Record<ThemeMode, 'sun' | 'moon' | 'monitor'> = {
   light: 'sun',
@@ -111,8 +113,8 @@ export function AppearanceMenu({ canManageBranding }: { canManageBranding: boole
           <>
             <MenuSeparator />
             <MenuItem selected={false} onSelect={() => setBrandingOpen(true)}>
-              <Icon name="image" />
-              <span className="flex-1">نشان سازمان</span>
+              <Icon name="settings" />
+              <span className="flex-1">تنظیمات سازمان</span>
             </MenuItem>
           </>
         ) : null}
@@ -123,11 +125,12 @@ export function AppearanceMenu({ canManageBranding }: { canManageBranding: boole
   );
 }
 
-/** بارگذاری و حذف نشان سازمان. */
+/** نشان سازمان و سال‌های پیش‌فرض. */
 function BrandingDialog({ onClose }: { onClose: () => void }): JSX.Element {
   const organization = useOrganization();
   const upload = useUploadLogo();
   const remove = useRemoveLogo();
+  const save = useUpdateOrganization();
   const inputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -146,7 +149,7 @@ function BrandingDialog({ onClose }: { onClose: () => void }): JSX.Element {
   };
 
   return (
-    <Modal title="نشان سازمان" onClose={onClose}>
+    <Modal title="تنظیمات سازمان" onClose={onClose}>
       <div className="flex items-center gap-4">
         <span className="flex size-20 items-center justify-center rounded-xl border border-border bg-muted/50">
           <OrganizationMark size={56} />
@@ -180,6 +183,22 @@ function BrandingDialog({ onClose }: { onClose: () => void }): JSX.Element {
         </p>
       ) : null}
 
+      <DefaultYears
+        fiscal={organization.data?.defaultFiscalYear ?? null}
+        jalali={organization.data?.defaultJalaliYear ?? null}
+        saving={save.isPending}
+        onSave={(input) => {
+          setMessage(null);
+          save.mutate(input, {
+            onSuccess: () => setMessage('سال‌های پیش‌فرض ذخیره شد.'),
+            onError: (error) =>
+              setMessage(
+                error instanceof ApiError ? formatServerMessage(error.message) : 'ذخیره ناموفق بود',
+              ),
+          });
+        }}
+      />
+
       <div className="mt-5 flex flex-wrap gap-2">
         <Button loading={upload.isPending} onClick={() => inputRef.current?.click()}>
           <Icon name="upload" />
@@ -208,5 +227,74 @@ function BrandingDialog({ onClose }: { onClose: () => void }): JSX.Element {
         </Button>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * سال مالی و سال شمسی پیش‌فرض.
+ *
+ * این دو عدد در فرم ایجاد سند از پیش پر می‌شوند. نگه داشتنشان در تنظیمات سازمان —
+ * نه در مرورگرِ هر کاربر — عمدی است: سال جاری یک واقعیت سازمانی است، نه سلیقهٔ شخصی، و
+ * نباید بین دو کاربر فرق کند.
+ */
+function DefaultYears({
+  fiscal,
+  jalali,
+  saving,
+  onSave,
+}: {
+  fiscal: number | null;
+  jalali: number | null;
+  saving: boolean;
+  onSave: (input: { defaultFiscalYear: number | null; defaultJalaliYear: number | null }) => void;
+}): JSX.Element {
+  const [fiscalYear, setFiscalYear] = useState(fiscal === null ? '' : String(fiscal));
+  const [jalaliYear, setJalaliYear] = useState(jalali === null ? '' : String(jalali));
+
+  const toYear = (value: string): number | null => (value.length === 4 ? Number(value) : null);
+  const dirty = toYear(fiscalYear) !== fiscal || toYear(jalaliYear) !== jalali;
+
+  return (
+    <section className="mt-5 border-t border-border pt-5">
+      <h4 className="text-sm font-semibold">سال‌های پیش‌فرض</h4>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        فرم ایجاد سند این دو را از پیش پر می‌کند. خالی گذاشتنشان یعنی تازه‌ترین سال مالی باز.
+      </p>
+
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <YearInput label="سال مالی پیش‌فرض" value={fiscalYear} onChange={setFiscalYear} />
+        <YearInput label="سال شمسی پیش‌فرض" value={jalaliYear} onChange={setJalaliYear} />
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        <Button
+          size="sm"
+          loading={saving}
+          disabled={!dirty}
+          onClick={() =>
+            onSave({
+              defaultFiscalYear: toYear(fiscalYear),
+              defaultJalaliYear: toYear(jalaliYear),
+            })
+          }
+        >
+          ذخیرهٔ سال‌ها
+        </Button>
+
+        {fiscal !== null || jalali !== null ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setFiscalYear('');
+              setJalaliYear('');
+              onSave({ defaultFiscalYear: null, defaultJalaliYear: null });
+            }}
+          >
+            برداشتن پیش‌فرض
+          </Button>
+        ) : null}
+      </div>
+    </section>
   );
 }

@@ -61,8 +61,8 @@ export function PaymentFields({
         <Select
           label="روش پرداخت"
           value={draft.paymentMethodId}
-          onChange={(event) =>
-            onChange({ ...EMPTY_PAYMENT, notes: draft.notes, paymentMethodId: event.target.value })
+          onChange={(nextValue) =>
+            onChange({ ...EMPTY_PAYMENT, notes: draft.notes, paymentMethodId: nextValue })
           }
           options={methods.map((method) => ({ value: method.id, label: method.titleFa }))}
           placeholder="ثبت نشود"
@@ -79,8 +79,8 @@ export function PaymentFields({
               label="شبای ذی‌نفع"
               required
               value={draft.vendorBankAccountId}
-              onChange={(event) =>
-                onChange({ ...draft, vendorBankAccountId: event.target.value })
+              onChange={(nextValue) =>
+                onChange({ ...draft, vendorBankAccountId: nextValue })
               }
               options={(accounts.data ?? []).map((account) => ({
                 value: account.id,

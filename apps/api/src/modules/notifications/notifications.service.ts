@@ -36,8 +36,15 @@ export class NotificationsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(query: ListQuery, user: AuthenticatedUser): Promise<PageResult<unknown>> {
-    const where: Prisma.NotificationWhereInput = { userId: user.id };
+  async list(
+    query: ListQuery,
+    user: AuthenticatedUser,
+    unreadOnly = false,
+  ): Promise<PageResult<unknown>> {
+    const where: Prisma.NotificationWhereInput = {
+      userId: user.id,
+      ...(unreadOnly ? { readAt: null } : {}),
+    };
 
     const [items, total, unread] = await Promise.all([
       this.prisma.notification.findMany({
@@ -47,6 +54,7 @@ export class NotificationsService {
         include: { document: { select: { id: true, title: true, status: true } } },
       }),
       this.prisma.notification.count({ where }),
+      // شمارندهٔ خوانده‌نشده‌ها همیشه روی **همه** اعلان‌هاست، نه روی فیلتر جاری.
       this.prisma.notification.count({ where: { userId: user.id, readAt: null } }),
     ]);
 

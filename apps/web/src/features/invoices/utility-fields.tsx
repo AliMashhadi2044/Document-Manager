@@ -3,7 +3,6 @@ import { calculateSingleAmountInvoice, type Money } from '@dm/shared';
 
 import { MoneyInput } from '../../shared/ui/money-input';
 import { Select } from '../../shared/ui/select';
-import { SearchableSelect } from '../../shared/ui/searchable-select';
 import { formatMoney } from '../../shared/format/money';
 import { useSchoolSearch } from './invoices.api';
 import { TaxFields, type TaxDraft } from './tax-fields';
@@ -66,13 +65,16 @@ export function UtilityFields({
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <SearchableSelect
+        <Select
           label="مدرسه"
           required
-          search={schoolSearch}
-          onSearchChange={setSchoolSearch}
-          loading={schools.isFetching}
-          total={schools.data?.total}
+          prefsKey="school"
+          remoteSearch={{
+            search: schoolSearch,
+            onSearchChange: setSchoolSearch,
+            loading: schools.isFetching,
+            total: schools.data?.total,
+          }}
           value={draft.schoolId}
           options={(schools.data?.items ?? []).map((school) => ({
             value: school.id,
@@ -87,7 +89,7 @@ export function UtilityFields({
               districtTitle: school?.district.title ?? '',
             });
           }}
-          hint="نام مدرسه را تایپ کنید؛ جست‌وجو روی سرور انجام می‌شود."
+          hint="جست‌وجو روی سرور انجام می‌شود؛ مدارس پرتکرار را پین کنید."
         />
 
         <div className="space-y-1.5">
@@ -109,7 +111,7 @@ export function UtilityFields({
           label="نوع انشعاب"
           required
           value={draft.utilityTypeId}
-          onChange={(event) => onChange({ ...draft, utilityTypeId: event.target.value })}
+          onChange={(nextValue) => onChange({ ...draft, utilityTypeId: nextValue })}
           options={utilityTypes.map((type) => ({ value: type.id, label: type.title }))}
         />
 

@@ -207,8 +207,8 @@ function DatasetReport({
                 placeholder={null}
                 aria-label="گروه‌بندی"
                 value={groupBy ?? ''}
-                onChange={(event) => {
-                  setGroupBy(event.target.value);
+                onChange={(nextValue) => {
+                  setGroupBy(nextValue);
                   setPage(1);
                 }}
                 options={dataset.groupBy.map((item) => ({
@@ -224,8 +224,8 @@ function DatasetReport({
               placeholder={null}
               aria-label="تعداد ردیف هر صفحه"
               value={String(pageSize)}
-              onChange={(event) => {
-                setPageSize(Number(event.target.value));
+              onChange={(nextValue) => {
+                setPageSize(Number(nextValue));
                 setPage(1);
               }}
               options={['10', '25', '50', '100', '200'].map((size) => ({

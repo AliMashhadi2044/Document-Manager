@@ -96,8 +96,8 @@ export function FormatEditor({
         label="قالب نمایش"
         placeholder={null}
         value={value.kind}
-        onChange={(event) =>
-          onChange({ ...value, kind: event.target.value as FormatSpec['kind'] })
+        onChange={(nextValue) =>
+          onChange({ ...value, kind: nextValue as FormatSpec['kind'] })
         }
         options={Object.entries(FORMAT_KIND_LABELS).map(([key, label]) => ({
           value: key,
@@ -171,7 +171,7 @@ export function ExpressionBuilder({
         label="نوع عبارت"
         placeholder={null}
         value={value.k}
-        onChange={(event) => onChange(emptyExpression(event.target.value as Expression['k']))}
+        onChange={(nextValue) => onChange(emptyExpression(nextValue as Expression['k']))}
         options={Object.entries(EXPRESSION_KIND_LABELS).map(([key, text]) => ({
           value: key,
           label: text,
@@ -185,7 +185,7 @@ export function ExpressionBuilder({
           required
           placeholder="انتخاب کنید…"
           value={value.path}
-          onChange={(event) => onChange({ k: 'var', path: event.target.value })}
+          onChange={(nextValue) => onChange({ k: 'var', path: nextValue })}
           options={options.map((option) => ({ value: option.value, label: option.label }))}
           hint={
             options.length === 0
@@ -201,8 +201,8 @@ export function ExpressionBuilder({
             label="نوع مقدار"
             placeholder={null}
             value={value.type}
-            onChange={(event) =>
-              onChange({ ...value, type: event.target.value as typeof value.type })
+            onChange={(nextValue) =>
+              onChange({ ...value, type: nextValue as typeof value.type })
             }
             options={[
               { value: 'text', label: 'متن' },
@@ -229,8 +229,8 @@ export function ExpressionBuilder({
               label="تابع"
               placeholder={null}
               value={value.fn}
-              onChange={(event) =>
-                onChange({ ...value, fn: event.target.value as typeof value.fn })
+              onChange={(nextValue) =>
+                onChange({ ...value, fn: nextValue as typeof value.fn })
               }
               options={Object.entries(AGG_FN_LABELS).map(([key, text]) => ({
                 value: key,
@@ -241,7 +241,7 @@ export function ExpressionBuilder({
               label="روی مجموعه"
               required
               value={value.over}
-              onChange={(event) => onChange({ ...value, over: event.target.value })}
+              onChange={(nextValue) => onChange({ ...value, over: nextValue })}
               options={collections.map((source) => ({
                 value: source.key,
                 label: source.titleFa,
@@ -273,8 +273,8 @@ export function ExpressionBuilder({
             label="عملیات"
             placeholder={null}
             value={value.op}
-            onChange={(event) =>
-              onChange({ ...value, op: event.target.value as typeof value.op })
+            onChange={(nextValue) =>
+              onChange({ ...value, op: nextValue as typeof value.op })
             }
             options={Object.entries(ARITH_OP_LABELS).map(([key, text]) => ({
               value: key,
@@ -425,7 +425,7 @@ export function ConditionBuilder({
         label="نوع شرط"
         placeholder={null}
         value={value.k}
-        onChange={(event) => onChange(emptyCondition(event.target.value as Condition['k']))}
+        onChange={(nextValue) => onChange(emptyCondition(nextValue as Condition['k']))}
         options={Object.entries(CONDITION_KIND_LABELS).map(([key, text]) => ({
           value: key,
           label: text,
@@ -439,8 +439,8 @@ export function ConditionBuilder({
             label="مقایسه"
             placeholder={null}
             value={value.op}
-            onChange={(event) =>
-              onChange({ ...value, op: event.target.value as typeof value.op })
+            onChange={(nextValue) =>
+              onChange({ ...value, op: nextValue as typeof value.op })
             }
             options={Object.entries(CMP_OP_LABELS).map(([key, text]) => ({
               value: key,
@@ -592,8 +592,8 @@ export function FieldShortcut({
       placeholder="یک فیلد را انتخاب کنید…"
       value=""
       hint="عبارت و قالب نمایش با هم تنظیم می‌شوند"
-      onChange={(event) => {
-        const picked = options.find((option) => option.value === event.target.value);
+      onChange={(nextValue) => {
+        const picked = options.find((option) => option.value === nextValue);
         if (!picked) return;
         onPick({ k: 'var', path: picked.value }, formatForFieldType(picked.type));
       }}

@@ -16,7 +16,6 @@ import { Card, CardHeader } from '../../shared/ui/card';
 import { Input } from '../../shared/ui/input';
 import { formatServerMessage } from '../../shared/format/money';
 import { Select } from '../../shared/ui/select';
-import { SearchableSelect } from '../../shared/ui/searchable-select';
 import { useBudgetCategories } from '../base-data/base-data.api';
 import {
   useChapterInvoiceTypes,
@@ -194,7 +193,7 @@ export function CreateInvoiceForm({
             label="فصل"
             required
             value={chapterId}
-            onChange={(event) => setChapterId(event.target.value)}
+            onChange={(nextValue) => setChapterId(nextValue)}
             options={chapters}
             hint="انواع فاکتور مجاز، از اتصال‌های همین فصل در اطلاعات پایه می‌آیند."
           />
@@ -222,7 +221,7 @@ export function CreateInvoiceForm({
               label="نوع فاکتور"
               required
               value={invoiceTypeId}
-              onChange={(event) => setInvoiceTypeId(event.target.value)}
+              onChange={(nextValue) => setInvoiceTypeId(nextValue)}
               placeholder={null}
               options={options.map((option) => ({
                 value: option.invoiceTypeId,
@@ -239,12 +238,15 @@ export function CreateInvoiceForm({
         ) : (
           <>
             <div className="grid gap-x-5 gap-y-4 md:grid-cols-3">
-              <SearchableSelect
+              <Select
                 label="فروشنده"
-                search={vendorSearch}
-                onSearchChange={setVendorSearch}
-                loading={vendors.isFetching}
-                total={vendors.data?.total}
+                prefsKey="vendor"
+                remoteSearch={{
+                  search: vendorSearch,
+                  onSearchChange: setVendorSearch,
+                  loading: vendors.isFetching,
+                  total: vendors.data?.total,
+                }}
                 value={vendorId}
                 options={(vendors.data?.items ?? []).map((vendor) => ({
                   value: vendor.id,

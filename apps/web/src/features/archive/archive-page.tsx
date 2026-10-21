@@ -160,7 +160,7 @@ export function ArchivePage({ user }: { user: CurrentUser }): JSX.Element {
           label="وضعیت"
           placeholder="همه"
           value={filters.status}
-          onChange={(event) => update({ status: event.target.value as ArchiveInboxFilters['status'] })}
+          onChange={(nextValue) => update({ status: nextValue as ArchiveInboxFilters['status'] })}
           options={[
             { value: 'PENDING_ARCHIVE', label: DOCUMENT_STATUS_LABELS.PENDING_ARCHIVE },
             { value: 'ARCHIVED', label: DOCUMENT_STATUS_LABELS.ARCHIVED },
@@ -178,8 +178,8 @@ export function ArchivePage({ user }: { user: CurrentUser }): JSX.Element {
           label="بازخورد رسیدگی‌نشده"
           placeholder="مهم نیست"
           value={filters.hasOpenFeedback}
-          onChange={(event) =>
-            update({ hasOpenFeedback: event.target.value as ArchiveInboxFilters['hasOpenFeedback'] })
+          onChange={(nextValue) =>
+            update({ hasOpenFeedback: nextValue as ArchiveInboxFilters['hasOpenFeedback'] })
           }
           options={[
             { value: 'true', label: 'دارد' },

@@ -35,12 +35,23 @@ export interface MenuProps {
   label: string;
   /** راهنمای کوتاه روی دکمه برای کاربر ماوس؛ aria-label کارِ صفحه‌خوان را می‌کند. */
   triggerTitle?: string;
+  /** نام دکمه برای صفحه‌خوان — وقتی محتوای دکمه فقط یک آیکون است. */
+  triggerLabel?: string;
   className?: string;
   panelClassName?: string;
 }
 
 export const Menu = forwardRef<HTMLDivElement, MenuProps>(function Menu(
-  { trigger, children, align = 'start', label, triggerTitle, className, panelClassName },
+  {
+    trigger,
+    children,
+    align = 'start',
+    label,
+    triggerTitle,
+    triggerLabel,
+    className,
+    panelClassName,
+  },
   ref,
 ) {
   const [open, setOpen] = useState(false);
@@ -88,6 +99,7 @@ export const Menu = forwardRef<HTMLDivElement, MenuProps>(function Menu(
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={triggerLabel}
         title={triggerTitle}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((value) => !value)}
@@ -137,19 +149,27 @@ export function MenuItem({
   onSelect,
   selected = false,
   className,
+  action = false,
 }: {
   children: ReactNode;
   onSelect: () => void;
   selected?: boolean;
   className?: string;
+  /**
+   * گزینهٔ انجام کار، نه انتخاب از چند حالت.
+   *
+   * نقش `menuitemradio` به صفحه‌خوان می‌گوید این یکی از چند گزینهٔ هم‌خانواده است و
+   * یکیشان علامت خورده است — برای «حذف» یا «اصلاح» حرف بی‌ربطی است.
+   */
+  action?: boolean;
 }): JSX.Element {
   const menu = useContext(MenuContext);
 
   return (
     <button
       type="button"
-      role="menuitemradio"
-      aria-checked={selected}
+      role={action ? 'menuitem' : 'menuitemradio'}
+      aria-checked={action ? undefined : selected}
       onClick={() => {
         // ترتیب مهم است: اول بستن، بعد اجرای کنش.
         //

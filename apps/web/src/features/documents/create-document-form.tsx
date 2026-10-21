@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from '@dm/shared';
 
@@ -7,14 +7,10 @@ import { Button } from '../../shared/ui/button';
 import { Input } from '../../shared/ui/input';
 import { Select } from '../../shared/ui/select';
 import { Card, CardHeader } from '../../shared/ui/card';
-import { NUMERIC_CLASS } from '../../shared/ui/field';
-import type { PageResult } from '../base-data/base-data.api';
+import { YearInput } from '../../shared/ui/year-input';
+import { useOrganization } from '../organization/organization.api';
+import { useActiveBuyers } from '../buyers/buyers.api';
 import { useCreateDocument } from './documents.api';
-
-interface BuyerOption {
-  readonly id: string;
-  readonly name: string;
-}
 
 interface BootstrapData {
   readonly fiscalYears: ReadonlyArray<{ year: number; isClosed: boolean }>;
@@ -22,10 +18,7 @@ interface BootstrapData {
 }
 
 export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.Element {
-  const buyers = useQuery({
-    queryKey: ['buyers', 'options'],
-    queryFn: () => apiFetch<PageResult<BuyerOption>>('/buyers?isActive=true&pageSize=100'),
-  });
+  const buyers = useActiveBuyers();
   const bootstrap = useQuery({
     queryKey: ['base-data', 'bootstrap'],
     queryFn: () => apiFetch<BootstrapData>('/base-data/bootstrap'),
@@ -33,18 +26,52 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
   });
 
   const create = useCreateDocument();
+  const organization = useOrganization();
 
   const [type, setType] = useState<DocumentType>('NORMAL');
   const [title, setTitle] = useState('');
-  const [fiscalYear, setFiscalYear] = useState('1405');
-  const [jalaliYear, setJalaliYear] = useState('1405');
+  const [fiscalYear, setFiscalYear] = useState('');
+  const [jalaliYear, setJalaliYear] = useState('');
+  const [yearsTouched, setYearsTouched] = useState(false);
   const [buyerEntityId, setBuyerEntityId] = useState('');
+  const [buyerTouched, setBuyerTouched] = useState(false);
   const [needNumber, setNeedNumber] = useState('');
   const [workflowNumber, setWorkflowNumber] = useState('');
   const [requestNumber, setRequestNumber] = useState('');
   const [requestTypeId, setRequestTypeId] = useState('');
   const [stadNotes, setStadNotes] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+
+  /**
+   * مجموعه پیش‌فرض، از پیش انتخاب می‌شود.
+   *
+   * در عمل همیشه یک مجموعه غالب است؛ بدون این، کاربر هر بار یک انتخاب تکراری
+   * انجام می‌دهد. `buyerTouched` جلوی بازگرداندن انتخابِ خودِ کاربر را می‌گیرد.
+   */
+  useEffect(() => {
+    if (buyerTouched || buyerEntityId !== '') return;
+    const fallback = buyers.data?.items.find((buyer) => buyer.isDefault);
+    if (fallback) setBuyerEntityId(fallback.id);
+  }, [buyerTouched, buyerEntityId, buyers.data]);
+
+  /**
+   * سال‌های پیش‌فرض از تنظیمات سازمان.
+   *
+   * اگر تنظیم نشده باشند، تازه‌ترین سال مالی باز جایشان را می‌گیرد — عددی که در کد
+   * نوشته نشده و با گذشت سال، کهنه نمی‌شود.
+   */
+  useEffect(() => {
+    if (yearsTouched) return;
+
+    const settings = organization.data;
+    const latestOpen = (bootstrap.data?.fiscalYears ?? []).find((year) => !year.isClosed);
+
+    const fiscalDefault = settings?.defaultFiscalYear ?? latestOpen?.year ?? null;
+    const jalaliDefault = settings?.defaultJalaliYear ?? fiscalDefault;
+
+    if (fiscalYear === '' && fiscalDefault !== null) setFiscalYear(String(fiscalDefault));
+    if (jalaliYear === '' && jalaliDefault !== null) setJalaliYear(String(jalaliDefault));
+  }, [yearsTouched, fiscalYear, jalaliYear, organization.data, bootstrap.data]);
 
   // سال‌های بسته برای سند جدید قابل انتخاب نیستند — سرور هم همین را اجبار می‌کند.
   const openYears = (bootstrap.data?.fiscalYears ?? []).filter((year) => !year.isClosed);
@@ -123,40 +150,46 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
           label="مجموعه خریدار"
           required
           value={buyerEntityId}
-          onChange={(event) => setBuyerEntityId(event.target.value)}
+          onChange={(nextValue) => {
+            setBuyerTouched(true);
+            setBuyerEntityId(nextValue);
+          }}
           options={(buyers.data?.items ?? []).map((buyer) => ({
             value: buyer.id,
             label: buyer.name,
+            description: buyer.isDefault ? 'پیش‌فرض' : undefined,
           }))}
+          emptyLabel="مجموعه خریداری ثبت نشده است"
+          hint={
+            (buyers.data?.items.length ?? 0) === 0 && !buyers.isPending
+              ? 'ابتدا در «مجموعه‌های خریدار» یک مجموعه بسازید.'
+              : undefined
+          }
         />
 
         {/* قابل انتخاب از فهرست و قابل تایپ دستی (§۹ پرامپت). */}
-        <div>
-          <Input
-            id="fiscalYear"
-            label="سال مالی"
-            required
-            inputMode="numeric"
-            list="fiscal-years"
-            className={NUMERIC_CLASS}
-            value={fiscalYear}
-            onChange={(event) => setFiscalYear(event.target.value)}
-            hint="از فهرست سال‌های باز انتخاب یا دستی وارد کنید."
-          />
-          <datalist id="fiscal-years">
-            {openYears.map((year) => (
-              <option key={year.year} value={year.year} />
-            ))}
-          </datalist>
-        </div>
+        <YearInput
+          id="fiscalYear"
+          label="سال مالی"
+          required
+          value={fiscalYear}
+          onChange={(next) => {
+            setYearsTouched(true);
+            setFiscalYear(next);
+          }}
+          suggestions={openYears.map((year) => year.year)}
+          hint="از تنظیمات سازمان پر می‌شود؛ با دکمه‌ها یا کلید بالا/پایین تغییر بدهید."
+        />
 
-        <Input
+        <YearInput
+          id="jalaliYear"
           label="سال شمسی"
           required
-          inputMode="numeric"
-          className={NUMERIC_CLASS}
           value={jalaliYear}
-          onChange={(event) => setJalaliYear(event.target.value)}
+          onChange={(next) => {
+            setYearsTouched(true);
+            setJalaliYear(next);
+          }}
           hint="مستقل از سال مالی است."
         />
 
@@ -187,7 +220,7 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
               id="requestType"
               label="نوع درخواست"
               value={requestTypeId}
-              onChange={(event) => setRequestTypeId(event.target.value)}
+              onChange={(nextValue) => setRequestTypeId(nextValue)}
               options={(bootstrap.data?.stadRequestTypes ?? []).map((item) => ({
                 value: item.id,
                 label: item.title,

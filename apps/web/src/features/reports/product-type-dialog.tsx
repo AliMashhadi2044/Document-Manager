@@ -101,7 +101,7 @@ export function ProductTypeDialog({
             required
             placeholder="انتخاب کنید"
             value={selected}
-            onChange={(event) => setSelected(event.target.value)}
+            onChange={(nextValue) => setSelected(nextValue)}
             options={data.allTypes.map((type) => ({ value: type.id, label: type.title }))}
           />
 

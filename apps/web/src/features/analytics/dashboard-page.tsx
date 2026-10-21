@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   DOCUMENT_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
@@ -19,7 +19,8 @@ import { DashboardSkeleton } from './dashboard-skeleton';
 import { ApiError } from '../../shared/api/client';
 import { cn } from '../../shared/ui/cn';
 import { formatMoney, formatServerMessage, toPersianDigits } from '../../shared/format/money';
-import { useDashboard, useFiscalYears } from './analytics.api';
+import { AnimatedValue, Updating, UpdatingBar } from '../../shared/ui/animated-value';
+import { useDashboard, useDashboardYears, type YearBasis } from './analytics.api';
 
 /**
  * برچسب‌ها از `@dm/shared` می‌آیند، نه از فهرستی در همین فایل.
@@ -64,13 +65,44 @@ export function DashboardPage({
   onCreateDocument?: (() => void) | undefined;
   onOpenReports?: (() => void) | undefined;
 }): JSX.Element {
-  const [fiscalYear, setFiscalYear] = useState<number | null>(null);
-  const years = useFiscalYears();
-  const dashboard = useDashboard(fiscalYear);
+  const [basis, setBasis] = useState<YearBasis>('fiscal');
+  const [year, setYear] = useState<number | null>(null);
+  const [touched, setTouched] = useState(false);
 
-  if (dashboard.isPending) return <DashboardSkeleton />;
+  const years = useDashboardYears();
+  const dashboard = useDashboard(basis, year);
 
-  if (dashboard.isError) {
+  const yearList = useMemo(
+    () => (basis === 'jalali' ? (years.data?.jalali ?? []) : (years.data?.fiscal ?? [])),
+    [basis, years.data],
+  );
+
+  /**
+   * پیش‌فرض: تازه‌ترین سالِ همان مبنا — نه «همه سال‌ها».
+   *
+   * چرا نه همه سال‌ها: جمع چندساله در یک سامانه مالی کمتر به کار می‌آید؛ آنچه کاربر
+   * روز اول می‌خواهد ببیند، سال جاری است. `touched` جلوی بازگرداندن انتخابِ خودِ کاربر
+   * را می‌گیرد — اگر عمداً «همه سال‌ها» را زده، نباید دوباره پر شود.
+   */
+  useEffect(() => {
+    if (touched || yearList.length === 0) return;
+    setYear(yearList[0] ?? null);
+  }, [touched, yearList]);
+
+  const changeBasis = (next: YearBasis): void => {
+    setBasis(next);
+    // سال مالی ۱۴۰۵ و سال شمسی ۱۴۰۵ یک چیز نیستند، ولی فهرست‌ها تقریباً هم‌پوشانند؛
+    // نگه داشتن همان عدد از تهی شدن ناگهانی داشبورد جلوگیری می‌کند.
+    const available = next === 'jalali' ? (years.data?.jalali ?? []) : (years.data?.fiscal ?? []);
+    if (year !== null && !available.includes(year)) setYear(available[0] ?? null);
+  };
+
+  /** بار اول اسکلت دارد؛ به‌روزرسانی‌های بعدی عدد قبلی را نگه می‌دارند. */
+  const updating = dashboard.isFetching && dashboard.data !== undefined;
+
+  if (dashboard.data === undefined && dashboard.isPending) return <DashboardSkeleton />;
+
+  if (dashboard.isError && dashboard.data === undefined) {
     return (
       <ErrorState
         title="خواندن داشبورد ناموفق بود"
@@ -84,13 +116,21 @@ export function DashboardPage({
     );
   }
 
-  const data = dashboard.data;
+  const data = dashboard.data as NonNullable<typeof dashboard.data>;
   const canCreateDocument = user.permissions.includes('document:create');
 
+  /**
+   * دایرهٔ وضعیت، بر اساس **تعداد سند** است، نه مبلغ.
+   *
+   * پیش از این سهم‌ها از مبلغ حساب می‌شد و نتیجه‌اش گمراه‌کننده بود: پیش‌نویس‌ها هنوز
+   * فاکتوری ندارند، پس مبلغشان صفر است و ده‌ها سند سهم ۰٪ می‌گرفتند — دایره یک‌دست
+   * تک‌رنگ می‌شد در حالی که کارت عنوانش «اسناد بر اساس وضعیت» است. مبلغ همانجا به‌عنوان
+   * متن کمکی می‌آید، پس چیزی از دست نمی‌رود.
+   */
   const statusData = data.byStatus.map((row) => ({
     label: statusLabel(row.status),
-    value: row.total,
-    hint: toPersianDigits(String(row.count)),
+    value: row.count,
+    hint: `${formatMoney(row.total, { withUnit: false })} ریال`,
   }));
 
   const monthData = (data.byMonth ?? []).map((row) => ({
@@ -139,29 +179,57 @@ export function DashboardPage({
         onOpenReports={onOpenReports}
       />
 
-      {/* ───────────── فیلتر سال مالی ───────────── */}
+      {/* ───────────── فیلتر سال ───────────── */}
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <p className="text-sm font-medium">نمای کلی</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium">نمای کلی</p>
+          {updating ? (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="size-1.5 animate-[var(--animate-ping-ring)] rounded-full bg-primary" />
+              در حال به‌روزرسانی…
+            </span>
+          ) : null}
+        </div>
 
-        <div className="w-48">
-          <Select
-            label="سال مالی"
-            placeholder="همه سال‌ها"
-            value={fiscalYear === null ? '' : String(fiscalYear)}
-            onChange={(event) =>
-              setFiscalYear(event.target.value === '' ? null : Number(event.target.value))
-            }
-            options={(years.data ?? []).map((year) => ({
-              value: String(year),
-              label: toPersianDigits(String(year)),
-            }))}
-          />
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-44">
+            <Select
+              label="بر اساس"
+              prefsKey={null}
+              placeholder={null}
+              value={basis}
+              onChange={(nextValue) => changeBasis(nextValue as YearBasis)}
+              options={[
+                { value: 'fiscal', label: 'سال مالی' },
+                { value: 'jalali', label: 'سال شمسی' },
+              ]}
+            />
+          </div>
+
+          <div className="w-44">
+            <Select
+              label={basis === 'jalali' ? 'سال شمسی' : 'سال مالی'}
+              prefsKey={null}
+              placeholder="همه سال‌ها"
+              value={year === null ? '' : String(year)}
+              onChange={(nextValue) => {
+                setTouched(true);
+                setYear(nextValue === '' ? null : Number(nextValue));
+              }}
+              options={yearList.map((item) => ({
+                value: String(item),
+                label: toPersianDigits(String(item)),
+              }))}
+              emptyLabel="سالی در دسترس شما ثبت نشده است"
+            />
+          </div>
         </div>
       </div>
 
       {/* ───────────── شمارنده‌های کلیدی ───────────── */}
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
+          updating={updating}
           icon="documents"
           title="اسناد"
           value={toPersianDigits(String(data.documentCount))}
@@ -171,6 +239,7 @@ export function DashboardPage({
           sparkTitle="روند تعداد فاکتورهای ماهانه"
         />
         <StatTile
+          updating={updating}
           icon="money"
           title="جمع کل"
           value={formatMoney(data.totals.total, { withUnit: false })}
@@ -180,6 +249,7 @@ export function DashboardPage({
           sparkTitle="روند مبلغ ماهانه"
         />
         <StatTile
+          updating={updating}
           icon="clock"
           title="در انتظار بایگانی"
           value={toPersianDigits(String(data.pendingArchiveCount))}
@@ -187,6 +257,7 @@ export function DashboardPage({
           tone={data.pendingArchiveCount > 0 ? 'warning' : 'neutral'}
         />
         <StatTile
+          updating={updating}
           icon="alert"
           title="بازخورد باز"
           value={toPersianDigits(String(data.openFeedbackCount))}
@@ -196,6 +267,7 @@ export function DashboardPage({
       </section>
 
       {/* ───────────── مسیر سند ───────────── */}
+      <Updating active={updating} className="space-y-4">
       <Card>
         <CardHeader
           icon="layers"
@@ -250,9 +322,9 @@ export function DashboardPage({
           icon="chart"
           title="روند ماهانه فاکتورها"
           description={
-            data.fiscalYear === null
-              ? 'بر اساس تازه‌ترین سال مالی موجود در دامنه دسترسی شما'
-              : `سال مالی ${toPersianDigits(String(data.fiscalYear))}`
+            data.year === null
+              ? 'بر اساس تازه‌ترین سال موجود در دامنه دسترسی شما'
+              : `${data.basis === 'jalali' ? 'سال شمسی' : 'سال مالی'} ${toPersianDigits(String(data.year))}`
           }
           action={
             <Badge tone="primary">
@@ -283,12 +355,13 @@ export function DashboardPage({
           <CardHeader
             icon="layers"
             title="اسناد بر اساس وضعیت"
-            description="سهم هر وضعیت از مبلغ کل اسناد"
+            description="سهم هر وضعیت از تعداد اسناد؛ مبلغ هر وضعیت کنار برچسبش می‌آید."
           />
           <CardBody className="pt-4">
             <DonutChart
               data={statusData}
-              title="سهم وضعیت‌ها از مبلغ کل"
+              money={false}
+              title="سهم هر وضعیت از تعداد اسناد"
               centerLabel="سند"
               centerValue={toPersianDigits(String(data.documentCount))}
             />
@@ -311,9 +384,11 @@ export function DashboardPage({
             <DonutChart
               data={data.byType.map((row) => ({
                 label: typeLabel(row.type),
-                value: row.total,
+                value: row.count,
+                hint: `${formatMoney(row.total, { withUnit: false })} ریال`,
               }))}
-              title="سهم نوع سند از مبلغ کل"
+              money={false}
+              title="سهم هر نوع سند از تعداد اسناد"
               centerLabel="نوع سند"
               centerValue={toPersianDigits(String(data.byType.length))}
             />
@@ -374,6 +449,7 @@ export function DashboardPage({
           </CardBody>
         </Card>
       </div>
+      </Updating>
     </div>
   );
 }
@@ -395,6 +471,7 @@ function StatTile({
   tone,
   spark,
   sparkTitle,
+  updating = false,
 }: {
   icon: IconName;
   title: string;
@@ -404,9 +481,12 @@ function StatTile({
   /** روند ماهانه برای خط کوچک زیر کاشی؛ نبودنش کاشی را خراب نمی‌کند. */
   spark?: readonly (string | number)[];
   sparkTitle?: string;
+  /** عدد فعلی کهنه است و پاسخ تازه در راه است. */
+  updating?: boolean;
 }): JSX.Element {
   return (
-    <Card interactive className="overflow-hidden p-4">
+    <Card interactive className="relative overflow-hidden p-4">
+      <UpdatingBar active={updating} />
       <div className="flex items-start gap-3">
         <span
           className={cn(
@@ -418,8 +498,8 @@ function StatTile({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-xs text-muted-foreground">{title}</p>
-          <p className="money mt-0.5 truncate text-xl font-bold" title={value}>
-            {value}
+          <p className="money mt-0.5 truncate text-xl font-bold">
+            <AnimatedValue value={value} title={value} />
           </p>
           <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{caption}</p>
         </div>
@@ -456,11 +536,8 @@ function AmountCell({
         {sign ? <span aria-hidden="true">{sign} </span> : null}
         {title}
       </p>
-      <p
-        className={cn('money mt-1 truncate text-sm font-bold', emphasis && 'text-primary')}
-        title={formatMoney(value)}
-      >
-        {formatMoney(value, { withUnit: false })}
+      <p className={cn('money mt-1 truncate text-lg font-bold text-center', emphasis && 'text-primary')}>
+        <AnimatedValue value={formatMoney(value, { withUnit: false })} title={formatMoney(value)} />
       </p>
     </div>
   );

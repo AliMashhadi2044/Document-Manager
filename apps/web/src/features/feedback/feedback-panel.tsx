@@ -100,7 +100,7 @@ export function FeedbackPanel({
             required
             placeholder={null}
             value={targetKind}
-            onChange={(event) => setTargetKind(event.target.value as FeedbackTargetKind)}
+            onChange={(nextValue) => setTargetKind(nextValue as FeedbackTargetKind)}
             options={DOCUMENT_LEVEL_TARGETS.map((kind) => ({
               value: kind,
               label: FEEDBACK_TARGET_LABELS[kind],

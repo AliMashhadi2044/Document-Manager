@@ -1,5 +1,17 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 import {
@@ -32,7 +44,13 @@ const buyerSchema = z.object({
   fax: z.string().trim().max(30).optional().transform(emptyToNull),
   isActive: z.boolean().default(true),
   sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
+  isDefault: z.boolean().default(false),
 });
+
+/** شکل پاسخ: شمارش اسناد به‌صورت یک عدد ساده، نه شیء `_count` پریزما. */
+interface BuyerRow {
+  documentCount: number;
+}
 
 /**
  * مجموعه‌های خریدار (§۸.۳).
@@ -62,21 +80,26 @@ export class BuyersController {
     const [items, total] = await Promise.all([
       this.prisma.buyerEntity.findMany({
         where,
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        // پیش‌فرض همیشه اول فهرست — همان چیزی که کاربر در فرم سند هم اول می‌بیند.
+        orderBy: [{ isDefault: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+        include: { _count: { select: { documents: true } } },
         ...paginationArgs(query),
       }),
       this.prisma.buyerEntity.count({ where }),
     ]);
 
-    return toPageResult(items, total, query);
+    return toPageResult(items.map((item) => this.withCount(item)), total, query);
   }
 
   @RequirePermission('buyer:read')
   @Get(':id')
   async get(@Param('id') id: string) {
-    const buyer = await this.prisma.buyerEntity.findUnique({ where: { id } });
+    const buyer = await this.prisma.buyerEntity.findUnique({
+      where: { id },
+      include: { _count: { select: { documents: true } } },
+    });
     if (!buyer) throw AppError.notFound('مجموعه خریدار یافت نشد');
-    return buyer;
+    return this.withCount(buyer);
   }
 
   @RequirePermission('buyer:write')
@@ -85,7 +108,10 @@ export class BuyersController {
     @Body(new ZodBody(buyerSchema)) body: z.infer<typeof buyerSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    const created = await this.prisma.buyerEntity.create({ data: body });
+    const created = await this.prisma.$transaction(async (tx) => {
+      if (body.isDefault) await this.clearDefault(tx, null);
+      return tx.buyerEntity.create({ data: body });
+    });
 
     await this.audit.record({
       actorId: user.id,
@@ -95,7 +121,7 @@ export class BuyersController {
       after: created,
     });
 
-    return created;
+    return { ...created, documentCount: 0 };
   }
 
   @RequirePermission('buyer:write')
@@ -108,7 +134,23 @@ export class BuyersController {
     const before = await this.prisma.buyerEntity.findUnique({ where: { id } });
     if (!before) throw AppError.notFound('مجموعه خریدار یافت نشد');
 
-    const updated = await this.prisma.buyerEntity.update({ where: { id }, data: body });
+    /*
+     * یک مجموعه غیرفعال نمی‌تواند پیش‌فرض بماند.
+     *
+     * وگرنه فرم ایجاد سند مقداری را از پیش انتخاب می‌کند که در فهرست گزینه‌هایش
+     * (فقط فعال‌ها) نیست — و کاربر دکمه ثبت را می‌زند و خطای نامفهوم می‌گیرد.
+     */
+    const willBeActive = body.isActive ?? before.isActive;
+    const wantsDefault = (body.isDefault ?? before.isDefault) && willBeActive;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (wantsDefault) await this.clearDefault(tx, id);
+      return tx.buyerEntity.update({
+        where: { id },
+        data: { ...body, isDefault: wantsDefault },
+        include: { _count: { select: { documents: true } } },
+      });
+    });
 
     await this.audit.record({
       actorId: user.id,
@@ -119,6 +161,61 @@ export class BuyersController {
       after: updated,
     });
 
-    return updated;
+    return this.withCount(updated);
+  }
+
+  /**
+   * حذف یک مجموعه خریدار.
+   *
+   * فقط وقتی ممکن است که **هیچ سندی** به آن وصل نباشد. سندهای گذشته داده خریدار را
+   * به‌صورت snapshot دارند، ولی ستون `buyer_entity_id` هم نگه داشته می‌شود تا بشود
+   * «همه اسناد این مجموعه» را پرسید؛ حذف رکورد، آن ارتباط را پاک می‌کند.
+   *
+   * راه درستِ «از کار انداختن» یک مجموعه، غیرفعال کردن آن است نه حذف.
+   */
+  @RequirePermission('buyer:write')
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
+    const buyer = await this.prisma.buyerEntity.findUnique({
+      where: { id },
+      include: { _count: { select: { documents: true } } },
+    });
+    if (!buyer) throw AppError.notFound('مجموعه خریدار یافت نشد');
+
+    if (buyer._count.documents > 0) {
+      throw AppError.conflict(
+        'BUYER_IN_USE',
+        'این مجموعه در اسناد ثبت‌شده به کار رفته است و حذف نمی‌شود؛ آن را غیرفعال کنید.',
+      );
+    }
+
+    await this.prisma.buyerEntity.delete({ where: { id } });
+
+    await this.audit.record({
+      actorId: user.id,
+      action: 'BUYER_DELETE',
+      entityType: 'buyerEntity',
+      entityId: id,
+      before: buyer,
+    });
+  }
+
+  /** برداشتن علامت پیش‌فرض از بقیه — پیش از نشاندن آن روی یک ردیف تازه. */
+  private async clearDefault(
+    tx: Prisma.TransactionClient,
+    keepId: string | null,
+  ): Promise<void> {
+    await tx.buyerEntity.updateMany({
+      where: { isDefault: true, ...(keepId === null ? {} : { id: { not: keepId } }) },
+      data: { isDefault: false },
+    });
+  }
+
+  private withCount<T extends { _count: { documents: number } }>(
+    row: T,
+  ): Omit<T, '_count'> & BuyerRow {
+    const { _count, ...rest } = row;
+    return { ...rest, documentCount: _count.documents };
   }
 }

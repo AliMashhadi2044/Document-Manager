@@ -72,8 +72,8 @@ export function BlockSettings({
               label="چینش"
               placeholder={null}
               value={block.align}
-              onChange={(event) =>
-                onChange({ ...block, align: event.target.value as 'start' | 'center' | 'end' })
+              onChange={(nextValue) =>
+                onChange({ ...block, align: nextValue as 'start' | 'center' | 'end' })
               }
               options={ALIGN_OPTIONS}
             />
@@ -122,8 +122,8 @@ export function BlockSettings({
             label="چینش"
             placeholder={null}
             value={block.align}
-            onChange={(event) =>
-              onChange({ ...block, align: event.target.value as 'start' | 'center' | 'end' })
+            onChange={(nextValue) =>
+              onChange({ ...block, align: nextValue as 'start' | 'center' | 'end' })
             }
             options={ALIGN_OPTIONS}
           />
@@ -310,7 +310,7 @@ function SignatureSettings({
         required
         placeholder="انتخاب کنید…"
         value={block.signatoryRoleKey}
-        onChange={(event) => onChange({ ...block, signatoryRoleKey: event.target.value })}
+        onChange={(nextValue) => onChange({ ...block, signatoryRoleKey: nextValue })}
         options={signatories.map((item) => ({
           value: item.roleKey,
           label: `${item.positionTitle} — ${item.fullName}`,
@@ -322,8 +322,8 @@ function SignatureSettings({
           label="چینش"
           placeholder={null}
           value={block.align}
-          onChange={(event) =>
-            onChange({ ...block, align: event.target.value as 'start' | 'center' | 'end' })
+          onChange={(nextValue) =>
+            onChange({ ...block, align: nextValue as 'start' | 'center' | 'end' })
           }
           options={ALIGN_OPTIONS}
         />

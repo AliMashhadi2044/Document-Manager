@@ -45,17 +45,28 @@ export class ChaptersController {
   @Get('categories')
   @ApiOperation({ summary: 'گروه‌های بودجه (جاری و عمرانی) با فصل‌هایشان' })
   async categories() {
-    return this.prisma.budgetCategory.findMany({
+    const categories = await this.prisma.budgetCategory.findMany({
       orderBy: { sortOrder: 'asc' },
       include: {
         chapters: {
           orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
           include: {
             invoiceTypes: { include: { invoiceType: true }, orderBy: { sortOrder: 'asc' } },
+            // شمارش فاکتورها: رابط باید پیش از نشان دادن دکمه حذف، بداند کدام فصل در
+            // داده واقعی به کار رفته است — وگرنه کاربر دکمه‌ای را می‌زند که همیشه خطا می‌دهد.
+            _count: { select: { invoices: true } },
           },
         },
       },
     });
+
+    return categories.map((category) => ({
+      ...category,
+      chapters: category.chapters.map(({ _count, ...chapter }) => ({
+        ...chapter,
+        invoiceCount: _count.invoices,
+      })),
+    }));
   }
 
   /**
@@ -101,6 +112,18 @@ export class ChaptersController {
     };
   }
 
+  /** همه انواع فاکتور فعال — برای فهرست انتخاب در صفحه اتصال. */
+  @RequirePermission('base_data:read')
+  @Get('invoice-types')
+  @ApiOperation({ summary: 'انواع فاکتور قابل اتصال به فصل' })
+  async allInvoiceTypes() {
+    return this.prisma.invoiceType.findMany({
+      where: { isActive: true },
+      orderBy: { titleFa: 'asc' },
+      select: { id: true, key: true, kind: true, titleFa: true },
+    });
+  }
+
   @RequirePermission('base_data:write')
   @Post()
   async create(
@@ -138,6 +161,45 @@ export class ChaptersController {
       after: updated,
     });
     return updated;
+  }
+
+  /**
+   * حذف یک فصل.
+   *
+   * فقط وقتی ممکن است که هیچ فاکتوری به آن ارجاع ندهد. فاکتورهای گذشته عنوان فصل
+   * را snapshot دارند، ولی `chapter_id` هم نگه داشته می‌شود؛ حذف رکورد، آن ارتباط را
+   * می‌شکند. راه درستِ «کم کردن» یک فصلِ به‌کاررفته، غیرفعال کردن آن است.
+   */
+  @RequirePermission('base_data:write')
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
+    const chapter = await this.prisma.budgetChapter.findUnique({
+      where: { id },
+      include: { _count: { select: { invoices: true } } },
+    });
+    if (!chapter) throw AppError.notFound('فصل یافت نشد');
+
+    if (chapter._count.invoices > 0) {
+      throw AppError.conflict(
+        'CHAPTER_IN_USE',
+        'این فصل در فاکتورهای ثبت‌شده به کار رفته است و حذف نمی‌شود؛ آن را غیرفعال کنید.',
+      );
+    }
+
+    // اتصال‌های نوع فاکتور فقط پیکربندی‌اند و همراه فصل می‌روند.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.chapterInvoiceType.deleteMany({ where: { chapterId: id } });
+      await tx.budgetChapter.delete({ where: { id } });
+    });
+
+    await this.audit.record({
+      actorId: user.id,
+      action: 'BASE_DATA_DELETE',
+      entityType: 'budgetChapter',
+      entityId: id,
+      before: chapter,
+    });
   }
 
   @RequirePermission('base_data:write')

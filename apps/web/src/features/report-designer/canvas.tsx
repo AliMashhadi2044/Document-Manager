@@ -92,22 +92,23 @@ export function Canvas({
                   </label>
                 )}
 
-                <select
-                  aria-label={`افزودن عنصر به ${BAND_LABELS[band]}`}
-                  className="h-8 rounded-md border border-border bg-background px-2 text-xs"
-                  value=""
-                  onChange={(event) => {
-                    if (event.target.value === '') return;
-                    addBlock(band, event.target.value as Block['type']);
-                  }}
-                >
-                  <option value="">افزودن عنصر…</option>
-                  {BLOCK_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {BLOCK_TYPE_LABELS[type]}
-                    </option>
-                  ))}
-                </select>
+                <div className="w-44">
+                  <Select
+                    size="sm"
+                    prefsKey={`report-block-type`}
+                    aria-label={`افزودن عنصر به ${BAND_LABELS[band]}`}
+                    placeholder="افزودن عنصر…"
+                    value=""
+                    onChange={(nextValue) => {
+                      if (nextValue === '') return;
+                      addBlock(band, nextValue as Block['type']);
+                    }}
+                    options={BLOCK_TYPES.map((type) => ({
+                      value: type,
+                      label: BLOCK_TYPE_LABELS[type],
+                    }))}
+                  />
+                </div>
               </div>
             </header>
 
@@ -303,10 +304,10 @@ export function PageSettings({
           label="اندازه کاغذ"
           placeholder={null}
           value={template.page.size}
-          onChange={(event) =>
+          onChange={(nextValue) =>
             onChange({
               ...template,
-              page: { ...template.page, size: event.target.value as 'A4' | 'A5' | 'A3' | 'LETTER' },
+              page: { ...template.page, size: nextValue as 'A4' | 'A5' | 'A3' | 'LETTER' },
             })
           }
           options={[
@@ -320,12 +321,12 @@ export function PageSettings({
           label="جهت صفحه"
           placeholder={null}
           value={template.page.orientation}
-          onChange={(event) =>
+          onChange={(nextValue) =>
             onChange({
               ...template,
               page: {
                 ...template.page,
-                orientation: event.target.value as 'portrait' | 'landscape',
+                orientation: nextValue as 'portrait' | 'landscape',
               },
             })
           }

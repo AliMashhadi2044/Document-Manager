@@ -55,7 +55,17 @@ export type IconName =
   | 'money'
   | 'trend-up'
   | 'users'
-  | 'image';
+  | 'image'
+  | 'pin'
+  | 'pin-off'
+  | 'arrow-up'
+  | 'arrow-down'
+  | 'sliders'
+  | 'restore'
+  | 'power'
+  | 'grip'
+  | 'more'
+  | 'minus';
 
 /** مسیرهای هر آیکون روی گرید ۲۴×۲۴. */
 const PATHS: Record<IconName, readonly string[]> = {
@@ -95,6 +105,7 @@ const PATHS: Record<IconName, readonly string[]> = {
   ],
   search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', 'M21 21l-4.3-4.3'],
   plus: ['M12 5v14', 'M5 12h14'],
+  minus: ['M5 12h14'],
   check: ['M20 6L9 17l-5-5'],
   close: ['M18 6L6 18', 'M6 6l12 12'],
   'chevron-start': ['M15 18l-6-6 6-6'],
@@ -114,6 +125,15 @@ const PATHS: Record<IconName, readonly string[]> = {
   'trend-up': ['M3 17l6-6 4 4 7-7', 'M14 8h6v6'],
   users: ['M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M22 20v-2a4 4 0 0 0-3-3.9', 'M16 2.1a4 4 0 0 1 0 7.8'],
   image: ['M3 5h18v14H3z', 'M8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z', 'M21 16l-5-5-6 6-3-3-4 4'],
+  pin: ['M12 17v5', 'M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z'],
+  'pin-off': ['M12 17v5', 'M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z', 'M3 3l18 18'],
+  'arrow-up': ['M12 20V5', 'M6 11l6-6 6 6'],
+  'arrow-down': ['M12 4v15', 'M6 13l6 6 6-6'],
+  sliders: ['M4 7h10', 'M18 7h2', 'M4 17h4', 'M12 17h8', 'M16 5v4', 'M8 15v4'],
+  restore: ['M3 12a9 9 0 1 0 3-6.7', 'M3 4v5h5'],
+  power: ['M12 3v9', 'M7.5 6.2a7.5 7.5 0 1 0 9 0'],
+  more: ['M12 5h.01', 'M12 12h.01', 'M12 19h.01'],
+  grip: ['M9 6h.01', 'M9 12h.01', 'M9 18h.01', 'M15 6h.01', 'M15 12h.01', 'M15 18h.01'],
 };
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { gotoSection, login, logout, toAsciiDigits, unique } from './helpers';
+import { gotoSection, login, logout, pickOption, toAsciiDigits, unique } from './helpers';
 
 /**
  * سناریوی اصلی سند (docs/11-testing-plan.md §۴) از راه **رابط کاربری**:
@@ -24,7 +24,7 @@ test.describe('چرخه کامل سند', () => {
     // از درون خود فرم گرفته می‌شود، نه از کل صفحه.
     const form = page.locator('form').filter({ has: page.getByLabel('شرح سند') });
     await page.getByLabel('شرح سند').fill(title);
-    await page.locator('#buyer').selectOption({ index: 1 });
+    await pickOption(page, 'مجموعه خریدار');
     await form.getByRole('button', { name: 'ایجاد سند' }).click();
     await expect(page.getByText('سند ایجاد شد.')).toBeVisible();
 
@@ -34,35 +34,23 @@ test.describe('چرخه کامل سند', () => {
 
     // ───── فاکتور عادی با یک ردیف کالا ─────
     await page.getByRole('button', { name: 'افزودن فاکتور' }).click();
-    // برچسب گزینه شامل دسته و کد فصل هم هست («جاری — مواد مصرفی (۲۲۱۳۰۰۰)»)، پس
-    // گزینه از روی متنش پیدا و با value انتخاب می‌شود.
-    const chapter = page.getByLabel('فصل');
-    const chapterValue = await chapter
-      .locator('option', { hasText: 'مواد مصرفی' })
-      .first()
-      .getAttribute('value');
-    expect(chapterValue, 'فصل «مواد مصرفی» در اطلاعات پایه نیست').toBeTruthy();
-    await chapter.selectOption(chapterValue as string);
+    // برچسب گزینه شامل دسته و کد فصل هم هست («جاری — مواد مصرفی (۲۲۱۳۰۰۰)»)،
+    // پس بخشی از متنش برای یافتن کافی است.
+    await pickOption(page, 'فصل', { search: 'مواد مصرفی', nth: 0 });
 
-    const typeSelect = page.getByLabel('نوع فاکتور');
+    const typeSelect = page.getByRole('combobox', { name: 'نوع فاکتور', exact: true });
     if ((await typeSelect.count()) > 0) {
-      await typeSelect.selectOption({ label: 'فاکتور عادی' });
+      await pickOption(page, 'نوع فاکتور', { text: 'فاکتور عادی' });
     }
 
     // فروشنده: گزارش مالیات بر اساس فروشنده تجمیع می‌شود، پس فاکتور بدون فروشنده
-    // هیچ ردیفی در گزارش ندارد. انتخاب فروشنده، combobox واقعی است (نه select).
-    const vendorBox = page.getByRole('combobox', { name: 'فروشنده' });
-    await vendorBox.click();
-    await vendorBox.fill('');
-    // دامنه مهم است: گزینه‌های select های دیگر صفحه هم نقش option دارند.
-    const firstVendor = page.getByRole('listbox').getByRole('option').first();
-    await expect(firstVendor, 'هیچ فروشنده‌ای در اطلاعات پایه نیست').toBeVisible();
-    await firstVendor.click();
+    // هیچ ردیفی در گزارش ندارد. فهرست فروشنده سمت سرور جست‌وجو می‌شود.
+    await pickOption(page, 'فروشنده');
 
     await page.getByLabel('تاریخ صورتحساب').fill('1405/07/12');
     await page.getByLabel('شرح ردیف ۱').fill('کاغذ A4');
     await page.getByLabel('تعداد').fill('2');
-    await page.getByLabel('واحد', { exact: true }).selectOption({ index: 1 });
+    await pickOption(page, 'واحد');
     await page.getByLabel('مبلغ واحد').fill('1500000');
 
     // پیش‌نمایش جمع، سمت کلاینت محاسبه می‌شود و باید ۲ × ۱٬۵۰۰٬۰۰۰ باشد.
@@ -70,13 +58,7 @@ test.describe('چرخه کامل سند', () => {
     await expect(preview).toBeVisible();
 
     // روش پرداخت اختیاری **نیست**: سرور در ثبت نهایی آن را لازم می‌داند.
-    const method = page.getByLabel('روش پرداخت');
-    const methodValue = await method
-      .locator('option', { hasText: 'تنخواه' })
-      .first()
-      .getAttribute('value');
-    expect(methodValue, 'روش پرداخت تنخواه در اطلاعات پایه نیست').toBeTruthy();
-    await method.selectOption(methodValue as string);
+    await pickOption(page, 'روش پرداخت', { text: 'تنخواه' });
 
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
 
@@ -99,6 +81,20 @@ test.describe('چرخه کامل سند', () => {
     await expect(reportRow).toBeVisible();
     await expect(reportRow).toContainText('۳٬۰۰۰٬۰۰۰');
     await expect(reportRow).toContainText('۳۰۰٬۰۰۰');
+
+    // ───── فهرست انتخاب درون گفت‌وگوی پوشا ─────
+    //
+    // گفت‌وگوی showModal در «لایه بالا»ی مرورگر نقاشی می‌شود؛ فهرستی که در body
+    // باز شود زیر آن پنهان می‌ماند. این بررسی، همان حالت را می‌سنجد.
+    await page.getByRole('button', { name: 'نوع کالا' }).first().click();
+    await page.getByRole('combobox', { name: 'نوع کالا', exact: true }).click();
+    await expect(page.getByRole('listbox', { name: 'نوع کالا' })).toBeVisible();
+    // یک Escape فهرست را می‌بندد و دومی گفت‌وگو را — فهرست باز نباید Escape را به
+    // گفت‌وگو بدهد، وگرنه کاربر با یک کلید هر دو را از دست می‌دهد.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('listbox', { name: 'نوع کالا' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('combobox', { name: 'نوع کالا', exact: true })).toHaveCount(0);
 
     // ───── خروجی Excel: فایل واقعی دانلود می‌شود ─────
     const download = page.waitForEvent('download');

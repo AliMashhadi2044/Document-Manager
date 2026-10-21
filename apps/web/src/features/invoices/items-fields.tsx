@@ -166,8 +166,8 @@ export function ItemsFields({
                   <Select
                     label="واحد"
                     value={item.unitId}
-                    onChange={(event) =>
-                      update(draft, onChange, index, { unitId: event.target.value })
+                    onChange={(nextValue) =>
+                      update(draft, onChange, index, { unitId: nextValue })
                     }
                     options={units.map((unit) => ({ value: unit.id, label: unit.title }))}
                     placeholder="—"

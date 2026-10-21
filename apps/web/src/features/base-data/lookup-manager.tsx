@@ -9,8 +9,10 @@ import {
   useDeleteLookup,
   useLookupList,
   useLookupResources,
+  useReorderLookup,
   useUpdateLookup,
   type LookupItem,
+  type LookupListParams,
 } from './base-data.api';
 
 /**
@@ -32,14 +34,32 @@ export function LookupManager(): JSX.Element {
 
   const activeResource = resource || resources?.[0]?.key || '';
 
-  const list = useLookupList({
+  const listParams: LookupListParams = {
     resource: activeResource,
     page,
     search,
     isActive: onlyActive ? 'true' : undefined,
     sortBy,
     sortDir,
-  });
+  };
+
+  const list = useLookupList(listParams);
+  const reorder = useReorderLookup(activeResource, listParams);
+
+  /**
+   * جابه‌جایی فقط وقتی معنا دارد که آنچه دیده می‌شود همان ترتیبِ ذخیره‌شده باشد.
+   *
+   * با مرتب‌سازی روی ستونی دیگر یا فیلتر جست‌وجو، ردیف‌های بینابینی از قلم می‌افتند و
+   * «ببر بالای این یکی» دیگر معنای روشنی ندارد — پس دستگیره خاموش می‌شود و دلیلش گفته می‌شود.
+   */
+  const reorderBlockedReason =
+    search !== ''
+      ? 'برای جابه‌جایی ترتیب، جست‌وجو را خالی کنید.'
+      : sortBy !== undefined && sortBy !== 'sortOrder'
+        ? 'برای جابه‌جایی ترتیب، مرتب‌سازی را روی ستون «ترتیب» بگذارید.'
+        : sortDir === 'desc'
+          ? 'برای جابه‌جایی ترتیب، مرتب‌سازی صعودی لازم است.'
+          : undefined;
 
   const create = useCreateLookup(activeResource);
   const update = useUpdateLookup(activeResource);
@@ -226,6 +246,13 @@ export function LookupManager(): JSX.Element {
             : undefined
         }
         onPageChange={setPage}
+        onReorder={(ids) => {
+          setMessage(null);
+          reorder.mutate(ids, {
+            onError: report,
+          });
+        }}
+        reorderBlockedReason={reorderBlockedReason}
         emptyTitle="موردی ثبت نشده است"
         emptyDescription="با فرم بالا اولین مورد را اضافه کنید."
         toolbar={

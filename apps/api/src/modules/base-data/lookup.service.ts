@@ -25,6 +25,13 @@ export const lookupInputSchema = z.object({
 
 export type LookupInput = z.infer<typeof lookupInputSchema>;
 
+export const reorderSchema = z.object({
+  /** شناسهٔ ردیف‌های دیده‌شده، به ترتیب تازه. */
+  ids: z.array(z.string().uuid()).min(2).max(500),
+});
+
+export type ReorderInput = z.infer<typeof reorderSchema>;
+
 export interface LookupRecord {
   id: string;
   title: string;
@@ -132,6 +139,68 @@ export class LookupService {
     });
 
     return updated;
+  }
+
+  /**
+   * جابه‌جایی ترتیب نمایش.
+   *
+   * کلاینت فقط صفحهٔ دیده‌شده را می‌شناسد، پس سرور ترتیب تازه را **در جایگاه‌های
+   * همان ردیف‌ها** می‌نشاند: جایگاه‌هایی که این شناسه‌ها در فهرست کامل اشغال کرده‌اند ثابت
+   * می‌مانند و فقط محتوایشان جابه‌جا می‌شود. بدون این، یک جابه‌جایی در صفحهٔ دوم، ردیف‌های
+   * صفحهٔ اول را هم به‌هم می‌ریخت.
+   *
+   * شماره‌گذاری دوباره‌ی کامل عمدی است: مقدار پیش‌فرض `sortOrder` برای همه صفر است و
+   * بدون شماره‌گذاری، هیچ ترتیبی قابل ذخیره نیست.
+   */
+  async reorder(
+    resource: LookupResource,
+    ids: readonly string[],
+    actorId: string,
+  ): Promise<void> {
+    const delegate = this.delegate(resource);
+
+    const all = await delegate.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+    });
+
+    const byId = new Map(all.map((record) => [record.id, record]));
+    const moving = ids.filter((id, index) => byId.has(id) && ids.indexOf(id) === index);
+    if (moving.length < 2) {
+      throw AppError.validation('ترتیب تازه باید دست‌کم دو مورد معتبر داشته باشد');
+    }
+
+    const movingSet = new Set(moving);
+    const slots = all.map((record, index) => ({ record, index })).filter((entry) => movingSet.has(entry.record.id));
+    if (slots.length !== moving.length) {
+      throw AppError.validation('برخی از موارد این ترتیب، در این منبع نیستند');
+    }
+
+    const next = [...all];
+    slots.forEach((slot, position) => {
+      next[slot.index] = byId.get(moving[position] as string) as LookupRecord;
+    });
+
+    const changed = next
+      .map((record, index) => ({ id: record.id, sortOrder: index }))
+      .filter((entry, index) => (next[index] as LookupRecord).sortOrder !== entry.sortOrder);
+
+    if (changed.length === 0) return;
+
+    await this.prisma.$transaction(
+      changed.map((entry) =>
+        (delegate as unknown as {
+          update(args: unknown): Promise<LookupRecord>;
+        }).update({ where: { id: entry.id }, data: { sortOrder: entry.sortOrder } }),
+      ) as never,
+    );
+
+    await this.audit.record({
+      actorId,
+      action: 'BASE_DATA_REORDER',
+      entityType: LOOKUP_RESOURCES[resource].model,
+      entityId: resource,
+      after: { order: next.map((record) => record.id) },
+    });
   }
 
   /**

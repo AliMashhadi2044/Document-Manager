@@ -44,7 +44,7 @@ export function JalaliMonthPicker({
         disabled={disabled}
         placeholder={null}
         value={String(year)}
-        onChange={(event) => onChange({ year: Number(event.target.value), month })}
+        onChange={(nextValue) => onChange({ year: Number(nextValue), month })}
         options={years.map((item) => ({
           value: String(item),
           label: toPersianDigits(String(item)),
@@ -57,7 +57,7 @@ export function JalaliMonthPicker({
         disabled={disabled}
         placeholder={null}
         value={String(month)}
-        onChange={(event) => onChange({ year, month: Number(event.target.value) })}
+        onChange={(nextValue) => onChange({ year, month: Number(nextValue) })}
         options={JALALI_MONTH_NAMES.map((name, index) => ({
           value: String(index + 1),
           label: name,

@@ -88,10 +88,10 @@ export function FilterBuilder({
                   label="فیلد"
                   placeholder="انتخاب کنید…"
                   value={condition.field}
-                  onChange={(event) => {
-                    const next = fields.find((item) => item.key === event.target.value);
+                  onChange={(nextValue) => {
+                    const next = fields.find((item) => item.key === nextValue);
                     setCondition(index, {
-                      field: event.target.value,
+                      field: nextValue,
                       // عملگر با تغییر فیلد بازنشانی می‌شود: عملگر قبلی می‌تواند با
                       // نوع فیلد تازه نخواند و سرور همان را رد می‌کند.
                       op: next?.operators[0] ?? 'eq',
@@ -108,10 +108,10 @@ export function FilterBuilder({
                   placeholder={null}
                   disabled={field === undefined}
                   value={condition.op}
-                  onChange={(event) =>
+                  onChange={(nextValue) =>
                     setCondition(index, {
                       ...condition,
-                      op: event.target.value as FilterCondition['op'],
+                      op: nextValue as FilterCondition['op'],
                       values: [],
                     })
                   }
@@ -337,7 +337,7 @@ function SingleValueInput({
         label={label}
         placeholder="انتخاب کنید…"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(nextValue) => onChange(nextValue)}
         options={field.enumValues.map((option) => ({
           value: option.value,
           label: option.label,

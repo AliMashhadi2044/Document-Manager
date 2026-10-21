@@ -28,8 +28,10 @@ export class NotificationsController {
   async list(
     @Query(new ZodBody(listQuerySchema)) query: ReturnType<typeof listQuerySchema.parse>,
     @CurrentUser() user: AuthenticatedUser,
+    @Query('unread') unread?: string,
   ) {
-    return this.notifications.list(query, user);
+    // هر چیزی جز 'true' یعنی همه اعلان‌ها؛ ورودی ناشناخته خطا نمی‌دهد.
+    return this.notifications.list(query, user, unread === 'true');
   }
 
   @RequirePermission('document:read')

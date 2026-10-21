@@ -8,12 +8,14 @@ import { useLogout, type CurrentUser } from '../features/auth/auth.api';
 import { LookupManager } from '../features/base-data/lookup-manager';
 import { ChaptersView } from '../features/base-data/chapters-view';
 import { VendorsPage } from '../features/vendors/vendors-page';
+import { BuyersPage } from '../features/buyers/buyers-page';
 import { DocumentsPage } from '../features/documents/documents-page';
 import { ArchivePage } from '../features/archive/archive-page';
 import { ReportTemplatesPage } from '../features/report-designer/templates-page';
 import { ReportsPage } from '../features/analytics/reports-page';
 import { DashboardPage } from '../features/analytics/dashboard-page';
 import { NotificationBell } from '../features/notifications/notification-bell';
+import { NotificationsPage } from '../features/notifications/notifications-page';
 import { OrganizationMark } from '../features/organization/organization-mark';
 import { AppearanceMenu } from './appearance-menu';
 import { ProjectOverview } from './project-overview';
@@ -27,7 +29,9 @@ type SectionKey =
   | 'overview'
   | 'lookups'
   | 'chapters'
-  | 'vendors';
+  | 'buyers'
+  | 'vendors'
+  | 'notifications';
 
 interface Section {
   readonly key: SectionKey;
@@ -67,6 +71,13 @@ const GROUPS: readonly SectionGroup[] = [
         titleFa: 'اسناد',
         icon: 'documents',
         description: 'ایجاد، ویرایش و ثبت نهایی اسناد و فاکتورها',
+        permission: 'document:read',
+      },
+      {
+        key: 'notifications',
+        titleFa: 'اعلان‌ها',
+        icon: 'bell',
+        description: 'همهٔ اعلان‌های شما با جزئیات، نوع و سند مربوط',
         permission: 'document:read',
       },
       {
@@ -111,8 +122,15 @@ const GROUPS: readonly SectionGroup[] = [
         key: 'chapters',
         titleFa: 'فصل‌ها و انواع فاکتور',
         icon: 'layers',
-        description: 'اتصال فصل بودجه به نوع فاکتور مجاز',
+        description: 'افزودن و اصلاح فصل بودجه و اتصالش به انواع فاکتور مجاز',
         permission: 'base_data:read',
+      },
+      {
+        key: 'buyers',
+        titleFa: 'مجموعه‌های خریدار',
+        icon: 'users',
+        description: 'طرف خریدارِ سند، شناسه‌های هویتی و مجموعه پیش‌فرض',
+        permission: 'buyer:read',
       },
       {
         key: 'vendors',
@@ -316,6 +334,7 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
                   setDocumentFromNotification(documentId);
                   go('documents');
                 }}
+                onOpenAll={() => go('notifications')}
               />
               <AppearanceMenu canManageBranding={user.permissions.includes('base_data:write')} />
               <Button
@@ -369,6 +388,15 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
             {section === 'overview' ? <ProjectOverview user={user} /> : null}
             {section === 'lookups' ? <LookupManager /> : null}
             {section === 'chapters' ? <ChaptersView /> : null}
+            {section === 'notifications' ? (
+              <NotificationsPage
+                onOpenDocument={(documentId) => {
+                  setDocumentFromNotification(documentId);
+                  go('documents');
+                }}
+              />
+            ) : null}
+            {section === 'buyers' ? <BuyersPage /> : null}
             {section === 'vendors' ? <VendorsPage /> : null}
           </div>
         </main>

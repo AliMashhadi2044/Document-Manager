@@ -10,6 +10,9 @@ export interface OrganizationDto {
   readonly phone: string | null;
   readonly fax: string | null;
   readonly logoPath: string | null;
+  /** سال‌های پیش‌فرض فرم ایجاد سند؛ `null` یعنی تنظیم نشده. */
+  readonly defaultFiscalYear: number | null;
+  readonly defaultJalaliYear: number | null;
 }
 
 interface BootstrapDto {
@@ -59,6 +62,21 @@ export function useUploadLogo() {
         body,
       });
     },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: organizationKeys.bootstrap });
+    },
+  });
+}
+
+/** ذخیرهٔ سال‌های پیش‌فرض سازمان. */
+export function useUpdateOrganization() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      defaultFiscalYear?: number | null;
+      defaultJalaliYear?: number | null;
+    }) => apiFetch<OrganizationDto>('/base-data/organization', { method: 'PATCH', json: input }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: organizationKeys.bootstrap });
     },

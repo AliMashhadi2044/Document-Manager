@@ -279,6 +279,45 @@ export function DonutChart({
  *
  * خط با انیمیشن کشیده می‌شود (`--animate-draw`) و نقطه‌های داده قابل hover هستند.
  */
+/**
+ * مسیر نرم از میان چند نقطه — Catmull–Rom تبدیل‌شده به منحنی بزیه مکعبی.
+ *
+ * چرا نه خط شکسته: روند ماهانه یک کمیت پیوسته است؛ زاویه‌های تیز در هر نقطه،
+ * شکستی را نشان می‌دهند که در داده نیست.
+ *
+ * مهار عمودی عمدی است: منحنی بدون مهار، بین دو نقطه از خط مبنا پایین‌تر می‌رود و
+ * مقداری منفی را نشان می‌دهد که وجود ندارد — در یک سامانه مالی، اطلاعات غلط.
+ */
+function smoothPath(
+  points: readonly { x: number; y: number }[],
+  topLimit: number,
+  bottomLimit: number,
+): string {
+  const first = points[0];
+  if (!first) return '';
+
+  const clamp = (value: number): number => Math.min(bottomLimit, Math.max(topLimit, value));
+  let path = `M ${first.x.toFixed(2)} ${first.y.toFixed(2)}`;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    if (!current || !next) break;
+
+    const previous = points[index - 1] ?? current;
+    const after = points[index + 2] ?? next;
+
+    const c1x = current.x + (next.x - previous.x) / 6;
+    const c1y = clamp(current.y + (next.y - previous.y) / 6);
+    const c2x = next.x - (after.x - current.x) / 6;
+    const c2y = clamp(next.y - (after.y - current.y) / 6);
+
+    path += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${next.x.toFixed(2)} ${next.y.toFixed(2)}`;
+  }
+
+  return path;
+}
+
 export function AreaChart({
   data,
   title,
@@ -320,53 +359,65 @@ export function AreaChart({
     };
   });
 
-  const line = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
-  const area = `${padding},${height - padding} ${line} ${width - padding},${height - padding}`;
+  const curve = smoothPath(points, padding, height - padding);
+  const baseline = height - padding;
+  const last = points[points.length - 1];
+  const area = `${curve} L ${(last?.x ?? width - padding).toFixed(2)} ${baseline} L ${padding} ${baseline} Z`;
 
   return (
     <div className={cn('w-full', className)}>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-44 w-full"
-        role="img"
-        aria-label={title}
-        preserveAspectRatio="none"
-      >
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
+      {/*
+        نقطه‌ها عنصر HTML اند، نه `circle` درون SVG.
 
-        <polygon points={area} fill={`url(#${gradientId})`} />
-        <polyline
-          points={line}
-          fill="none"
-          stroke="var(--color-chart-1)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-          style={{ strokeDasharray: 2000, ['--draw-length' as string]: 2000 }}
-          className="animate-[var(--animate-draw)]"
-        />
+        این SVG با `preserveAspectRatio="none"` کشیده می‌شود تا عرض کارت را پر کند؛
+        کشیدگی افقی هر دایره‌ای را به بیضی تبدیل می‌کند. خط و سطح از کشیدگی آسیبی
+        نمی‌بینند (ضخامت هم با `non-scaling-stroke` ثابت است)، پس فقط نقطه‌ها بیرون
+        گذاشته شدند و با درصد جایگذاری می‌شوند.
+      */}
+      <div className="relative">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-44 w-full"
+          role="img"
+          aria-label={title}
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
 
-        {points.map((point) => (
-          <circle
-            key={point.item.label}
-            cx={point.x}
-            cy={point.y}
-            r={active === point.index ? 5 : 3}
-            fill="var(--color-card)"
+          <path d={area} fill={`url(#${gradientId})`} />
+          <path
+            d={curve}
+            fill="none"
             stroke="var(--color-chart-1)"
             strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
+            style={{ strokeDasharray: 2000, ['--draw-length' as string]: 2000 }}
+            className="animate-[var(--animate-draw)]"
+          />
+        </svg>
+
+        {points.map((point) => (
+          <span
+            key={point.item.label}
+            aria-hidden="true"
             onMouseEnter={() => setActive(point.index)}
             onMouseLeave={() => setActive(null)}
+            style={{ left: `${(point.x / width) * 100}%`, top: `${(point.y / height) * 100}%` }}
+            className={cn(
+              'absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-card',
+              'border-[var(--color-chart-1)] transition-all duration-150',
+              active === point.index ? 'size-3.5 shadow-[var(--shadow-lift)]' : 'size-2.5',
+            )}
           />
         ))}
-      </svg>
+      </div>
 
       <div className="mt-1 flex">
         {data.map((item, index) => (
@@ -500,9 +551,10 @@ export function Sparkline({
   const last = points[points.length - 1];
 
   return (
+    <div className={cn('relative', className)}>
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      className={cn('h-8 w-full', className)}
+      className="h-8 w-full"
       role="img"
       aria-label={title}
       preserveAspectRatio="none"
@@ -523,10 +575,21 @@ export function Sparkline({
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
-      {last ? (
-        <circle cx={last.x} cy={last.y} r="2.5" fill={tone} vectorEffect="non-scaling-stroke" />
-      ) : null}
     </svg>
+
+      {/* نقطه پایانی خارج از SVG کشیده‌شده، تا دایره بماند و بیضی نشود. */}
+      {last ? (
+        <span
+          aria-hidden="true"
+          style={{
+            left: `${(last.x / width) * 100}%`,
+            top: `${(last.y / height) * 100}%`,
+            background: tone,
+          }}
+          className="absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+        />
+      ) : null}
+    </div>
   );
 }
 

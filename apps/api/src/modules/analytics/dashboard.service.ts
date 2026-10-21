@@ -5,6 +5,9 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
 import { DocumentAccessService } from '../documents/document-access.service';
 
+/** مبنای سال در فیلتر داشبورد. */
+export type YearBasis = 'fiscal' | 'jalali';
+
 /**
  * داشبورد — کوئری‌های تجمیعی، نه شمردن ردیف‌های خوانده‌شده.
  *
@@ -25,9 +28,19 @@ export class DashboardService {
     private readonly access: DocumentAccessService,
   ) {}
 
-  async summary(user: AuthenticatedUser, fiscalYear?: number) {
+  /**
+   * خلاصه داشبورد، بر اساس سال مالی یا سال شمسی.
+   *
+   * این دو یکی نیستند: سند هم `fiscal_year` دارد (سال بودجه‌ای که سند به آن نسبت داده
+   * می‌شود) و هم `jalali_year` (سال شمسیِ ثبت). سندی که اسفند ثبت شده ولی به سال مالی
+   * بعد تعلق دارد، در دو نما در دو جای متفاوت دیده می‌شود — و هر دو درست‌اند.
+   */
+  async summary(user: AuthenticatedUser, year?: number, basis: YearBasis = 'fiscal') {
     const scope = this.access.scope(user);
-    const where = fiscalYear === undefined ? scope : { ...scope, fiscalYear };
+    const where =
+      year === undefined
+        ? scope
+        : { ...scope, ...(basis === 'jalali' ? { jalaliYear: year } : { fiscalYear: year }) };
 
     const [
       documentCount,
@@ -108,7 +121,10 @@ export class DashboardService {
     const nameById = new Map(vendorNames.map((vendor) => [vendor.id, vendor.name]));
 
     return {
-      fiscalYear: fiscalYear ?? null,
+      basis,
+      year: year ?? null,
+      fiscalYear: basis === 'fiscal' ? (year ?? null) : null,
+      jalaliYear: basis === 'jalali' ? (year ?? null) : null,
       documentCount,
       invoiceCount,
       openFeedbackCount: openFeedbacks,
@@ -143,7 +159,7 @@ export class DashboardService {
         total: (row._sum.totalAmount ?? 0n).toString(),
         tax: (row._sum.taxAmount ?? 0n).toString(),
       })),
-      byMonth: await this.monthlySeries(where, fiscalYear ?? (await this.latestFiscalYear(user))),
+      byMonth: await this.monthlySeries(where, year ?? (await this.latestYear(user, basis))),
     };
   }
 
@@ -190,19 +206,37 @@ export class DashboardService {
     }));
   }
 
-  /** تازه‌ترین سال مالی در دامنه کاربر — مبنای روند ماهانه وقتی سالی انتخاب نشده. */
-  private async latestFiscalYear(user: AuthenticatedUser): Promise<number | null> {
-    const years = await this.fiscalYears(user);
-    return years[0] ?? null;
+  /** تازه‌ترین سال در دامنه کاربر — مبنای روند ماهانه وقتی سالی انتخاب نشده. */
+  private async latestYear(user: AuthenticatedUser, basis: YearBasis): Promise<number | null> {
+    const years = await this.years(user);
+    return (basis === 'jalali' ? years.jalali[0] : years.fiscal[0]) ?? null;
   }
 
-  /** سال‌های مالی موجود در دامنه دسترسی کاربر — برای فیلتر داشبورد. */
-  async fiscalYears(user: AuthenticatedUser): Promise<number[]> {
-    const rows = await this.prisma.financialDocument.groupBy({
-      by: ['fiscalYear'],
-      where: this.access.scope(user),
-      orderBy: { fiscalYear: 'desc' },
-    });
-    return rows.map((row) => row.fiscalYear);
+  /**
+   * سال‌های موجود در دامنه دسترسی کاربر، برای هر دو مبنا.
+   *
+   * هر دو در یک پاسخ می‌آیند تا عوض کردن مبنا در رابط، فهرست سال‌ها را خالی نکند و
+   * منتظر یک رفت و برگشت تازه نماند.
+   */
+  async years(user: AuthenticatedUser): Promise<{ fiscal: number[]; jalali: number[] }> {
+    const scope = this.access.scope(user);
+
+    const [fiscal, jalali] = await Promise.all([
+      this.prisma.financialDocument.groupBy({
+        by: ['fiscalYear'],
+        where: scope,
+        orderBy: { fiscalYear: 'desc' },
+      }),
+      this.prisma.financialDocument.groupBy({
+        by: ['jalaliYear'],
+        where: scope,
+        orderBy: { jalaliYear: 'desc' },
+      }),
+    ]);
+
+    return {
+      fiscal: fiscal.map((row) => row.fiscalYear),
+      jalali: jalali.map((row) => row.jalaliYear),
+    };
   }
 }

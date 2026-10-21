@@ -47,8 +47,7 @@ export function DashboardHero({
             {toPersianDigits(String(today.year))}
           </h2>
           <p className="mt-1.5 max-w-prose text-xs leading-6 text-muted-foreground">
-            همه اعداد این صفحه در دامنه دسترسی شما و با کوئری تجمیعی سرور حساب شده‌اند —
-            هیچ عددی در مرورگر ساخته نمی‌شود.
+          اداره کل ، نوسازی ، توسعه و تجهیز مدارس استان قم
           </p>
         </div>
 

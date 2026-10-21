@@ -95,6 +95,65 @@ test.describe('دسترس‌پذیری', () => {
 });
 
 /**
+ * کنترل انتخاب، در حالت باز.
+ *
+ * بازرسی axe روی صفحهٔ بسته، درخت فهرست بازشده را **نمی‌بیند** — و دقیقاً همانجاست
+ * که نقش‌های ARIA خراب می‌شوند: `listbox` که فرزند غیرمجاز دارد، یا دکمه‌ای درون
+ * `option`. این آزمون هر دو حالت را می‌سنجد: انتخاب و مدیریت ترتیب.
+ */
+test.describe('کنترل انتخاب', () => {
+  const FIELD = 'وضعیت';
+
+  /** باز کردن فیلتر وضعیت در کارتابل بایگانی — سه گزینه ثابت و مستقل از داده. */
+  async function openFilter(page: Page): Promise<void> {
+    await gotoSection(page, 'بایگانی');
+    await page.getByRole('combobox', { name: FIELD, exact: true }).click();
+    await expect(page.getByRole('listbox', { name: FIELD })).toBeVisible();
+  }
+
+  test('فهرست باز، در هر دو حالت، تخطی ندارد', async ({ page }) => {
+    await login(page, 'admin');
+    await openFilter(page);
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: 'پین و ترتیب' }).click();
+    await expect(page.getByRole('button', { name: /^پین کردن / }).first()).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+  });
+
+  /**
+   * پین کردن، واقعاً گزینه را بالا می‌برد و پس از بارگذاری دوباره می‌ماند.
+   *
+   * ادعای «ذخیره می‌شود» بدون بارگذاری دوباره، چیزی را ثابت نمی‌کند.
+   */
+  test('گزینه پین‌شده بالا می‌آید و ماندگار است', async ({ page }) => {
+    await login(page, 'admin');
+    await openFilter(page);
+
+    // گزینه سوم انتخاب شده تا بالا آمدنش قابل تشخیص باشد (ردیف صفر «همه» است).
+    const list = page.getByRole('listbox', { name: FIELD });
+    const target = ((await list.getByRole('option').nth(3).textContent()) ?? '').trim();
+    expect(target, 'فیلتر وضعیت گزینه کافی ندارد').toBeTruthy();
+
+    await page.getByRole('button', { name: 'پین و ترتیب' }).click();
+    await page.getByRole('button', { name: `پین کردن ${target}` }).click();
+    await page.keyboard.press('Escape');
+
+    await page.reload();
+    await openFilter(page);
+
+    // گروه «پین‌شده» باید همان گزینه را داشته باشد — بالاتر از بقیه.
+    await expect(
+      page.getByRole('group', { name: 'پین‌شده' }).getByRole('option'),
+    ).toHaveText([target]);
+
+    // و بازنشانی، همه چیز را به حال اول برمی‌گرداند — وگرنه کاربر در چیدمانی گیر می‌افتد.
+    await page.getByRole('button', { name: 'بازنشانی' }).click();
+    await expect(page.getByRole('group', { name: 'پین‌شده' })).toHaveCount(0);
+  });
+});
+
+/**
  * تم تاریک، نسخه دوم همین صفحه‌ها نیست؛ توکن‌های رنگش جداگانه تعریف شده‌اند و
  * کنتراستش هم باید جداگانه سنجیده شود.
  */

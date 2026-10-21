@@ -1,9 +1,11 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   Res,
   UploadedFile,
@@ -13,6 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { FileValidationError, validateUpload } from '@dm/shared';
+import { z } from 'zod';
 
 import { AuditService } from '../../common/audit/audit.service';
 import { AppError } from '../../common/errors/app-error';
@@ -20,6 +23,24 @@ import { CurrentUser, RequirePermission } from '../../common/auth/auth.decorator
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../files/storage.service';
+import { ZodBody } from '../../common/validation/zod.pipe';
+
+/**
+ * سالِ شمسی معتبر.
+ *
+ * دامنه همان چیزی است که CHECK در پایگاه داده هم اجبار می‌کند؛ دو جا نوشتنش عمدی
+ * است: اعتبارسنجی پیام فارسی می‌دهد و CHECK ضمانت نهایی است.
+ */
+const jalaliYear = z.coerce
+  .number()
+  .int()
+  .min(1300, 'سال معتبر نیست')
+  .max(1500, 'سال معتبر نیست');
+
+const settingsSchema = z.object({
+  defaultFiscalYear: jalaliYear.nullable().optional(),
+  defaultJalaliYear: jalaliYear.nullable().optional(),
+});
 
 interface UploadedLogo {
   readonly originalname: string;
@@ -53,6 +74,41 @@ export class OrganizationController {
     private readonly storage: StorageService,
     private readonly audit: AuditService,
   ) {}
+
+  /**
+   * تنظیمات سازمان — فعلاً سال‌های پیش‌فرض.
+   *
+   * خواندنشان در `bootstrap` هم هست؛ این مسیر فقط برای نوشتن است.
+   */
+  @RequirePermission('base_data:write')
+  @Patch()
+  @ApiOperation({ summary: 'ذخیرهٔ سال مالی و سال شمسی پیش‌فرض' })
+  async updateSettings(
+    @Body(new ZodBody(settingsSchema)) body: z.infer<typeof settingsSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const before = await this.prisma.organizationSettings.findUnique({ where: { id: 1 } });
+    if (!before) throw AppError.notFound('تنظیمات سازمان ثبت نشده است');
+
+    // فقط کلیدهایی که واقعاً آمده‌اند نوشته می‌شوند؛ `undefined` در شیء داده پریزما
+    // جای `null` را نمی‌گیرد و با exactOptionalPropertyTypes اصلاً تایپ نمی‌شود.
+    const data: { defaultFiscalYear?: number | null; defaultJalaliYear?: number | null } = {};
+    if (body.defaultFiscalYear !== undefined) data.defaultFiscalYear = body.defaultFiscalYear;
+    if (body.defaultJalaliYear !== undefined) data.defaultJalaliYear = body.defaultJalaliYear;
+
+    const updated = await this.prisma.organizationSettings.update({ where: { id: 1 }, data });
+
+    await this.audit.record({
+      actorId: user.id,
+      action: 'BASE_DATA_UPDATE',
+      entityType: 'organizationSettings',
+      entityId: '1',
+      before,
+      after: updated,
+    });
+
+    return updated;
+  }
 
   @RequirePermission('base_data:read')
   @Get('logo')

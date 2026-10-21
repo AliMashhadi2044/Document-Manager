@@ -10,7 +10,6 @@ import {
 import { Button } from '../../shared/ui/button';
 import { MoneyInput } from '../../shared/ui/money-input';
 import { Select } from '../../shared/ui/select';
-import { SearchableSelect } from '../../shared/ui/searchable-select';
 import { JalaliMonthPicker } from '../../shared/ui/jalali-month-picker';
 import { formatMoney, toPersianDigits } from '../../shared/format/money';
 import { useVehicleSearch } from './invoices.api';
@@ -67,7 +66,6 @@ export function FuelFields({
   vehicleTypes: ReadonlyArray<{ id: string; title: string }>;
   fuelTypes: ReadonlyArray<{ id: string; title: string }>;
 }): JSX.Element {
-  const [typeSearch, setTypeSearch] = useState('');
   const [plateSearch, setPlateSearch] = useState('');
   const vehicles = useVehicleSearch(draft.vehicleTypeId, plateSearch);
 
@@ -84,21 +82,16 @@ export function FuelFields({
 
   const dayProblems = collectDayProblems(draft);
 
-  const filteredTypes = typeSearch
-    ? vehicleTypes.filter((type) => type.title.includes(typeSearch))
-    : vehicleTypes;
-
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-3">
         {/* فهرست انواع خودرو کوتاه است و در bootstrap آمده؛ جست‌وجویش محلی است. */}
-        <SearchableSelect
+        <Select
           label="نوع خودرو"
           required
-          search={typeSearch}
-          onSearchChange={setTypeSearch}
+          prefsKey="vehicle-type"
           value={draft.vehicleTypeId}
-          options={filteredTypes.map((type) => ({ value: type.id, label: type.title }))}
+          options={vehicleTypes.map((type) => ({ value: type.id, label: type.title }))}
           onChange={(vehicleTypeId) => {
             // تغییر نوع خودرو، پلاک انتخاب‌شده را بی‌اعتبار می‌کند.
             setPlateSearch('');
@@ -107,14 +100,17 @@ export function FuelFields({
           hint="ابتدا نوع خودرو، سپس پلاک‌های همان نوع"
         />
 
-        <SearchableSelect
+        <Select
           label="پلاک"
           required
           disabled={draft.vehicleTypeId === ''}
-          search={plateSearch}
-          onSearchChange={setPlateSearch}
-          loading={vehicles.isFetching}
-          total={vehicles.data?.total}
+          prefsKey="vehicle-plate"
+          remoteSearch={{
+            search: plateSearch,
+            onSearchChange: setPlateSearch,
+            loading: vehicles.isFetching,
+            total: vehicles.data?.total,
+          }}
           value={draft.vehicleId}
           options={(vehicles.data?.items ?? []).map((vehicle) => ({
             value: vehicle.id,
@@ -133,7 +129,7 @@ export function FuelFields({
           label="نوع سوخت"
           required
           value={draft.fuelTypeId}
-          onChange={(event) => onChange({ ...draft, fuelTypeId: event.target.value })}
+          onChange={(nextValue) => onChange({ ...draft, fuelTypeId: nextValue })}
           options={fuelTypes.map((type) => ({ value: type.id, label: type.title }))}
         />
       </div>
@@ -175,9 +171,9 @@ export function FuelFields({
                   <Select
                     aria-label={`روز ردیف ${index + 1}`}
                     value={entry.day === null ? '' : String(entry.day)}
-                    onChange={(event) =>
+                    onChange={(nextValue) =>
                       updateEntry(draft, onChange, index, {
-                        day: event.target.value === '' ? null : Number(event.target.value),
+                        day: nextValue === '' ? null : Number(nextValue),
                       })
                     }
                     // گزینه‌های روز از طول **همان ماه** می‌آیند، پس روز ناموجود حتی

@@ -25,8 +25,25 @@ export interface NotificationRow {
 
 export const notificationKeys = {
   list: ['notifications', 'list'] as const,
+  paged: (page: number, unreadOnly: boolean) =>
+    ['notifications', 'list', page, unreadOnly] as const,
   unread: ['notifications', 'unread'] as const,
 };
+
+/** فهرست کامل با صفحه‌بندی — برای صفحهٔ اعلان‌ها. */
+export function useNotificationList(page: number, unreadOnly: boolean) {
+  const query = new URLSearchParams({ page: String(page), pageSize: '20' });
+  if (unreadOnly) query.set('unread', 'true');
+
+  return useQuery({
+    queryKey: notificationKeys.paged(page, unreadOnly),
+    queryFn: () =>
+      apiFetch<PageResult<NotificationRow> & { unread: number }>(
+        `/notifications?${query.toString()}`,
+      ),
+    placeholderData: (previous) => previous,
+  });
+}
 
 export function useNotifications() {
   return useQuery({

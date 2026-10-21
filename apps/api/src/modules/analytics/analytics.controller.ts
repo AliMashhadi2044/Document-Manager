@@ -209,19 +209,19 @@ export class AnalyticsController {
   @ApiOperation({ summary: 'خلاصه تجمیعی اسناد و مبالغ در دامنه دسترسی کاربر' })
   async dashboardSummary(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('fiscalYear') fiscalYear?: string,
+    @Query('year') year?: string,
+    @Query('basis') basis?: string,
   ) {
-    const parsed = fiscalYear === undefined ? undefined : Number(fiscalYear);
-    if (parsed !== undefined && !Number.isInteger(parsed)) {
-      return this.dashboard.summary(user);
-    }
-    return this.dashboard.summary(user, parsed);
+    const parsed = year === undefined || year === '' ? undefined : Number(year);
+    const safeYear = parsed !== undefined && Number.isInteger(parsed) ? parsed : undefined;
+    // هر چیزی جز 'jalali' به مبنای پیش‌فرض می‌افتد؛ ورودی ناشناخته خطا نمی‌دهد.
+    return this.dashboard.summary(user, safeYear, basis === 'jalali' ? 'jalali' : 'fiscal');
   }
 
   @RequirePermission('report:run')
-  @Get('dashboard/fiscal-years')
-  @ApiOperation({ summary: 'سال‌های مالی موجود در دامنه دسترسی کاربر' })
+  @Get('dashboard/years')
+  @ApiOperation({ summary: 'سال‌های مالی و شمسی موجود در دامنه دسترسی کاربر' })
   async dashboardYears(@CurrentUser() user: AuthenticatedUser) {
-    return this.dashboard.fiscalYears(user);
+    return this.dashboard.years(user);
   }
 }

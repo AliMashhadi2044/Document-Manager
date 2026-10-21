@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { Button } from '../../shared/ui/button';
 import { Icon } from '../../shared/ui/icon';
@@ -9,17 +10,8 @@ import {
   useMarkNotificationRead,
   useNotifications,
   useUnreadCount,
-  type NotificationKind,
 } from './notifications.api';
-
-const KIND_LABELS: Record<NotificationKind, string> = {
-  DOCUMENT_SENT_TO_ARCHIVE: 'ارجاع به بایگانی',
-  DOCUMENT_ARCHIVED: 'بایگانی نهایی',
-  DOCUMENT_NEEDS_REVISION: 'ارجاع برای اصلاح',
-  FEEDBACK_CREATED: 'بازخورد تازه',
-  FEEDBACK_REPLIED: 'پاسخ بازخورد',
-  FEEDBACK_RESOLVED: 'رسیدگی بازخورد',
-};
+import { KIND_LABELS } from './notification-kinds';
 
 /**
  * نشان اعلان‌ها در سربرگ.
@@ -31,8 +23,73 @@ const KIND_LABELS: Record<NotificationKind, string> = {
  * رفتن به سند مربوط، کار این نشان نیست: اعلان فقط خبر می‌دهد. پیمایش به سند در فاز
  * بعد با مسیر‌یابی واقعی (URL) اضافه می‌شود؛ تا آن وقت ادعای لینک‌دار بودن نمی‌کند.
  */
-export function NotificationBell({ onOpenDocument }: { onOpenDocument?: (documentId: string) => void }): JSX.Element {
+export function NotificationBell({
+  onOpenDocument,
+  onOpenAll,
+}: {
+  onOpenDocument?: (documentId: string) => void;
+  /** رفتن به صفحهٔ کامل اعلان‌ها. */
+  onOpenAll?: (() => void) | undefined;
+}): JSX.Element {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  /**
+   * مختصات پانل، گرفته‌شده از دکمه.
+   *
+   * پانل هم مثل پوشش در پورتال بدنه ساخته می‌شود. اگر در سربرگ بماند،
+   * `z-index` اش درون زمینهٔ چینشِ سربرگ محبوس می‌شود و پوششِ سطح بدنه رویش
+   * می‌افتد — یعنی کلیک روی دکمه‌های خود پانل هم به پوشش می‌خورد.
+   */
+  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const measure = (): void => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      /*
+       * پانل به لبهٔ دکمه چسبیده است، ولی باید **داخل پنجره** بماند.
+       *
+       * در چیدمان باریک، دکمهٔ اعلان نزدیک لبهٔ چپ است و چسباندن بی‌قید، پانل را
+       * از صفحه بیرون می‌برد — دکمه‌هایش دیده می‌شوند ولی قابل کلیک نیستند.
+       */
+      const width = Math.min(448, window.innerWidth * 0.9);
+      const edge = 8;
+      const preferred = window.innerWidth - rect.right;
+      const right = Math.min(Math.max(edge, preferred), Math.max(edge, window.innerWidth - width - edge));
+
+      setAnchor({ top: rect.bottom + 8, right });
+    };
+
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [open]);
+
+  /*
+   * بستن با Escape و برگشت فوکوس.
+   *
+   * بدون برگرداندن فوکوس، کاربر کیبورد پس از بستن، فوکوسش به ابتدای صفحه می‌پرد.
+   */
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open]);
   const unread = useUnreadCount();
   const notifications = useNotifications();
   const markRead = useMarkNotificationRead();
@@ -43,6 +100,7 @@ export function NotificationBell({ onOpenDocument }: { onOpenDocument?: (documen
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
@@ -74,11 +132,30 @@ export function NotificationBell({ onOpenDocument }: { onOpenDocument?: (documen
       </button>
 
       {open ? (
-        <div
-          role="dialog"
-          aria-label="اعلان‌ها"
-          className="absolute end-0 z-50 mt-2 w-[min(28rem,90vw)] rounded-xl border border-border bg-popover p-4 shadow-[var(--shadow-lift)] animate-[var(--animate-rise)]"
-        >
+        <>
+          {/*
+            پوشش پشت پاپاپ: هم تمرکز را روی فهرست می‌برد و هم همان عنصری است که
+            کلیک بیرون را می‌گیرد.
+
+            در پورتال ساخته می‌شود و نه در جای خود: سربرگ `backdrop-blur` دارد و هر عنصری
+            که فیلتر یا ترانسفورم داشته باشد، برای فرزندان `fixed` خود یک ظرف تازه می‌سازد —
+            پوششی که فقط سربرگ را می‌پوشاند، کلیک بیرون را نمی‌گیرد.
+          */}
+          {createPortal(
+            <>
+              <div
+                aria-hidden="true"
+                onClick={() => setOpen(false)}
+                className="fixed inset-0 z-[60] bg-foreground/20 backdrop-blur-[2px] animate-[var(--animate-fade-in)]"
+              />
+
+              <div
+                role="dialog"
+                aria-label="اعلان‌ها"
+                aria-modal="true"
+                style={{ position: 'fixed', top: anchor?.top ?? 0, right: anchor?.right ?? 0 }}
+                className="z-[61] w-[min(28rem,90vw)] rounded-xl border border-border bg-popover p-4 shadow-[var(--shadow-lift)] animate-[var(--animate-rise)]"
+              >
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold">اعلان‌ها</h3>
             <div className="flex gap-1">
@@ -90,6 +167,18 @@ export function NotificationBell({ onOpenDocument }: { onOpenDocument?: (documen
                   onClick={() => markAll.mutate()}
                 >
                   خواندن همه
+                </Button>
+              ) : null}
+              {onOpenAll ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setOpen(false);
+                    onOpenAll();
+                  }}
+                >
+                  همهٔ اعلان‌ها
                 </Button>
               ) : null}
               <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
@@ -159,7 +248,11 @@ export function NotificationBell({ onOpenDocument }: { onOpenDocument?: (documen
               </ul>
             )
           ) : null}
-        </div>
+              </div>
+            </>,
+            document.body,
+          )}
+        </>
       ) : null}
     </div>
   );

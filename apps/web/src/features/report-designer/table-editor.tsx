@@ -80,7 +80,7 @@ export function TableEditor({
           required
           placeholder="انتخاب کنید…"
           value={block.dataSource}
-          onChange={(event) => onChange({ ...block, dataSource: event.target.value })}
+          onChange={(nextValue) => onChange({ ...block, dataSource: nextValue })}
           options={collections.map((source) => ({ value: source.key, label: source.titleFa }))}
           hint="فهرست فقط منابعی را دارد که مجوز دیدنشان را دارید"
         />
@@ -242,29 +242,32 @@ export function TableEditor({
                   </span>
 
                   {totals?.enabled === true ? (
-                    <select
-                      aria-label={`تابع ردیف جمع برای ستون ${column.titleFa}`}
-                      className="h-7 rounded border border-border bg-background px-1 text-[11px]"
-                      value={totals.cells[column.key] ?? 'none'}
-                      onChange={(event) =>
-                        onChange({
-                          ...block,
-                          totalsRow: {
-                            ...totals,
-                            cells: {
-                              ...totals.cells,
-                              [column.key]: event.target.value as 'sum' | 'count' | 'none',
+                    <div className="w-28">
+                      <Select
+                        size="sm"
+                        prefsKey={null}
+                        placeholder={null}
+                        aria-label={`تابع ردیف جمع برای ستون ${column.titleFa}`}
+                        value={totals.cells[column.key] ?? 'none'}
+                        onChange={(nextValue) =>
+                          onChange({
+                            ...block,
+                            totalsRow: {
+                              ...totals,
+                              cells: {
+                                ...totals.cells,
+                                [column.key]: nextValue as 'sum' | 'count' | 'none',
+                              },
                             },
-                          },
-                        })
-                      }
-                    >
-                      <option value="none">بدون جمع</option>
-                      <option value="sum" disabled={!isNumeric}>
-                        جمع
-                      </option>
-                      <option value="count">تعداد</option>
-                    </select>
+                          })
+                        }
+                        options={[
+                          { value: 'none', label: 'بدون جمع' },
+                          { value: 'sum', label: 'جمع', disabled: !isNumeric },
+                          { value: 'count', label: 'تعداد' },
+                        ]}
+                      />
+                    </div>
                   ) : null}
 
                   <div className="flex items-center gap-0.5">
@@ -365,12 +368,12 @@ export function TableEditor({
                         label="واحد عرض"
                         placeholder={null}
                         value={column.width.unit}
-                        onChange={(event) =>
+                        onChange={(nextValue) =>
                           updateColumn(index, {
                             ...column,
                             width: {
-                              unit: event.target.value as 'mm' | 'percent' | 'auto',
-                              ...(event.target.value === 'auto'
+                              unit: nextValue as 'mm' | 'percent' | 'auto',
+                              ...(nextValue === 'auto'
                                 ? {}
                                 : { value: column.width.value ?? 20 }),
                             },
@@ -401,10 +404,10 @@ export function TableEditor({
                         label="چینش"
                         placeholder={null}
                         value={column.align}
-                        onChange={(event) =>
+                        onChange={(nextValue) =>
                           updateColumn(index, {
                             ...column,
-                            align: event.target.value as 'start' | 'center' | 'end',
+                            align: nextValue as 'start' | 'center' | 'end',
                           })
                         }
                         options={[
@@ -616,11 +619,11 @@ function SortEditor({
               label="بر اساس"
               placeholder="انتخاب کنید…"
               value={sort.path}
-              onChange={(event) =>
+              onChange={(nextValue) =>
                 onChange({
                   ...block,
                   sortBy: block.sortBy.map((item, position) =>
-                    position === index ? { ...item, path: event.target.value } : item,
+                    position === index ? { ...item, path: nextValue } : item,
                   ),
                 })
               }
@@ -632,12 +635,12 @@ function SortEditor({
               label="جهت"
               placeholder={null}
               value={sort.dir}
-              onChange={(event) =>
+              onChange={(nextValue) =>
                 onChange({
                   ...block,
                   sortBy: block.sortBy.map((item, position) =>
                     position === index
-                      ? { ...item, dir: event.target.value as 'asc' | 'desc' }
+                      ? { ...item, dir: nextValue as 'asc' | 'desc' }
                       : item,
                   ),
                 })

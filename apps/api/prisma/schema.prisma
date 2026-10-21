@@ -275,6 +275,11 @@ model OrganizationSettings {
   fax         String? @db.VarChar(30)
   logoPath    String? @map("logo_path") @db.VarChar(500)
 
+  /// سال مالی و سال شمسیِ پیش‌فرض برای فرم ایجاد سند.
+  /// دامنه‌شان با CHECK در migration محدود شده است.
+  defaultFiscalYear Int? @map("default_fiscal_year")
+  defaultJalaliYear Int? @map("default_jalali_year")
+
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   // تک‌ردیفی بودن در migration با CHECK تضمین می‌شود.
@@ -316,6 +321,10 @@ model BuyerEntity {
 
   isActive  Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
+
+  /// مجموعه پیش‌فرض — در فرم ایجاد سند از پیش انتخاب می‌شود.
+  /// یک ایندکس جزئی یکتا تضمین می‌کند حداکثر یک ردیف این علامت را دارد.
+  isDefault Boolean @default(false) @map("is_default")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

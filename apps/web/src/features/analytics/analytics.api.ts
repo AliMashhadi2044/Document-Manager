@@ -78,8 +78,14 @@ export interface ExportJobDto {
   readonly errorMessage: string | null;
 }
 
+/** مبنای سال در فیلتر داشبورد. */
+export type YearBasis = 'fiscal' | 'jalali';
+
 export interface DashboardDto {
+  readonly basis: YearBasis;
+  readonly year: number | null;
   readonly fiscalYear: number | null;
+  readonly jalaliYear: number | null;
   readonly documentCount: number;
   readonly invoiceCount: number;
   readonly openFeedbackCount: number;
@@ -122,8 +128,9 @@ export const analyticsKeys = {
     ['analytics', 'query', dataset, request] as const,
   views: (dataset: string) => ['analytics', 'views', dataset] as const,
   exports: ['analytics', 'exports'] as const,
-  dashboard: (fiscalYear: number | null) => ['analytics', 'dashboard', fiscalYear] as const,
-  fiscalYears: ['analytics', 'fiscal-years'] as const,
+  dashboard: (basis: YearBasis, year: number | null) =>
+    ['analytics', 'dashboard', basis, year] as const,
+  years: ['analytics', 'years'] as const,
 };
 
 export function useDatasets() {
@@ -242,20 +249,34 @@ export function useDeleteView(dataset: string) {
   });
 }
 
-export function useDashboard(fiscalYear: number | null) {
+/**
+ * خلاصه داشبورد.
+ *
+ * `placeholderData` عمدی است: با عوض کردن سال، داده قبلی سر جایش می‌ماند تا پاسخ
+ * تازه برسد. بدون آن، کل صفحه به اسکلت برمی‌گردد و کاربری که فقط یک فیلتر را
+ * عوض کرده، همه زمینه را از دست می‌دهد.
+ */
+export function useDashboard(basis: YearBasis, year: number | null) {
   return useQuery({
-    queryKey: analyticsKeys.dashboard(fiscalYear),
-    queryFn: () =>
-      apiFetch<DashboardDto>(
-        `/analytics/dashboard${fiscalYear === null ? '' : `?fiscalYear=${fiscalYear}`}`,
-      ),
+    queryKey: analyticsKeys.dashboard(basis, year),
+    queryFn: () => {
+      const query = new URLSearchParams({ basis });
+      if (year !== null) query.set('year', String(year));
+      return apiFetch<DashboardDto>(`/analytics/dashboard?${query.toString()}`);
+    },
+    placeholderData: (previous) => previous,
   });
 }
 
-export function useFiscalYears() {
+export interface DashboardYears {
+  readonly fiscal: readonly number[];
+  readonly jalali: readonly number[];
+}
+
+export function useDashboardYears() {
   return useQuery({
-    queryKey: analyticsKeys.fiscalYears,
-    queryFn: () => apiFetch<readonly number[]>('/analytics/dashboard/fiscal-years'),
+    queryKey: analyticsKeys.years,
+    queryFn: () => apiFetch<DashboardYears>('/analytics/dashboard/years'),
     staleTime: 5 * 60_000,
   });
 }

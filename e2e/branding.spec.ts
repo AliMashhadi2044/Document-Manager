@@ -20,9 +20,9 @@ test.describe('نشان سازمان', () => {
     await login(page, 'admin');
 
     await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
-    await page.getByRole('menuitemradio', { name: 'نشان سازمان' }).click();
+    await page.getByRole('menuitemradio', { name: 'تنظیمات سازمان' }).click();
 
-    const dialog = page.getByRole('dialog', { name: 'نشان سازمان' });
+    const dialog = page.getByRole('dialog', { name: 'تنظیمات سازمان' });
     await expect(dialog).toBeVisible();
 
     await page.locator('input[type="file"]').setInputFiles({
@@ -56,7 +56,7 @@ test.describe('نشان سازمان', () => {
     await login(page, 'admin');
 
     await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
-    await page.getByRole('menuitemradio', { name: 'نشان سازمان' }).click();
+    await page.getByRole('menuitemradio', { name: 'تنظیمات سازمان' }).click();
 
     // محتوای HTML با نام و نوع اعلام‌شده PNG — امضای فایل باید لو بدهد.
     await page.locator('input[type="file"]').setInputFiles({
@@ -65,7 +65,7 @@ test.describe('نشان سازمان', () => {
       buffer: Buffer.from('<html><script>alert(1)</script></html>'),
     });
 
-    const dialog = page.getByRole('dialog', { name: 'نشان سازمان' });
+    const dialog = page.getByRole('dialog', { name: 'تنظیمات سازمان' });
     await expect(dialog.getByRole('status')).toBeVisible();
     await expect(dialog.getByText('نشان سازمان به‌روز شد.')).toHaveCount(0);
   });
