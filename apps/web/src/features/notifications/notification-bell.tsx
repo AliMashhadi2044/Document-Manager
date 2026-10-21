@@ -153,7 +153,7 @@ export function NotificationBell({
                 role="dialog"
                 aria-label="اعلان‌ها"
                 aria-modal="true"
-                style={{ position: 'fixed', top: anchor?.top ?? 0, right: anchor?.right ?? 0 }}
+                style={{ position: 'fixed', top: anchor?.top ?? 0, right: anchor?.right ? anchor.right - 20 : 0  }}
                 className="z-[61] w-[min(28rem,90vw)] rounded-xl border border-border bg-popover p-4 shadow-[var(--shadow-lift)] animate-[var(--animate-rise)]"
               >
           <div className="flex items-center justify-between gap-3">
