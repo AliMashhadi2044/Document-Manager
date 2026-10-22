@@ -183,6 +183,8 @@ export interface CreateInvoicePayload {
     readonly pettyCashHolderId: string | null;
     readonly notes: string | null;
   } | null;
+  /** تأیید صریح ثبت با وجود هشدار پرداخت تکراری (فقط انشعابات). */
+  readonly acknowledgeDuplicate?: boolean;
 }
 
 export function useCreateInvoice(documentId: string) {
@@ -203,5 +205,41 @@ export function useDeleteInvoice() {
     mutationFn: (invoiceId: string) =>
       apiFetch<void>(`/documents/invoices/${invoiceId}`, { method: 'DELETE' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
+  });
+}
+
+export interface UtilityDuplicate {
+  readonly invoiceId: string;
+  readonly invoiceNumber: string | null;
+  readonly invoiceDateJalali: string;
+  readonly totalAmount: string;
+  readonly documentId: string;
+  readonly documentTitle: string;
+  readonly documentNumber: string | null;
+  readonly documentStatus: string;
+  readonly fiscalYear: number;
+  readonly schoolTitle: string;
+  readonly utilityTypeTitle: string;
+  readonly paymentMethodTitle: string | null;
+  readonly paymentIdentifier: string | null;
+  readonly billIdentifier: string | null;
+  readonly ibanSnapshot: string | null;
+  readonly createdByName: string | null;
+}
+
+/**
+ * پرداخت قبلی همین انشعاب برای همین مدرسه، در همین سال مالی.
+ *
+ * به‌محض انتخاب مدرسه و نوع انشعاب پرسیده می‌شود — نه موقع ثبت: هشداری که بعد از پر
+ * کردن کل فرم بیاید، کارِ از قبل انجام‌شده را باطل می‌کند.
+ */
+export function useUtilityDuplicate(documentId: string, schoolId: string, utilityTypeId: string) {
+  return useQuery({
+    queryKey: ['documents', documentId, 'utility-duplicate', schoolId, utilityTypeId],
+    queryFn: () =>
+      apiFetch<{ duplicate: UtilityDuplicate | null; message: string | null }>(
+        `/documents/${documentId}/utility-duplicate?schoolId=${schoolId}&utilityTypeId=${utilityTypeId}`,
+      ),
+    enabled: documentId !== '' && schoolId !== '' && utilityTypeId !== '',
   });
 }

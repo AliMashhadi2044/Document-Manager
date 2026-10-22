@@ -13,6 +13,7 @@ import { listQuerySchema } from '../../common/query/list-query';
 import { DocumentsService } from './documents.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { createInvoiceSchema } from '../invoices/invoice.schema';
+import { UtilityDuplicateService } from '../invoices/utility-duplicate.service';
 
 const stadSchema = z.object({
   // سقف ۵۰ نویسه طبق §۹ پرامپت.
@@ -42,6 +43,12 @@ const createDocumentSchema = z
     }
   });
 
+/** پارامترهای بررسی تکرار — هر دو الزامی، چون بدون هر کدام سؤال بی‌معناست. */
+const utilityDuplicateQuery = z.object({
+  schoolId: z.string().uuid(),
+  utilityTypeId: z.string().uuid(),
+});
+
 const reasonSchema = z.object({
   reason: z.string().trim().min(1, 'ثبت دلیل الزامی است').max(2000),
 });
@@ -52,6 +59,7 @@ export class DocumentsController {
   constructor(
     private readonly documents: DocumentsService,
     private readonly invoices: InvoicesService,
+    private readonly utilityDuplicates: UtilityDuplicateService,
   ) {}
 
   @RequirePermission('document:read')
@@ -161,6 +169,36 @@ export class DocumentsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.documents.sendBackForRevision(id, body.reason, user);
+  }
+
+  /**
+   * هشدار پرداخت تکراری انشعاب، **پیش از** پر کردن بقیهٔ فرم.
+   *
+   * چرا یک مسیر جدا و نه فقط خطای ۴۰۹ هنگام ثبت: کاربر باید همان لحظه‌ای که مدرسه و
+   * نوع انشعاب را انتخاب می‌کند بفهمد، نه بعد از وارد کردن مبلغ و روش پرداخت.
+   */
+  @RequirePermission('invoice:create')
+  @Get(':id/utility-duplicate')
+  @ApiOperation({ summary: 'بررسی پرداخت قبلی همین انشعاب برای همین مدرسه' })
+  async utilityDuplicate(
+    @Param('id') documentId: string,
+    @Query(new ZodBody(utilityDuplicateQuery)) query: z.infer<typeof utilityDuplicateQuery>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    // از همان مسیری خوانده می‌شود که دامنهٔ دسترسی را اعمال می‌کند: سند خارج از
+    // دامنهٔ کاربر ۴۰۴ می‌گیرد و سال مالی‌اش هم لو نمی‌رود.
+    const document = await this.documents.get(documentId, user);
+
+    const duplicate = await this.utilityDuplicates.find({
+      schoolId: query.schoolId,
+      utilityTypeId: query.utilityTypeId,
+      fiscalYear: document.fiscalYear,
+    });
+
+    return {
+      duplicate,
+      message: duplicate === null ? null : this.utilityDuplicates.describe(duplicate),
+    };
   }
 
   @RequirePermission('invoice:create')

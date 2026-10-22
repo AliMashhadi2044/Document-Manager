@@ -230,6 +230,8 @@ export function CreateInvoiceForm({
       notes: notes.trim() || null,
       details,
       payment: paymentToPayload(payment),
+      // فقط برای انشعابات معنا دارد؛ بقیه خانواده‌ها هیچ‌وقت تکراری اعلام نمی‌شوند.
+      acknowledgeDuplicate: kind === 'UTILITY' ? utilityDraft.acknowledgeDuplicate : false,
     };
 
     create.mutate(payload, {
@@ -387,6 +389,7 @@ export function CreateInvoiceForm({
                 onChange={setUtilityDraft}
                 utilityTypes={reference.utilityTypes}
                 policy={policy}
+                documentId={documentId}
               />
             ) : null}
 

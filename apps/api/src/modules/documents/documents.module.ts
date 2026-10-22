@@ -5,6 +5,7 @@ import { DocumentsController } from './documents.controller';
 import { DocumentsService } from './documents.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { InvoiceKindService } from '../invoices/invoice-kind.service';
+import { UtilityDuplicateService } from '../invoices/utility-duplicate.service';
 import { FinancialService } from '../financial/financial.service';
 import { DocumentAccessService } from './document-access.service';
 
@@ -14,6 +15,7 @@ import { DocumentAccessService } from './document-access.service';
     DocumentsService,
     InvoicesService,
     InvoiceKindService,
+    UtilityDuplicateService,
     FinancialService,
     DocumentAccessService,
     AuditService,

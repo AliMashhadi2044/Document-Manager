@@ -159,6 +159,29 @@ test.describe('فیلتر سال داشبورد', () => {
   });
 
   /**
+   * سال مالی با سال شمسی یکی نیست: سال مالی ۱۴۰۴ از **مهر ۱۴۰۴** شروع می‌شود و تا
+   * شهریور ۱۴۰۵ ادامه دارد. پس محور روند با مبنای سال مالی باید از مهر شروع شود، و
+   * با مبنای سال شمسی از فروردین.
+   */
+  test('محور روند، با مبنای سال مالی از مهر شروع می‌شود', async ({ page }) => {
+    await login(page, 'admin');
+    await gotoSection(page, 'داشبورد');
+
+    const trend = page.getByText('روند پیوسته همان داده').locator('..');
+    const labels = trend.locator('div.mt-1 > span');
+
+    // پیش‌فرض داشبورد، مبنای سال مالی است.
+    await expect(labels.first()).toHaveText('مهر');
+    await expect(labels.last()).toHaveText('شهریور');
+    // بازهٔ کامل در زیرنویس کارت نوشته می‌شود، چون شش ماه آخر در سال بعدی است.
+    await expect(page.getByText(/مهر [۰-۹]{4} تا شهریور [۰-۹]{4}/)).toBeVisible();
+
+    await pickOption(page, 'بر اساس', { text: 'سال شمسی' });
+    await expect(labels.first()).toHaveText('فروردین');
+    await expect(labels.last()).toHaveText('اسفند');
+  });
+
+  /**
    * نمودار روند و ردیف برچسب‌هایش باید **هم‌جهت** باشند.
    *
    * باگی که این آزمون را لازم کرد: ردیف برچسب‌ها یک `flex` راست‌به‌چپ است و اولین

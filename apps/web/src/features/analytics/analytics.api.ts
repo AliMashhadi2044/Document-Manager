@@ -115,6 +115,8 @@ export interface DashboardDto {
   /** روند ماه‌های **شمسی** یک سال مالی؛ ماه بدون فاکتور هم با مقدار صفر می‌آید. */
   readonly byMonth: readonly {
     readonly month: number;
+    /** سال شمسیِ همان ماه؛ در مبنای سال مالی، شش ماه آخر در سال بعدی‌اند. */
+    readonly jalaliYear: number;
     readonly label: string;
     readonly invoiceCount: number;
     readonly total: string;

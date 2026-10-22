@@ -163,6 +163,13 @@ export const createInvoiceSchema = z.object({
   notes: z.string().trim().max(2000).nullable().default(null),
   details: invoiceDetailsSchema,
   payment: invoicePaymentSchema.nullable().default(null),
+  /**
+   * تأیید صریح کاربر که این فاکتور با وجود تکراری بودن ثبت شود.
+   *
+   * پیش‌فرض `false` است و باید **صریح** بیاید: تکرار پرداخت انشعاب یک اشتباه گران
+   * است و نباید با یک درخواست معمولی رد شود. خود تأیید هم در رد حسابرسی می‌نشیند.
+   */
+  acknowledgeDuplicate: z.boolean().default(false),
 });
 
 export type CreateInvoiceBody = z.infer<typeof createInvoiceSchema>;

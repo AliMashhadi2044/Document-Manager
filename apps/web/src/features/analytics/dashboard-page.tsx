@@ -133,11 +133,28 @@ export function DashboardPage({
     hint: `${formatMoney(row.total, { withUnit: false })} ریال`,
   }));
 
+  /*
+    برچسب ماه، و سالش در متن راهنما.
+
+    در مبنای سال مالی، محور از مهر شروع می‌شود و شش ماه آخرش در سال شمسی بعدی است؛
+    بدون نوشتن سال، «فروردین» در انتهای نمودارِ سال مالی ۱۴۰۴ گمراه‌کننده بود.
+  */
   const monthData = (data.byMonth ?? []).map((row) => ({
     label: row.label,
     value: row.total,
-    hint: toPersianDigits(String(row.invoiceCount)),
+    hint: `${row.label} ${toPersianDigits(String(row.jalaliYear))} · ${toPersianDigits(
+      String(row.invoiceCount),
+    )} فاکتور`,
   }));
+
+  const firstMonth = data.byMonth?.[0];
+  const lastMonth = data.byMonth?.[data.byMonth.length - 1];
+  const monthRangeLabel =
+    firstMonth && lastMonth
+      ? `${firstMonth.label} ${toPersianDigits(String(firstMonth.jalaliYear))} تا ${
+          lastMonth.label
+        } ${toPersianDigits(String(lastMonth.jalaliYear))}`
+      : null;
 
   const monthlyTotal = (data.byMonth ?? []).reduce(
     (sum, row) => sum + BigInt(row.total || '0'),
@@ -324,7 +341,9 @@ export function DashboardPage({
           description={
             data.year === null
               ? 'بر اساس تازه‌ترین سال موجود در دامنه دسترسی شما'
-              : `${data.basis === 'jalali' ? 'سال شمسی' : 'سال مالی'} ${toPersianDigits(String(data.year))}`
+              : `${data.basis === 'jalali' ? 'سال شمسی' : 'سال مالی'} ${toPersianDigits(
+                  String(data.year),
+                )}${monthRangeLabel === null ? '' : ` — ${monthRangeLabel}`}`
           }
           action={
             <Badge tone="primary">

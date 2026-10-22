@@ -3,8 +3,9 @@ import { calculateSingleAmountInvoice, type Money } from '@dm/shared';
 
 import { MoneyInput } from '../../shared/ui/money-input';
 import { Select } from '../../shared/ui/select';
-import { formatMoney } from '../../shared/format/money';
-import { useSchoolSearch } from './invoices.api';
+import { formatMoney, toPersianDigits } from '../../shared/format/money';
+import { Icon } from '../../shared/ui/icon';
+import { useSchoolSearch, useUtilityDuplicate, type UtilityDuplicate } from './invoices.api';
 import { TaxFields, type TaxDraft } from './tax-fields';
 import { SchoolDialog } from '../base-data/school-dialog';
 import { LookupQuickDialog } from '../base-data/lookup-quick-dialog';
@@ -18,6 +19,8 @@ export interface UtilityDraft {
   readonly baseAmount: string;
   readonly discountAmount: string;
   readonly tax: TaxDraft;
+  /** تأیید صریح کاربر برای ثبت با وجود هشدار پرداخت تکراری. */
+  readonly acknowledgeDuplicate: boolean;
 }
 
 export const EMPTY_UTILITY: UtilityDraft = {
@@ -27,6 +30,7 @@ export const EMPTY_UTILITY: UtilityDraft = {
   baseAmount: '',
   discountAmount: '0',
   tax: { mode: 'PERCENT', rateBp: 1000, amount: '' },
+  acknowledgeDuplicate: false,
 };
 
 /**
@@ -42,17 +46,23 @@ export function UtilityFields({
   onChange,
   utilityTypes,
   policy,
+  documentId,
 }: {
   draft: UtilityDraft;
   onChange: (next: UtilityDraft) => void;
   utilityTypes: ReadonlyArray<{ id: string; title: string }>;
   policy: RoundingPolicyRef;
+  /** برای بررسی پرداخت تکراری؛ سال مالی از خودِ سند خوانده می‌شود. */
+  documentId: string;
 }): JSX.Element {
   const [schoolSearch, setSchoolSearch] = useState('');
   const schools = useSchoolSearch(schoolSearch);
 
   /** گفت‌وگوی ساخت سریع: مدرسه یا نوع انشعاب. */
   const [quick, setQuick] = useState<'school' | 'utility-type' | null>(null);
+
+  const duplicateCheck = useUtilityDuplicate(documentId, draft.schoolId, draft.utilityTypeId);
+  const duplicate = duplicateCheck.data?.duplicate ?? null;
 
   const preview = safePreview(() =>
     calculateSingleAmountInvoice(
@@ -139,6 +149,14 @@ export function UtilityFields({
         />
       </div>
 
+      {duplicate ? (
+        <DuplicateWarning
+          duplicate={duplicate}
+          acknowledged={draft.acknowledgeDuplicate}
+          onAcknowledge={(acknowledgeDuplicate) => onChange({ ...draft, acknowledgeDuplicate })}
+        />
+      ) : null}
+
       {quick === 'school' ? (
         <SchoolDialog
           school={null}
@@ -207,3 +225,91 @@ function Preview({
     </div>
   );
 }
+
+/**
+ * هشدار پرداخت تکراری — کامل، و نه یک خط «تکراری است».
+ *
+ * چرا این‌همه جزئیات: کاربر باید **بدون خارج شدن از فرم** بتواند تصمیم بگیرد. اگر
+ * فقط بگوییم «قبلاً پرداخت شده»، تنها کار ممکن رها کردن سند و گشتن در بایگانی است —
+ * و همان چیزی است که این هشدار قرار بود جلویش را بگیرد.
+ *
+ * تأیید، یک چک‌باکس صریح است و نه دکمهٔ «ادامه»: کنارش نوشته شده چه چیزی تأیید
+ * می‌شود، و همین تأیید در رد حسابرسی ثبت می‌شود.
+ */
+function DuplicateWarning({
+  duplicate,
+  acknowledged,
+  onAcknowledge,
+}: {
+  duplicate: UtilityDuplicate;
+  acknowledged: boolean;
+  onAcknowledge: (value: boolean) => void;
+}): JSX.Element {
+  const rows: ReadonlyArray<[string, string | null]> = [
+    ['سند', duplicate.documentTitle],
+    ['شماره سند', duplicate.documentNumber],
+    ['وضعیت سند', DOCUMENT_STATUS_LABELS[duplicate.documentStatus] ?? duplicate.documentStatus],
+    ['تاریخ صورتحساب', duplicate.invoiceDateJalali],
+    ['شماره صورتحساب', duplicate.invoiceNumber],
+    ['مبلغ', `${formatMoney(duplicate.totalAmount, { withUnit: false })} ریال`],
+    ['روش پرداخت', duplicate.paymentMethodTitle],
+    ['شناسهٔ قبض', duplicate.billIdentifier],
+    ['شناسهٔ پرداخت', duplicate.paymentIdentifier],
+    ['ثبت‌کننده', duplicate.createdByName],
+  ];
+
+  return (
+    <section
+      role="alert"
+      className="rounded-xl border border-destructive/40 bg-destructive/10 p-4"
+    >
+      <div className="flex items-start gap-2">
+        <Icon name="alert" size={18} className="mt-0.5 shrink-0 text-destructive" />
+        <div className="min-w-0 flex-1 space-y-3">
+          <p className="text-sm font-semibold text-destructive">
+            «{duplicate.schoolTitle}» پیش از این برای «{duplicate.utilityTypeTitle}» در سال مالی{' '}
+            {toPersianDigits(String(duplicate.fiscalYear))} پرداخت شده است.
+          </p>
+
+          <dl className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+            {rows
+              .filter((row): row is [string, string] => row[1] !== null && row[1] !== '')
+              .map(([label, value]) => (
+                <div key={label} className="flex gap-2">
+                  <dt className="shrink-0 text-muted-foreground">{label}:</dt>
+                  <dd className="min-w-0 truncate font-medium" title={value}>
+                    {value}
+                  </dd>
+                </div>
+              ))}
+          </dl>
+
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-card/60 p-2.5 text-xs">
+            <input
+              type="checkbox"
+              checked={acknowledged}
+              onChange={(event) => onAcknowledge(event.target.checked)}
+              className="mt-0.5 size-4 rounded border-input accent-[var(--color-destructive)]"
+            />
+            <span>
+              این پرداخت تکراری نیست (مثلاً دورهٔ بعد یا کنتور دیگر)؛ با مسئولیت من ثبت شود.
+              <span className="block text-muted-foreground">
+                این تأیید با نام شما در رد حسابرسی ثبت می‌شود.
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** برچسب وضعیت سند — همان عنوان‌هایی که در فهرست اسناد دیده می‌شود. */
+const DOCUMENT_STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'پیش‌نویس',
+  FINALIZED: 'ثبت‌شده',
+  PENDING_ARCHIVE: 'در انتظار بایگانی',
+  ARCHIVED: 'بایگانی‌شده',
+  NEEDS_REVISION: 'نیازمند اصلاح',
+  REOPENED: 'بازگشایی‌شده',
+};

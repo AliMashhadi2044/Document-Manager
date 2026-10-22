@@ -8,6 +8,7 @@ import { AppError } from '../../common/errors/app-error';
 import { FinancialService, parseRoundingPolicy } from '../financial/financial.service';
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
 import { InvoiceKindService } from './invoice-kind.service';
+import { UtilityDuplicateService } from './utility-duplicate.service';
 import type { InvoiceDetailsBody } from './invoice.schema';
 
 export interface CreateInvoiceInput {
@@ -27,6 +28,8 @@ export interface CreateInvoiceInput {
     readonly pettyCashHolderId: string | null;
     readonly notes: string | null;
   } | null;
+  /** تأیید صریح ثبت با وجود هشدار تکرار (فقط انشعابات). */
+  readonly acknowledgeDuplicate?: boolean;
 }
 
 @Injectable()
@@ -36,6 +39,7 @@ export class InvoicesService {
     private readonly audit: AuditService,
     private readonly financial: FinancialService,
     private readonly kinds: InvoiceKindService,
+    private readonly duplicates: UtilityDuplicateService,
   ) {}
 
   async create(
@@ -48,6 +52,9 @@ export class InvoicesService {
       include: { buyerSnapshot: true },
     });
     if (!document) throw AppError.notFound('سند یافت نشد');
+
+    /** اگر کاربر تکرار را تأیید کرده، همان متن هشدار در رد حسابرسی می‌نشیند. */
+    let duplicateNotice: string | null = null;
 
     if (!isEditableStatus(document.status as DocumentStatus)) {
       throw AppError.conflict(
@@ -77,6 +84,28 @@ export class InvoicesService {
       throw AppError.validation('فصل یا نوع فاکتور انتخاب‌شده غیرفعال است', [
         { path: 'chapterId', message: 'فصل یا نوع فاکتور غیرفعال است' },
       ]);
+    }
+
+    /*
+      پرداخت تکراری انشعاب.
+
+      پیش از ساخت بررسی می‌شود و نه بعد از آن: فاکتور نیمه‌ساخته‌ای که بعداً حذف شود،
+      شمارهٔ ردیف و رد حسابرسی را بی‌دلیل شلوغ می‌کند. رابط هم همین را از قبل نشان
+      می‌دهد، ولی مرجع همین‌جاست — درخواست می‌تواند از هر جایی بیاید.
+    */
+    if (input.details.kind === 'UTILITY') {
+      const duplicate = await this.duplicates.find({
+        schoolId: input.details.schoolId,
+        utilityTypeId: input.details.utilityTypeId,
+        fiscalYear: document.fiscalYear,
+      });
+
+      if (duplicate && !input.acknowledgeDuplicate) {
+        throw AppError.conflict('UTILITY_DUPLICATE', this.duplicates.describe(duplicate));
+      }
+      if (duplicate) {
+        duplicateNotice = this.duplicates.describe(duplicate);
+      }
     }
 
     // خانواده فاکتور را **دیتابیس** تعیین می‌کند؛ از آن، ردیف‌های مالی ساخته می‌شوند.
@@ -178,7 +207,13 @@ export class InvoicesService {
             entityType: 'invoice',
             entityId: created.id,
             documentId: document.id,
-            after: { id: created.id, totalAmount: created.totalAmount.toString() },
+            after: {
+              id: created.id,
+              totalAmount: created.totalAmount.toString(),
+              // تأیید تکرار، بخشی از همان رویداد است: بعداً باید بشود فهمید چه کسی
+              // با چه هشداری ثبت را ادامه داده.
+              ...(duplicateNotice === null ? {} : { acknowledgedDuplicate: duplicateNotice }),
+            },
           },
           tx,
         );

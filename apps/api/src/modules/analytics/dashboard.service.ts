@@ -9,6 +9,18 @@ import { DocumentAccessService } from '../documents/document-access.service';
 export type YearBasis = 'fiscal' | 'jalali';
 
 /**
+ * ماه شروع سال مالی.
+ *
+ * داده نیست و ثابتِ تقویم اداری است: سال مالی ۱۴۰۴ یعنی مهر ۱۴۰۴ تا شهریور ۱۴۰۵.
+ */
+export const FISCAL_START_MONTH = 7;
+
+/** ماهِ `offset` اُم پس از فروردینِ `year` — با سرریز به سال بعد. */
+function monthAt(year: number, offset: number): { year: number; month: number } {
+  return { year: year + Math.floor(offset / 12), month: (offset % 12) + 1 };
+}
+
+/**
  * داشبورد — کوئری‌های تجمیعی، نه شمردن ردیف‌های خوانده‌شده.
  *
  * دو قاعده:
@@ -159,12 +171,17 @@ export class DashboardService {
         total: (row._sum.totalAmount ?? 0n).toString(),
         tax: (row._sum.taxAmount ?? 0n).toString(),
       })),
-      byMonth: await this.monthlySeries(where, year ?? (await this.latestYear(user, basis))),
+      byMonth: await this.monthlySeries(where, year ?? (await this.latestYear(user, basis)), basis),
     };
   }
 
   /**
-   * روند ماهانه فاکتورها در یک سال **شمسی**.
+   * روند ماهانه فاکتورها در یک سال.
+   *
+   * **سال مالی با سال شمسی یکی نیست**: سال مالی ۱۴۰۴ از مهر ۱۴۰۴ شروع می‌شود و تا
+   * شهریور ۱۴۰۵ ادامه دارد. پس با مبنای «سال مالی»، محور از مهر شروع می‌شود و شش ماه
+   * آخرش در سال شمسی بعدی است. پیش از این، هر دو مبنا از فروردین شروع می‌شدند و
+   * نمودارِ سال مالی عملاً شش ماه اشتباه را نشان می‌داد.
    *
    * چرا دوازده کوئری و نه یک `groupBy`: PostgreSQL تقویم شمسی ندارد و ماه‌های شمسی
    * با ماه‌های میلادی هم‌مرز نیستند، پس `date_trunc('month', ...)` ماهِ اشتباه
@@ -174,17 +191,23 @@ export class DashboardService {
    * تعداد کوئری **ثابت** است (دوازده، موازی) و با حجم داده رشد نمی‌کند؛ ستون
    * `invoice_date` هم ایندکس دارد.
    */
-  private async monthlySeries(where: object, jalaliYear: number | null) {
-    if (jalaliYear === null) return [];
+  private async monthlySeries(where: object, year: number | null, basis: YearBasis) {
+    if (year === null) return [];
+
+    // سال مالی از ماه هفتم شروع می‌شود؛ سال شمسی از ماه یکم.
+    const startMonth = basis === 'fiscal' ? FISCAL_START_MONTH : 1;
 
     const months = Array.from({ length: 12 }, (_, index) => {
-      const month = index + 1;
-      const from = new Date(`${jalaliToIsoDate({ year: jalaliYear, month, day: 1 })}T00:00:00.000Z`);
-      const to =
-        month === 12
-          ? new Date(`${jalaliToIsoDate({ year: jalaliYear + 1, month: 1, day: 1 })}T00:00:00.000Z`)
-          : new Date(`${jalaliToIsoDate({ year: jalaliYear, month: month + 1, day: 1 })}T00:00:00.000Z`);
-      return { month, from, to };
+      const offset = startMonth - 1 + index;
+      const point = monthAt(year, offset);
+      const next = monthAt(year, offset + 1);
+
+      return {
+        month: point.month,
+        jalaliYear: point.year,
+        from: new Date(`${jalaliToIsoDate({ ...point, day: 1 })}T00:00:00.000Z`),
+        to: new Date(`${jalaliToIsoDate({ ...next, day: 1 })}T00:00:00.000Z`),
+      };
     });
 
     const rows = await Promise.all(
@@ -199,6 +222,8 @@ export class DashboardService {
 
     return months.map((range, index) => ({
       month: range.month,
+      /** سال شمسیِ همین ماه — در سال مالی، شش ماه آخر در سال بعدی‌اند. */
+      jalaliYear: range.jalaliYear,
       label: JALALI_MONTH_NAMES[range.month - 1] ?? String(range.month),
       invoiceCount: rows[index]?._count._all ?? 0,
       total: (rows[index]?._sum.totalAmount ?? 0n).toString(),
