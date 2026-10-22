@@ -72,6 +72,21 @@ export function VehicleDialog({
     <>
       <Modal title={vehicle ? 'اصلاح خودرو' : 'خودروی جدید'} onClose={onClose}>
         <form className="grid gap-x-5 gap-y-4 md:grid-cols-2" onSubmit={submit}>
+          {/*
+            پلاک، تنها کنترل این فرم است که ارتفاع و عرض خودش را دارد؛ کنار یک کنترل
+            معمولی می‌نشست و ردیف را ناتراز می‌کرد. پس بالای فرم و وسط، تمام‌عرض —
+            و ردیف زیرش دو کنترل هم‌اندازه است که با هم تراز می‌مانند.
+          */}
+          <div className="md:col-span-2 border-b border-border pb-4">
+            <PlateInput
+              required
+              align="center"
+              label="پلاک"
+              value={plateNumber}
+              onChange={setPlateNumber}
+            />
+          </div>
+
           <Select
             label="نوع خودرو"
             required
@@ -87,16 +102,12 @@ export function VehicleDialog({
             createLabel="افزودن نوع خودرو"
           />
 
-          <PlateInput required label="پلاک" value={plateNumber} onChange={setPlateNumber} />
-
-          <div className="md:col-span-2">
-            <Input
-              label="یادداشت"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              hint="اختیاری — مثلاً واحد استفاده‌کننده."
-            />
-          </div>
+          <Input
+            label="یادداشت"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            hint="اختیاری — مثلاً واحد استفاده‌کننده."
+          />
 
           <div className="flex items-center md:col-span-2">
             <Toggle

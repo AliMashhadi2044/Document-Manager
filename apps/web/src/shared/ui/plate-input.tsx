@@ -94,9 +94,9 @@ function DigitCell({
       onFocus={(event) => event.target.select()}
       style={{ width: `${length + 0.6}ch` }}
       className={cn(
-        'money bg-transparent text-center text-[1.6rem] font-bold leading-none tracking-wide',
+        'money bg-transparent text-center text-[1.6rem] ring-transparent rounded-md outline-none shadow-none font-bold leading-none tracking-wide',
         'text-black outline-none placeholder:font-normal placeholder:text-black/25',
-        'focus:rounded focus:bg-amber-200/60',
+        'outline-none transition-colors hover:bg-amber-100/50 focus:bg-amber-100/60 ',
       )}
     />
   );
@@ -166,7 +166,7 @@ function LetterCell({
         }}
         className={cn(
           'min-w-[2.6rem] rounded px-1 text-center text-[1.6rem] font-bold leading-none text-black',
-          'outline-none transition-colors hover:bg-amber-200/50 focus:bg-amber-200/60',
+          'outline-none transition-colors hover:bg-amber-100/50 focus:bg-amber-100/60',
           value === '' && 'text-black/25',
         )}
       >
@@ -195,7 +195,7 @@ function LetterCell({
                     title={item.usage}
                     onClick={() => pick(item.char)}
                     className={cn(
-                      'flex flex-col items-center gap-0.5 rounded-lg border border-transparent px-1 py-1.5',
+                      'flex flex-col items-center gap-2 rounded-lg border border-transparent px-1 py-1.5',
                       'transition-colors hover:bg-primary/10',
                       item.char === value && 'border-primary bg-primary/10',
                     )}
@@ -221,6 +221,7 @@ export function PlateInput({
   error,
   label = 'پلاک',
   required,
+  align = 'start',
 }: {
   /** متن ذخیره‌شده؛ رشتهٔ خالی یعنی هنوز پلاک معتبری نداریم. */
   value: string;
@@ -228,6 +229,8 @@ export function PlateInput({
   error?: string | undefined;
   label?: string;
   required?: boolean;
+  /** کادر پلاک عرض خودش را دارد؛ `center` آن را وسط ستونش می‌نشاند. */
+  align?: 'start' | 'center';
 }): JSX.Element {
   const groupId = useId();
   const hintId = `${groupId}-hint`;
@@ -254,9 +257,11 @@ export function PlateInput({
     parts.left !== '' || parts.letter !== '' || parts.right !== '' || parts.iran !== '';
   const incomplete = started && !isPlateComplete(parts);
 
+  const centered = align === 'center';
+
   if (freeText) {
     return (
-      <div className="space-y-1.5">
+      <div className={cn('space-y-1.5', centered && 'mx-auto w-full max-w-sm')}>
         <Input
           label={label}
           required={required}
@@ -282,7 +287,11 @@ export function PlateInput({
   }
 
   return (
-    <div className="space-y-1.5" role="group" aria-labelledby={groupId}>
+    <div
+      role="group"
+      aria-labelledby={groupId}
+      className={cn('space-y-1.5', centered && 'flex flex-col items-center')}
+    >
       <span id={groupId} className={LABEL_CLASS}>
         {label}
         {required ? (
@@ -399,14 +408,14 @@ export function PlateBadge({ plate, className }: { plate: string; className?: st
       dir="ltr"
       title={plate}
       className={cn(
-        'inline-flex h-7 items-stretch overflow-hidden rounded-md border-2 border-black bg-white align-middle',
+        'inline-flex h-7  items-stretch overflow-hidden rounded-md border-2 border-black bg-white align-middle',
         className,
       )}
     >
-      <span className="flex w-3 items-center justify-center bg-[#163a92]">
-        <span className="text-[7px] font-bold leading-none text-white">IR</span>
+      <span className="flex w-3 items-center justify-center bg-[#163a92] px-2">
+        <span className="text-[10px] font-bold leading-none text-white">IR</span>
       </span>
-      <span className="money flex items-center gap-1 px-1.5 text-sm font-bold leading-none text-black">
+      <span className="money flex min-w-20 justify-center items-center gap-1 px-1.5 text-sm font-bold leading-none text-black">
         <span>{toPersianDigits(parts.left)}</span>
         <span>{parts.letter}</span>
         <span>{toPersianDigits(parts.right)}</span>
