@@ -63,6 +63,14 @@ export interface SelectProps {
    * می‌دهد و همان صفحه نتایجی که سرور داده را نشان می‌دهد. آوردن کل جدول به مرورگر
    * برای فیلتر محلی، الزام بهینگی را نقض می‌کند.
    */
+  /**
+   * ساخت گزینهٔ تازه، بدون خروج از همین فرم.
+   *
+   * چرا داخل خود فهرست: کاربر وقتی می‌فهمد گزینه‌اش نیست که فهرست را باز کرده و
+   * جست‌وجو کرده است؛ فرستادنش به صفحهٔ اطلاعات پایه یعنی رها کردن سندِ نیمه‌تمام.
+   */
+  onCreate?: () => void;
+  createLabel?: string;
   remoteSearch?: {
     readonly search: string;
     readonly onSearchChange: (search: string) => void;
@@ -113,6 +121,8 @@ export function Select({
   prefsKey,
   emptyLabel = 'موردی یافت نشد',
   size = 'md',
+  onCreate,
+  createLabel,
   remoteSearch,
 }: SelectProps): JSX.Element {
   const generatedId = useId();
@@ -547,6 +557,22 @@ export function Select({
                   ) : null}
                 </div>
               )}
+
+              {onCreate ? (
+                <div className="border-t border-border p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      close(false);
+                      onCreate();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                  >
+                    <Icon name="plus" size={14} />
+                    {createLabel ?? 'افزودن مورد تازه'}
+                  </button>
+                </div>
+              ) : null}
 
               {canManage ? (
                 <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/40 p-1.5">

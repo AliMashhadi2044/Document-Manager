@@ -6,6 +6,8 @@ import { apiFetch, ApiError } from '../../shared/api/client';
 import { Button } from '../../shared/ui/button';
 import { Input } from '../../shared/ui/input';
 import { Select } from '../../shared/ui/select';
+import { BuyerDialog } from '../buyers/buyer-dialog';
+import { LookupQuickDialog } from '../base-data/lookup-quick-dialog';
 import { Card, CardHeader } from '../../shared/ui/card';
 import { YearInput } from '../../shared/ui/year-input';
 import { useOrganization } from '../organization/organization.api';
@@ -35,6 +37,13 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
   const [yearsTouched, setYearsTouched] = useState(false);
   const [buyerEntityId, setBuyerEntityId] = useState('');
   const [buyerTouched, setBuyerTouched] = useState(false);
+  /*
+    گفت‌وگوی «ساخت سریع» که از داخل همین فرم باز می‌شود.
+
+    یک متغیر برای همهٔ آن‌ها و نه یکی برای هرکدام: هم‌زمان بیش از یکی باز نمی‌شود و
+    با چند متغیر بولی، حالت‌های ناممکن (دو گفت‌وگوی باز) قابل بیان می‌شد.
+  */
+  const [quick, setQuick] = useState<'buyer' | 'stad-request-types' | null>(null);
   const [needNumber, setNeedNumber] = useState('');
   const [workflowNumber, setWorkflowNumber] = useState('');
   const [requestNumber, setRequestNumber] = useState('');
@@ -160,11 +169,9 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
             description: buyer.isDefault ? 'پیش‌فرض' : undefined,
           }))}
           emptyLabel="مجموعه خریداری ثبت نشده است"
-          hint={
-            (buyers.data?.items.length ?? 0) === 0 && !buyers.isPending
-              ? 'ابتدا در «مجموعه‌های خریدار» یک مجموعه بسازید.'
-              : undefined
-          }
+          onCreate={() => setQuick('buyer')}
+          createLabel="افزودن مجموعه خریدار"
+          hint="اگر مجموعه‌ای که می‌خواهید نیست، از پایین همین فهرست بسازیدش."
         />
 
         {/* قابل انتخاب از فهرست و قابل تایپ دستی (§۹ پرامپت). */}
@@ -225,6 +232,8 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
                 value: item.id,
                 label: item.title,
               }))}
+              onCreate={() => setQuick('stad-request-types')}
+              createLabel="افزودن نوع درخواست"
             />
             <div className="md:col-span-2">
               <Input
@@ -258,6 +267,32 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
           </Button>
         </div>
       </form>
+
+      {quick === 'buyer' ? (
+        <BuyerDialog
+          buyer={null}
+          onClose={() => setQuick(null)}
+          onSaved={(created) => {
+            // همان رکورد تازه، بی‌درنگ انتخاب می‌شود؛ وگرنه کاربر باید دوباره دنبالش
+            // بگردد و ساختِ درجا نصفه می‌ماند.
+            setBuyerTouched(true);
+            setBuyerEntityId(created.id);
+            setQuick(null);
+          }}
+        />
+      ) : null}
+
+      {quick === 'stad-request-types' ? (
+        <LookupQuickDialog
+          resource="stad-request-types"
+          titleFa="نوع درخواست"
+          onClose={() => setQuick(null)}
+          onCreated={(created) => {
+            setRequestTypeId(created.id);
+            setQuick(null);
+          }}
+        />
+      ) : null}
     </Card>
   );
 }

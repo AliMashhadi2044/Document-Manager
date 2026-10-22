@@ -6,6 +6,8 @@ import { Select } from '../../shared/ui/select';
 import { formatMoney } from '../../shared/format/money';
 import { useSchoolSearch } from './invoices.api';
 import { TaxFields, type TaxDraft } from './tax-fields';
+import { SchoolDialog } from '../base-data/school-dialog';
+import { LookupQuickDialog } from '../base-data/lookup-quick-dialog';
 import { safePreview, type RoundingPolicyRef } from './invoice-preview';
 
 export interface UtilityDraft {
@@ -49,6 +51,9 @@ export function UtilityFields({
   const [schoolSearch, setSchoolSearch] = useState('');
   const schools = useSchoolSearch(schoolSearch);
 
+  /** گفت‌وگوی ساخت سریع: مدرسه یا نوع انشعاب. */
+  const [quick, setQuick] = useState<'school' | 'utility-type' | null>(null);
+
   const preview = safePreview(() =>
     calculateSingleAmountInvoice(
       {
@@ -89,6 +94,8 @@ export function UtilityFields({
               districtTitle: school?.district.title ?? '',
             });
           }}
+          onCreate={() => setQuick('school')}
+          createLabel="افزودن مدرسه"
           hint="جست‌وجو روی سرور انجام می‌شود؛ مدارس پرتکرار را پین کنید."
         />
 
@@ -113,6 +120,8 @@ export function UtilityFields({
           value={draft.utilityTypeId}
           onChange={(nextValue) => onChange({ ...draft, utilityTypeId: nextValue })}
           options={utilityTypes.map((type) => ({ value: type.id, label: type.title }))}
+          onCreate={() => setQuick('utility-type')}
+          createLabel="افزودن نوع انشعاب"
         />
 
         <MoneyInput
@@ -129,6 +138,38 @@ export function UtilityFields({
           hint="اختیاری"
         />
       </div>
+
+      {quick === 'school' ? (
+        <SchoolDialog
+          school={null}
+          onClose={() => setQuick(null)}
+          onSaved={(created) => {
+            /*
+              مدرسهٔ تازه بی‌درنگ انتخاب می‌شود و ناحیه‌اش هم از همان رکورد می‌آید —
+              نه از فهرستی که شاید هنوز بازخوانی نشده باشد.
+            */
+            setSchoolSearch(created.title);
+            onChange({
+              ...draft,
+              schoolId: created.id,
+              districtTitle: created.district.title,
+            });
+            setQuick(null);
+          }}
+        />
+      ) : null}
+
+      {quick === 'utility-type' ? (
+        <LookupQuickDialog
+          resource="utility-types"
+          titleFa="نوع انشعاب"
+          onClose={() => setQuick(null)}
+          onCreated={(created) => {
+            onChange({ ...draft, utilityTypeId: created.id });
+            setQuick(null);
+          }}
+        />
+      ) : null}
 
       <TaxFields
         draft={draft.tax}

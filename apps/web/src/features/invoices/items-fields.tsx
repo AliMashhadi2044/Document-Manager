@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   calculateInvoice,
   qtyFromString,
@@ -12,6 +13,7 @@ import { Input } from '../../shared/ui/input';
 import { MoneyInput } from '../../shared/ui/money-input';
 import { Select } from '../../shared/ui/select';
 import { Icon } from '../../shared/ui/icon';
+import { LookupQuickDialog } from '../base-data/lookup-quick-dialog';
 import { formatMoney, toPersianDigits } from '../../shared/format/money';
 import { TaxFields, type TaxDraft } from './tax-fields';
 import { safePreview, type RoundingPolicyRef } from './invoice-preview';
@@ -81,6 +83,9 @@ export function ItemsFields({
 }): JSX.Element {
   const perLineTax = policy.scope === 'LINE';
   const preview = safePreview(() => computePreview(draft, policy));
+
+  /** واحدِ تازه برای **کدام ردیف** ساخته می‌شود؛ `null` یعنی گفت‌وگو بسته است. */
+  const [unitFor, setUnitFor] = useState<number | null>(null);
 
   return (
     <div className="space-y-4">
@@ -208,6 +213,8 @@ export function ItemsFields({
                       onChange={(nextValue) => update(draft, onChange, index, { unitId: nextValue })}
                       options={units.map((unit) => ({ value: unit.id, label: unit.title }))}
                       placeholder="—"
+                      onCreate={() => setUnitFor(index)}
+                      createLabel="افزودن واحد"
                     />
                   </div>
                 </div>
@@ -280,6 +287,18 @@ export function ItemsFields({
           onChange={(invoiceTax) => onChange({ ...draft, invoiceTax })}
         />
       )}
+
+      {unitFor !== null ? (
+        <LookupQuickDialog
+          resource="measurement-units"
+          titleFa="واحد اندازه‌گیری"
+          onClose={() => setUnitFor(null)}
+          onCreated={(created) => {
+            update(draft, onChange, unitFor, { unitId: created.id });
+            setUnitFor(null);
+          }}
+        />
+      ) : null}
 
       {/* نوار جمع، چسبیده به پایین فرم: هنگام ویرایش ردیف‌ها، عددی که تغییر می‌کند
           باید جلوی چشم بماند، نه اینکه کاربر برای دیدنش پایین برود. */}

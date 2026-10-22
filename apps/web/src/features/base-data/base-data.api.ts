@@ -69,9 +69,49 @@ export function useLookupList(params: LookupListParams) {
   });
 }
 
+export interface ReferenceItem {
+  readonly id: string;
+  readonly title: string;
+}
+
+export interface BootstrapData {
+  readonly paymentMethods: ReadonlyArray<{
+    readonly id: string;
+    readonly kind: string;
+    readonly titleFa: string;
+    readonly requiresPaymentIdentifier: boolean;
+    readonly requiresBillIdentifier: boolean;
+  }>;
+  readonly utilityTypes: readonly ReferenceItem[];
+  readonly fuelTypes: readonly ReferenceItem[];
+  readonly stadRequestTypes: readonly ReferenceItem[];
+  readonly measurementUnits: readonly ReferenceItem[];
+  readonly districts: readonly ReferenceItem[];
+  readonly vehicleTypes: readonly ReferenceItem[];
+}
+
+/** داده‌های مرجعِ فرم‌ها در یک درخواست — کم‌حجم و کم‌تغییر. */
+export function useBootstrap() {
+  return useQuery({
+    queryKey: baseDataKeys.bootstrap,
+    queryFn: () => apiFetch<BootstrapData>('/base-data/bootstrap'),
+    staleTime: 5 * 60_000,
+  });
+}
+
 function useInvalidateLookups() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: ['base-data', 'lookups'] });
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ['base-data', 'lookups'] });
+    /*
+      فرم‌ها فهرست‌هایشان را از `bootstrap` می‌گیرند و نه از مسیر lookups.
+
+      بدون این خط، موردی که کاربر همان لحظه از داخل فرم ساخته بود تا بازخوانی بعدی
+      در فهرست انتخابش دیده نمی‌شد — یعنی دقیقاً همان چیزی که ساختنش را از فرم ممکن
+      کردیم، بی‌فایده می‌شد.
+    */
+    void queryClient.invalidateQueries({ queryKey: baseDataKeys.bootstrap });
+  };
 }
 
 export function useCreateLookup(resource: string) {

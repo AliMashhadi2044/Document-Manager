@@ -19,6 +19,7 @@ import { Select } from '../../shared/ui/select';
 import { HELP_CLASS, LABEL_CLASS } from '../../shared/ui/field';
 import { Segmented } from '../../shared/ui/segmented';
 import { JalaliDatePicker } from '../../shared/ui/date-picker';
+import { VendorDialog } from '../vendors/vendor-dialog';
 import { useBudgetCategories } from '../base-data/base-data.api';
 import {
   useChapterInvoiceTypes,
@@ -88,6 +89,8 @@ export function CreateInvoiceForm({
   /** تا وقتی کاربر روش پرداخت را دست نزده، پیش‌فرض **نوع فعلی** فاکتور حاکم است. */
   const [paymentTouched, setPaymentTouched] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  /** گفت‌وگوی ساخت فروشنده، از داخل همین فرم. */
+  const [newVendor, setNewVendor] = useState(false);
 
   const [itemsDraft, setItemsDraft] = useState<ItemsDraft>(() => emptyItemsDraft(null));
   const [utilityDraft, setUtilityDraft] = useState<UtilityDraft>(EMPTY_UTILITY);
@@ -146,7 +149,7 @@ export function CreateInvoiceForm({
           badge: toPersianDigits(
             String(category.chapters.filter((chapter) => chapter.isActive).length),
           ),
-          hint: category.key === 'CAPITAL' ? 'بودجهٔ تملک دارایی' : 'هزینه‌های جاری',
+          hint: category.key === 'CAPITAL' ? 'هزینه های عمرانی' : 'هزینه‌های جاری',
         })),
     [categories.data],
   );
@@ -345,7 +348,9 @@ export function CreateInvoiceForm({
                   description: vendor.representativeName ?? undefined,
                 }))}
                 onChange={setVendorId}
-                hint="روی همه انواع فاکتور در دسترس و اختیاری است."
+                onCreate={() => setNewVendor(true)}
+                createLabel="افزودن فروشنده"
+                hint="اگر فروشنده ثبت نشده، از پایین همین فهرست بسازیدش."
               />
 
               <Input
@@ -401,6 +406,9 @@ export function CreateInvoiceForm({
                 setPayment(next);
               }}
               methods={allowedMethods}
+              vendorName={
+                (vendors.data?.items ?? []).find((vendor) => vendor.id === vendorId)?.name ?? ''
+              }
               vendorId={vendorId}
             />
 
@@ -431,6 +439,24 @@ export function CreateInvoiceForm({
           </>
         )}
       </div>
+
+      {newVendor ? (
+        <VendorDialog
+          vendor={null}
+          onClose={() => setNewVendor(false)}
+          onSaved={(created) => {
+            /*
+              فروشندهٔ تازه بی‌درنگ انتخاب می‌شود.
+
+              جست‌وجوی فروشنده سمت سرور است، پس متن جست‌وجو هم روی نام تازه گذاشته
+              می‌شود تا همان رکورد در فهرست باشد و کاربر انتخابِ بی‌برچسب نبیند.
+            */
+            setVendorSearch(created.name);
+            setVendorId(created.id);
+            setNewVendor(false);
+          }}
+        />
+      ) : null}
     </Card>
   );
 }

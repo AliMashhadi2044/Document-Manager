@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import type { PaymentMethodKind } from '@dm/shared';
 
 import { Input } from '../../shared/ui/input';
 import { Select } from '../../shared/ui/select';
 import { toPersianDigits } from '../../shared/format/money';
 import { useVendorBankAccounts } from './invoices.api';
+import { BankAccountsDialog } from '../vendors/bank-accounts-dialog';
 
 export interface PaymentMethodRef {
   readonly id: string;
@@ -44,16 +46,28 @@ export function PaymentFields({
   onChange,
   methods,
   vendorId,
+  vendorName,
 }: {
   draft: PaymentDraft;
   onChange: (next: PaymentDraft) => void;
   methods: readonly PaymentMethodRef[];
   vendorId: string;
+  /** برای عنوان گفت‌وگوی شباها؛ فرمِ فاکتور نام فروشنده را می‌داند. */
+  vendorName?: string;
 }): JSX.Element {
   const selected = methods.find((method) => method.id === draft.paymentMethodId);
   const accounts = useVendorBankAccounts(
     selected?.kind === 'BENEFICIARY_ACCOUNT' ? vendorId : '',
   );
+
+  /*
+    گفت‌وگوی شباهای همان فروشنده، از داخل فرم فاکتور.
+
+    حالت واقعی‌ای که این را لازم کرد: فروشنده هست، ولی شبا ندارد. تا پیش از این
+    کاربر باید سند نیمه‌تمام را رها می‌کرد، به «فروشندگان» می‌رفت، شبا می‌افزود و
+    برمی‌گشت.
+  */
+  const [manageAccounts, setManageAccounts] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -90,13 +104,24 @@ export function PaymentFields({
                   account.iban,
                 )}`,
               }))}
+              onCreate={() => setManageAccounts(true)}
+              createLabel="افزودن شبا برای این فروشنده"
+              emptyLabel="برای این فروشنده شبای فعالی ثبت نشده است"
               hint={
                 accounts.data && accounts.data.length === 0
-                  ? 'برای این فروشنده شبای فعالی ثبت نشده است.'
+                  ? 'شبایی ثبت نشده؛ از پایین همین فهرست اضافه کنید.'
                   : undefined
               }
             />
           )
+        ) : null}
+
+        {manageAccounts && vendorId !== '' ? (
+          <BankAccountsDialog
+            vendorId={vendorId}
+            vendorName={vendorName ?? 'فروشنده'}
+            onClose={() => setManageAccounts(false)}
+          />
         ) : null}
 
         {selected?.kind === 'BILL' ? (

@@ -10,6 +10,8 @@ import {
 import { Button } from '../../shared/ui/button';
 import { MoneyInput } from '../../shared/ui/money-input';
 import { Select } from '../../shared/ui/select';
+import { VehicleDialog } from '../base-data/vehicle-dialog';
+import { LookupQuickDialog } from '../base-data/lookup-quick-dialog';
 import { JalaliMonthPicker } from '../../shared/ui/jalali-month-picker';
 import { formatMoney, toPersianDigits } from '../../shared/format/money';
 import { useVehicleSearch } from './invoices.api';
@@ -67,6 +69,8 @@ export function FuelFields({
   fuelTypes: ReadonlyArray<{ id: string; title: string }>;
 }): JSX.Element {
   const [plateSearch, setPlateSearch] = useState('');
+  /** گفت‌وگوی ساخت سریع: پلاک، نوع خودرو یا نوع سوخت. */
+  const [quick, setQuick] = useState<'vehicle' | 'vehicle-type' | 'fuel-type' | null>(null);
   const vehicles = useVehicleSearch(draft.vehicleTypeId, plateSearch);
 
   const monthLength = safePreview(() => daysInJalaliMonth(draft.jalaliYear, draft.jalaliMonth));
@@ -97,6 +101,8 @@ export function FuelFields({
             setPlateSearch('');
             onChange({ ...draft, vehicleTypeId, vehicleId: '' });
           }}
+          onCreate={() => setQuick('vehicle-type')}
+          createLabel="افزودن نوع خودرو"
           hint="ابتدا نوع خودرو، سپس پلاک‌های همان نوع"
         />
 
@@ -123,6 +129,10 @@ export function FuelFields({
               ? 'ابتدا نوع خودرو را انتخاب کنید'
               : 'برای این نوع خودرو پلاکی ثبت نشده است'
           }
+          // ساخت پلاک تازه فقط وقتی معنا دارد که نوعش معلوم باشد.
+          {...(draft.vehicleTypeId === ''
+            ? {}
+            : { onCreate: () => setQuick('vehicle'), createLabel: 'افزودن پلاک' })}
         />
 
         <Select
@@ -131,8 +141,50 @@ export function FuelFields({
           value={draft.fuelTypeId}
           onChange={(nextValue) => onChange({ ...draft, fuelTypeId: nextValue })}
           options={fuelTypes.map((type) => ({ value: type.id, label: type.title }))}
+          onCreate={() => setQuick('fuel-type')}
+          createLabel="افزودن نوع سوخت"
         />
       </div>
+
+      {quick === 'vehicle' ? (
+        <VehicleDialog
+          vehicle={null}
+          defaultVehicleTypeId={draft.vehicleTypeId}
+          onClose={() => setQuick(null)}
+          onSaved={(created) => {
+            // پلاک تازه بی‌درنگ انتخاب می‌شود؛ جست‌وجوی پلاک سمت سرور است، پس متن
+            // جست‌وجو هم روی همان پلاک گذاشته می‌شود تا در فهرست باشد.
+            setPlateSearch(created.plateNumber);
+            onChange({ ...draft, vehicleId: created.id });
+            setQuick(null);
+          }}
+        />
+      ) : null}
+
+      {quick === 'vehicle-type' ? (
+        <LookupQuickDialog
+          resource="vehicle-types"
+          titleFa="نوع خودرو"
+          onClose={() => setQuick(null)}
+          onCreated={(created) => {
+            setPlateSearch('');
+            onChange({ ...draft, vehicleTypeId: created.id, vehicleId: '' });
+            setQuick(null);
+          }}
+        />
+      ) : null}
+
+      {quick === 'fuel-type' ? (
+        <LookupQuickDialog
+          resource="fuel-types"
+          titleFa="نوع سوخت"
+          onClose={() => setQuick(null)}
+          onCreated={(created) => {
+            onChange({ ...draft, fuelTypeId: created.id });
+            setQuick(null);
+          }}
+        />
+      ) : null}
 
       <JalaliMonthPicker
         year={draft.jalaliYear}

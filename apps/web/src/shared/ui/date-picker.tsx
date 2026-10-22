@@ -423,7 +423,7 @@ function DateTextInput({
         }
       }}
       maxLength={10}
-      className="money w-full min-w-0 bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground/60"
+      className="money w-full min-w-0 bg-transparent px-1 text-sm outline-none focus-visible:shadow-none placeholder:text-muted-foreground/60 "
     />
   );
 }

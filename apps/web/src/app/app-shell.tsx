@@ -9,6 +9,8 @@ import { LookupManager } from '../features/base-data/lookup-manager';
 import { ChaptersView } from '../features/base-data/chapters-view';
 import { VendorsPage } from '../features/vendors/vendors-page';
 import { BuyersPage } from '../features/buyers/buyers-page';
+import { SchoolsPage } from '../features/base-data/schools-page';
+import { VehiclesPage } from '../features/base-data/vehicles-page';
 import { DocumentsPage } from '../features/documents/documents-page';
 import { ArchivePage } from '../features/archive/archive-page';
 import { ReportTemplatesPage } from '../features/report-designer/templates-page';
@@ -30,6 +32,8 @@ type SectionKey =
   | 'lookups'
   | 'chapters'
   | 'buyers'
+  | 'schools'
+  | 'vehicles'
   | 'vendors'
   | 'notifications';
 
@@ -131,6 +135,20 @@ const GROUPS: readonly SectionGroup[] = [
         icon: 'users',
         description: 'طرف خریدارِ سند، شناسه‌های هویتی و مجموعه پیش‌فرض',
         permission: 'buyer:read',
+      },
+      {
+        key: 'schools',
+        titleFa: 'مدارس',
+        icon: 'template',
+        description: 'مدارس هر ناحیه — اطلاعات پایهٔ فاکتور انشعابات',
+        permission: 'base_data:read',
+      },
+      {
+        key: 'vehicles',
+        titleFa: 'خودروها',
+        icon: 'store',
+        description: 'پلاک‌ها به تفکیک نوع خودرو — اطلاعات پایهٔ فاکتور سوخت',
+        permission: 'base_data:read',
       },
       {
         key: 'vendors',
@@ -397,6 +415,8 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
               />
             ) : null}
             {section === 'buyers' ? <BuyersPage /> : null}
+            {section === 'schools' ? <SchoolsPage /> : null}
+            {section === 'vehicles' ? <VehiclesPage /> : null}
             {section === 'vendors' ? <VendorsPage /> : null}
           </div>
         </main>
