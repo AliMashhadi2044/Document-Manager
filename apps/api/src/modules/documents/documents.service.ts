@@ -89,7 +89,9 @@ export class DocumentsService {
           orderBy: [{ invoiceDate: 'asc' }, { id: 'asc' }],
           include: {
             vendorSnapshot: true,
-            chapter: { select: { title: true } },
+            // گروه بودجه همراه فصل می‌آید: سند فقط یک گروه می‌پذیرد و رابط باید
+            // بداند کدام گروه قفل شده است.
+            chapter: { select: { title: true, category: { select: { key: true } } } },
             invoiceType: { select: { titleFa: true, kind: true } },
             payment: { include: { paymentMethod: true } },
             // روز سوخت‌گیری روی همان ردیف مالی می‌آید؛ نمایش، ردیف‌ها را دوباره جفت نمی‌کند.

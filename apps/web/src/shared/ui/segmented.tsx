@@ -10,6 +10,10 @@ export interface SegmentedOption {
   readonly icon?: IconName;
   /** عددی که کنار برچسب می‌نشیند — مثلاً تعداد آیتم‌های همین گروه. */
   readonly badge?: string;
+  /** گزینه‌ای که در این بافت مجاز نیست؛ دیده می‌شود ولی انتخاب نمی‌شود. */
+  readonly disabled?: boolean;
+  /** چرا غیرفعال است — روی hover و برای صفحه‌خوان. */
+  readonly disabledReason?: string;
 }
 
 /**
@@ -53,16 +57,21 @@ export function Segmented({
       >
         {options.map((option) => {
           const active = option.value === value;
+          const blocked = Boolean(option.disabled);
 
           return (
             <label
               key={option.value}
+              title={option.disabledReason}
               className={cn(
-                'group relative flex cursor-pointer items-center gap-2 rounded-lg transition-all duration-200',
+                'group relative flex items-center gap-2 rounded-lg transition-all duration-200',
                 size === 'lg' ? 'h-11 px-4' : 'h-9 px-3',
+                blocked
+                  ? 'cursor-not-allowed text-muted-foreground opacity-50'
+                  : 'cursor-pointer',
                 active
                   ? 'bg-card text-foreground shadow-[var(--shadow-soft)]'
-                  : 'text-muted-foreground hover:bg-card/60 hover:text-foreground',
+                  : !blocked && 'text-muted-foreground hover:bg-card/60 hover:text-foreground',
                 'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40',
               )}
             >
@@ -72,6 +81,7 @@ export function Segmented({
                 name={groupName}
                 value={option.value}
                 checked={active}
+                disabled={blocked}
                 onChange={() => onChange(option.value)}
               />
 
@@ -87,9 +97,9 @@ export function Segmented({
                 <span className={cn('truncate', active ? 'font-semibold' : 'font-medium')}>
                   {option.label}
                 </span>
-                {option.hint && size === 'lg' ? (
+                {size === 'lg' && (option.disabledReason ?? option.hint) ? (
                   <span className="truncate text-[11px] font-normal text-muted-foreground">
-                    {option.hint}
+                    {option.disabledReason ?? option.hint}
                   </span>
                 ) : null}
               </span>

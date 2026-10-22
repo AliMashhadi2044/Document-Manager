@@ -47,6 +47,8 @@ export interface InvoiceRow {
   readonly invoiceDate: string;
   readonly invoiceKind: 'NORMAL' | 'STAD' | 'UTILITY' | 'FUEL';
   readonly chapterTitleSnapshot: string;
+  /** گروه بودجهٔ فصل — سند فقط یکی از دو گروه را می‌پذیرد. */
+  readonly chapter: { readonly category: { readonly key: 'CURRENT' | 'CAPITAL' } };
   readonly grossAmount: string;
   readonly discountAmount: string;
   readonly netAmount: string;

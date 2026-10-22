@@ -59,12 +59,20 @@ export function CreateInvoiceForm({
   documentId,
   documentJalaliYear,
   policy,
+  lockedCategoryKey,
   onClose,
   onCreated,
 }: {
   documentId: string;
   documentJalaliYear: number;
   policy: RoundingPolicyRef;
+  /**
+   * گروه بودجه‌ای که این سند قبلاً گرفته است — `null` یعنی سند هنوز فاکتوری ندارد.
+   *
+   * یک سند یا جاری است یا عمرانی؛ گروه مخالف اینجا خاموش می‌شود تا کاربر تا پای
+   * ثبت نرود و آنجا خطا بگیرد. قاعده در سرور هم هست.
+   */
+  lockedCategoryKey: 'CURRENT' | 'CAPITAL' | null;
   onClose: () => void;
   onCreated: () => void;
 }): JSX.Element {
@@ -142,26 +150,35 @@ export function CreateInvoiceForm({
     () =>
       (categories.data ?? [])
         .filter((category) => category.chapters.some((chapter) => chapter.isActive))
-        .map((category) => ({
-          value: category.id,
-          label: category.titleFa,
-          icon: (category.key === 'CAPITAL' ? 'layers' : 'store') as 'layers' | 'store',
-          badge: toPersianDigits(
-            String(category.chapters.filter((chapter) => chapter.isActive).length),
-          ),
-          hint: category.key === 'CAPITAL' ? 'هزینه های عمرانی' : 'هزینه‌های جاری',
-        })),
-    [categories.data],
+        .map((category) => {
+          const blocked = lockedCategoryKey !== null && category.key !== lockedCategoryKey;
+
+          return {
+            value: category.id,
+            label: category.titleFa,
+            icon: (category.key === 'CAPITAL' ? 'layers' : 'store') as 'layers' | 'store',
+            badge: toPersianDigits(
+              String(category.chapters.filter((chapter) => chapter.isActive).length),
+            ),
+            hint: category.key === 'CAPITAL' ? 'هزینه های عمرانی' : 'هزینه‌های جاری',
+            disabled: blocked,
+            ...(blocked ? { disabledReason: 'این سند گروه بودجهٔ دیگری دارد' } : {}),
+          };
+        }),
+    [categories.data, lockedCategoryKey],
   );
 
-  // گروه پیش‌فرض: اولین گروهی که فصل فعال دارد. بدون این، کاربر اول باید یک انتخاب
-  // اضافه بکند تا فهرست فصل‌ها اصلاً پر شود.
+  /*
+    گروه پیش‌فرض: اولین گروهِ **مجاز** که فصل فعال دارد.
+
+    بدون این، کاربر اول باید یک انتخاب اضافه بکند تا فهرست فصل‌ها پر شود؛ و در سندی
+    که گروهش قفل شده، پیش‌فرض نباید روی گروه خاموش بنشیند.
+  */
   useEffect(() => {
-    if (categoryOptions.length === 0) return;
+    const allowed = categoryOptions.filter((option) => !option.disabled);
+    if (allowed.length === 0) return;
     setCategoryId((current) =>
-      categoryOptions.some((option) => option.value === current)
-        ? current
-        : (categoryOptions[0]?.value ?? ''),
+      allowed.some((option) => option.value === current) ? current : (allowed[0]?.value ?? ''),
     );
   }, [categoryOptions]);
 
@@ -268,6 +285,12 @@ export function CreateInvoiceForm({
               value={categoryId}
               onChange={setCategoryId}
             />
+            {lockedCategoryKey ? (
+              <p className="text-xs text-muted-foreground">
+                گروه بودجهٔ این سند با فاکتور اولش تعیین شده است؛ یک سند فقط فاکتورهای
+                یک گروه را می‌پذیرد. برای گروه دیگر، سند جداگانه‌ای بسازید.
+              </p>
+            ) : null}
           </div>
         ) : null}
 

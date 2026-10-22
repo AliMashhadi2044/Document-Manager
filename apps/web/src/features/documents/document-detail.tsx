@@ -325,6 +325,8 @@ export function DocumentDetailView({
           documentId={documentId}
           documentJalaliYear={data.jalaliYear}
           policy={data.roundingPolicy}
+          // گروه بودجهٔ سند را اولین فاکتورش تعیین می‌کند؛ بعد از آن قفل است.
+          lockedCategoryKey={data.invoices[0]?.chapter.category.key ?? null}
           onClose={() => setShowAddInvoice(false)}
           onCreated={() => {
             void refetch();

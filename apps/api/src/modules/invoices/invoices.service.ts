@@ -87,6 +87,35 @@ export class InvoicesService {
     }
 
     /*
+      یک سند، یک گروه بودجه.
+
+      سند مالی در دفتر اعتبار یک گروه (جاری یا عمرانی) می‌نشیند؛ سندی که هم‌زمان
+      ردیف جاری و ردیف عمرانی داشته باشد، در هیچ‌کدام کامل نیست. رابط هم گروه مخالف
+      را خاموش می‌کند، ولی قاعده همین‌جاست.
+
+      پیام، فاکتوری را که گروه سند را تعیین کرده نام می‌برد — وگرنه کاربر می‌ماند که
+      چرا سندی که خودش تازه ساخته «عمرانی» است.
+    */
+    const otherGroup = await this.prisma.invoice.findFirst({
+      where: { documentId, chapter: { categoryId: { not: link.chapter.categoryId } } },
+      orderBy: { sortIndex: 'asc' },
+      include: { chapter: { include: { category: true } } },
+    });
+
+    if (otherGroup) {
+      const current = await this.prisma.budgetCategory.findUnique({
+        where: { id: link.chapter.categoryId },
+      });
+      throw AppError.conflict(
+        'DOCUMENT_BUDGET_GROUP',
+        `گروه بودجه این سند «${otherGroup.chapter.category.titleFa}» است؛ ` +
+          `فاکتور «${otherGroup.chapterTitleSnapshot}» پیش از این در همین سند ثبت شده است. ` +
+          `در یک سند نمی‌توان فاکتور «${current?.titleFa ?? 'گروه دیگر'}» ثبت کرد — ` +
+          `برای آن سند جداگانه‌ای بسازید.`,
+      );
+    }
+
+    /*
       پرداخت تکراری انشعاب.
 
       پیش از ساخت بررسی می‌شود و نه بعد از آن: فاکتور نیمه‌ساخته‌ای که بعداً حذف شود،
