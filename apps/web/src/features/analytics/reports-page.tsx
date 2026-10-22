@@ -6,6 +6,7 @@ import { Input } from '../../shared/ui/input';
 import { Select } from '../../shared/ui/select';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
+import { useDebouncedValue } from '../../shared/hooks/use-debounced-value';
 import { formatServerMessage, toPersianDigits } from '../../shared/format/money';
 import type { CurrentUser } from '../auth/auth.api';
 import {
@@ -65,9 +66,8 @@ export function ReportsPage({ user }: { user: CurrentUser }): JSX.Element {
       <section className="rounded-lg border border-border bg-card p-4">
         <h2 className="text-sm font-semibold">گزارش‌گیری</h2>
         <p className="mt-2 text-xs leading-6 text-muted-foreground">
-          فیلتر، مرتب‌سازی و صفحه‌بندی همه سمت سرور انجام می‌شوند و خروجی Excel دقیقاً
-          همان برشی است که روی صفحه می‌بینید. ستون‌هایی که مجوزشان را ندارید در فهرست
-          نمی‌آیند.
+          فیلتر، مرتب‌سازی و صفحه‌بندی همه سمت سرور انجام می‌شوند و خروجی Excel دقیقاً همان برشی است
+          که روی صفحه می‌بینید. ستون‌هایی که مجوزشان را ندارید در فهرست نمی‌آیند.
         </p>
 
         <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="گزارش‌ها">
@@ -95,13 +95,7 @@ export function ReportsPage({ user }: { user: CurrentUser }): JSX.Element {
   );
 }
 
-function DatasetReport({
-  dataset,
-  user,
-}: {
-  dataset: DatasetDto;
-  user: CurrentUser;
-}): JSX.Element {
+function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUser }): JSX.Element {
   const [columns, setColumns] = useState<readonly string[]>(dataset.defaultColumns);
   const [filter, setFilter] = useState<FilterGroup>(EMPTY_FILTER);
   const [sort, setSort] = useState<readonly ReportSort[]>(dataset.defaultSort);
@@ -110,8 +104,16 @@ function DatasetReport({
   const [groupBy, setGroupBy] = useState<string | undefined>(
     dataset.groupBy?.[0]?.key ?? undefined,
   );
-  const [showFilter, setShowFilter] = useState(false);
-  const [showColumns, setShowColumns] = useState(false);
+  /*
+    سه تابلوی تنظیمات، و هر بار **یکی**.
+
+    پیش از این فیلترها و ستون‌ها هرکدام کلید خودشان را داشتند و نماهای ذخیره‌شده
+    همیشه باز بود؛ با باز بودن دو تا، جدول به ته صفحه می‌رفت. حالا بازکردن یکی،
+    بقیه را می‌بندد.
+  */
+  const [panel, setPanel] = useState<'filter' | 'columns' | 'views' | null>(null);
+  const toggle = (next: 'filter' | 'columns' | 'views'): void =>
+    setPanel((current) => (current === next ? null : next));
   const [viewName, setViewName] = useState('');
   const [shareView, setShareView] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -123,7 +125,22 @@ function DatasetReport({
     [columns, filter, sort, page, pageSize, groupBy],
   );
 
-  const result = useReportQuery(dataset.key, request);
+  /*
+    گزارش با **تأخیر** اجرا می‌شود.
+
+    مقدار فیلترها متن آزاد است و هر نویسه، یک درخواست تازه می‌ساخت؛ همین‌طور هر
+    کلیک روی ستون‌ها. اینجا یک گزارش روی صدها هزار ردیف می‌دود، پس درخواستی که
+    پیش از رسیدن پاسخ بی‌مصرف می‌شود هزینهٔ واقعی دارد.
+
+    تأخیر روی **کل درخواست** است، نه روی تک‌تک کنترل‌ها: یک جا، به‌جای پراکندن
+    همین منطق در هر ورودی فیلتر. `request` با `useMemo` مرجع پایدار دارد، پس
+    مقایسهٔ مرجعیِ هوک درست کار می‌کند.
+
+    خروجی Excel از `request` بی‌تأخیر می‌خواند: آنجا کاربر صریح دکمه زده است.
+  */
+  const settledRequest = useDebouncedValue(request, 350);
+  const result = useReportQuery(dataset.key, settledRequest);
+  const settling = settledRequest !== request;
   const views = useSavedViews(dataset.key);
   const saveView = useSaveView();
   const deleteView = useDeleteView(dataset.key);
@@ -149,6 +166,9 @@ function DatasetReport({
     return map;
   }, [dataset.fields]);
 
+  /** شمار شرط‌های فعال، شامل گروه‌های تودرتو — عددی که روی دکمهٔ فیلترها می‌نشیند. */
+  const filterCount = useMemo(() => countConditions(filter), [filter]);
+
   /** هر تغییر فیلتر یا ستون، صفحه را به اول برمی‌گرداند. */
   function changeFilter(next: FilterGroup): void {
     setFilter(next);
@@ -172,11 +192,7 @@ function DatasetReport({
         return;
       }
 
-      const rowCount = await downloadReportExport(
-        dataset.key,
-        request,
-        `${dataset.titleFa}.xlsx`,
-      );
+      const rowCount = await downloadReportExport(dataset.key, request, `${dataset.titleFa}.xlsx`);
       setMessage(`خروجی با ${toPersianDigits(String(rowCount))} ردیف دانلود شد.`);
     } catch (caught) {
       setError(
@@ -191,14 +207,30 @@ function DatasetReport({
     <div className="space-y-4">
       <section className="space-y-3 rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setShowFilter(!showFilter)}>
-            {showFilter ? 'بستن فیلترها' : 'فیلترها'}
-            {filter.conditions.length > 0 || (filter.groups ?? []).length > 0
-              ? ` (${toPersianDigits(String(filter.conditions.length))})`
-              : ''}
+          <Button
+            size="sm"
+            variant={panel === 'filter' ? 'primary' : 'secondary'}
+            onClick={() => toggle('filter')}
+          >
+            فیلترها
+            {filterCount > 0 ? ` (${toPersianDigits(String(filterCount))})` : ''}
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => setShowColumns(!showColumns)}>
+          <Button
+            size="sm"
+            variant={panel === 'columns' ? 'primary' : 'secondary'}
+            onClick={() => toggle('columns')}
+          >
             ستون‌ها ({toPersianDigits(String(columns.length))})
+          </Button>
+          <Button
+            size="sm"
+            variant={panel === 'views' ? 'primary' : 'secondary'}
+            onClick={() => toggle('views')}
+          >
+            نماها
+            {views.data && views.data.length > 0
+              ? ` (${toPersianDigits(String(views.data.length))})`
+              : ''}
           </Button>
 
           {dataset.groupBy ? (
@@ -244,11 +276,11 @@ function DatasetReport({
           </div>
         </div>
 
-        {showFilter ? (
+        {panel === 'filter' ? (
           <FilterBuilder fields={dataset.fields} value={filter} onChange={changeFilter} />
         ) : null}
 
-        {showColumns ? (
+        {panel === 'columns' ? (
           <ColumnPicker
             dataset={dataset}
             columns={columns}
@@ -259,47 +291,49 @@ function DatasetReport({
           />
         ) : null}
 
-        <SavedViews
-          datasetKey={dataset.key}
-          views={views.data ?? []}
-          viewName={viewName}
-          shareView={shareView}
-          onViewNameChange={setViewName}
-          onShareChange={setShareView}
-          onApply={(view) => {
-            setColumns(view.columns);
-            setFilter(view.filter);
-            setSort(view.sort);
-            setPageSize(view.pageSize);
-            setPage(1);
-            setViewName(view.name);
-            setShareView(view.isShared);
-            setMessage(`نمای «${view.name}» اعمال شد.`);
-          }}
-          onSave={() => {
-            setError(null);
-            setMessage(null);
-            saveView.mutate(
-              {
-                dataset: dataset.key,
-                name: viewName.trim(),
-                isShared: shareView,
-                request: { ...request, page: 1 },
-              },
-              {
-                onSuccess: () => setMessage(`نمای «${viewName.trim()}» ذخیره شد.`),
-                onError: (caught) =>
-                  setError(
-                    caught instanceof ApiError
-                      ? formatServerMessage(caught.message)
-                      : 'ذخیره نما ناموفق بود',
-                  ),
-              },
-            );
-          }}
-          onDelete={(viewId) => deleteView.mutate({ viewId })}
-          saving={saveView.isPending}
-        />
+        {panel === 'views' ? (
+          <SavedViews
+            datasetKey={dataset.key}
+            views={views.data ?? []}
+            viewName={viewName}
+            shareView={shareView}
+            onViewNameChange={setViewName}
+            onShareChange={setShareView}
+            onApply={(view) => {
+              setColumns(view.columns);
+              setFilter(view.filter);
+              setSort(view.sort);
+              setPageSize(view.pageSize);
+              setPage(1);
+              setViewName(view.name);
+              setShareView(view.isShared);
+              setMessage(`نمای «${view.name}» اعمال شد.`);
+            }}
+            onSave={() => {
+              setError(null);
+              setMessage(null);
+              saveView.mutate(
+                {
+                  dataset: dataset.key,
+                  name: viewName.trim(),
+                  isShared: shareView,
+                  request: { ...request, page: 1 },
+                },
+                {
+                  onSuccess: () => setMessage(`نمای «${viewName.trim()}» ذخیره شد.`),
+                  onError: (caught) =>
+                    setError(
+                      caught instanceof ApiError
+                        ? formatServerMessage(caught.message)
+                        : 'ذخیره نما ناموفق بود',
+                    ),
+                },
+              );
+            }}
+            onDelete={(viewId) => deleteView.mutate({ viewId })}
+            saving={saveView.isPending}
+          />
+        ) : null}
 
         {message ? (
           <p role="status" className="rounded-md bg-primary/10 p-2.5 text-sm text-primary">
@@ -331,7 +365,7 @@ function DatasetReport({
           sort={sort}
           sortableKeys={sortableKeys}
           enumLabels={enumLabels}
-          isLoading={result.isFetching}
+          isLoading={result.isFetching || settling}
           onSortChange={(next) => {
             setSort(next);
             setPage(1);
@@ -389,9 +423,7 @@ function ColumnPicker({
               type="button"
               onClick={() =>
                 onChange(
-                  selected
-                    ? columns.filter((key) => key !== field.key)
-                    : [...columns, field.key],
+                  selected ? columns.filter((key) => key !== field.key) : [...columns, field.key],
                 )
               }
               className={
@@ -412,8 +444,8 @@ function ColumnPicker({
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        ترتیب انتخاب، ترتیب ستون‌ها در جدول و در خروجی Excel است. فقط ستون‌های
-        انتخاب‌شده از پایگاه داده خوانده می‌شوند.
+        ترتیب انتخاب، ترتیب ستون‌ها در جدول و در خروجی Excel است. فقط ستون‌های انتخاب‌شده از پایگاه
+        داده خوانده می‌شوند.
       </p>
     </div>
   );
@@ -447,13 +479,16 @@ function SavedViews({
 
       {views.length === 0 ? (
         <p className="text-[11px] text-muted-foreground">
-          هنوز نمایی ذخیره نکرده‌اید. تنظیمات فعلی (ستون‌ها، فیلترها، مرتب‌سازی) را با
-          یک نام ذخیره کنید تا بعداً با یک کلیک برگردد.
+          هنوز نمایی ذخیره نکرده‌اید. تنظیمات فعلی (ستون‌ها، فیلترها، مرتب‌سازی) را با یک نام ذخیره
+          کنید تا بعداً با یک کلیک برگردد.
         </p>
       ) : (
         <ul className="flex flex-wrap gap-1.5">
           {views.map((view) => (
-            <li key={view.id} className="flex items-center gap-1 rounded border border-border px-2 py-1">
+            <li
+              key={view.id}
+              className="flex items-center gap-1 rounded border border-border px-2 py-1"
+            >
               <button
                 type="button"
                 className="text-xs text-primary hover:underline"
@@ -507,9 +542,16 @@ function SavedViews({
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        نمای اشتراکی دسترسی اضافه نمی‌دهد: هر کاربری که بازش کند، گزارش با مجوزهای
-        خودش اجرا می‌شود.
+        نمای اشتراکی دسترسی اضافه نمی‌دهد: هر کاربری که بازش کند، گزارش با مجوزهای خودش اجرا می‌شود.
       </p>
     </div>
+  );
+}
+
+/** شمار شرط‌های یک گروه و همهٔ گروه‌های درونش. */
+function countConditions(group: FilterGroup): number {
+  return (
+    group.conditions.length +
+    (group.groups ?? []).reduce((total, nested) => total + countConditions(nested), 0)
   );
 }

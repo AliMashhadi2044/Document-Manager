@@ -211,6 +211,9 @@ export function useSavedViews(dataset: string | null) {
     queryKey: analyticsKeys.views(dataset ?? ''),
     queryFn: () => apiFetch<readonly SavedViewDto[]>(`/analytics/${dataset as string}/views`),
     enabled: dataset !== null,
+    // نماها کم‌تغییرند و با ذخیره و حذف، خودشان بی‌اعتبار می‌شوند؛ جابه‌جایی بین
+    // مجموعه‌داده‌ها نباید هر بار دوباره بپرسد.
+    staleTime: 5 * 60_000,
   });
 }
 

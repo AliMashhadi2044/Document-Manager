@@ -60,6 +60,14 @@ export async function pickOption(
 
   if (option.search !== undefined) {
     await page.getByPlaceholder('جست‌وجو…').fill(option.search);
+
+    /*
+      فهرست‌های سمت‌سرور با تأخیر جست‌وجو می‌کنند (۳۰۰ms) تا هر نویسه یک درخواست
+      نسازد. بدون این صبر، آزمون گزینهٔ nth را از **نتیجهٔ قبلی** برمی‌داشت — خطایی
+      که خودش را به‌صورت «فاکتور ثبت نشد» نشان می‌داد، نه به‌صورت انتخاب اشتباه.
+    */
+    await page.waitForTimeout(400);
+    await expect(list.getByText('در حال جست‌وجو…')).toHaveCount(0);
   }
 
   const target =

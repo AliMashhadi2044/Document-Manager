@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 
 import { cn } from './cn';
 import { useAnchoredPosition } from './use-anchored-position';
+import { useDebouncedValue } from '../hooks/use-debounced-value';
 import { Icon } from './icon';
 import { CONTROL_CLASS, HELP_CLASS, LABEL_CLASS, borderClass } from './field';
 import {
@@ -140,9 +141,41 @@ export function Select({
   const [prefs, setPrefs] = useState<SelectPrefs>(() => loadPrefs(storageKey));
   const [open, setOpen] = useState(false);
   const [manage, setManage] = useState(false);
-  const [localQuery, setLocalQuery] = useState('');
-  const query = remoteSearch ? remoteSearch.search : localQuery;
-  const setQuery = remoteSearch ? remoteSearch.onSearchChange : setLocalQuery;
+  /*
+    متن جست‌وجو، همیشه محلی.
+
+    در حالت سمت‌سرور هم کادر از همین حالت محلی می‌خواند و والد با **تأخیر** خبردار
+    می‌شود: تایپ باید بی‌درنگ دیده شود، ولی درخواست نباید به‌ازای هر نویسه برود.
+  */
+  const [localQuery, setLocalQuery] = useState(remoteSearch?.search ?? '');
+  const query = localQuery;
+  const setQuery = setLocalQuery;
+
+  const debouncedQuery = useDebouncedValue(localQuery, 300);
+  const pushSearch = remoteSearch?.onSearchChange;
+  const remoteValue = remoteSearch?.search;
+
+  /*
+    آخرین متنی که به والد داده‌ایم.
+
+    بدون این، بازتابِ خودِ همان متن از والد با «تغییر از بیرون» اشتباه گرفته می‌شد و
+    اگر کاربر در فاصلهٔ ارسال و بازگشت، نویسهٔ تازه‌ای تایپ کرده بود، همان نویسه پاک
+    می‌شد.
+  */
+  const pushedRef = useRef(remoteSearch?.search ?? '');
+
+  useEffect(() => {
+    if (!pushSearch || debouncedQuery === pushedRef.current) return;
+    pushedRef.current = debouncedQuery;
+    pushSearch(debouncedQuery);
+  }, [debouncedQuery, pushSearch]);
+
+  // تغییر از بیرون — مثلاً پس از ساخت یک رکورد تازه، جست‌وجو روی نام آن می‌نشیند.
+  useEffect(() => {
+    if (remoteValue === undefined || remoteValue === pushedRef.current) return;
+    pushedRef.current = remoteValue;
+    setLocalQuery(remoteValue);
+  }, [remoteValue]);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const triggerRef = useRef<HTMLButtonElement>(null);

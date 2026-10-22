@@ -7,6 +7,7 @@ import { Badge } from '../../shared/ui/badge';
 import { Icon } from '../../shared/ui/icon';
 import { DataTable, type Column } from '../../shared/ui/data-table';
 import { ApiError } from '../../shared/api/client';
+import { useDebouncedValue } from '../../shared/hooks/use-debounced-value';
 import { formatServerMessage, toPersianDigits } from '../../shared/format/money';
 import { useCurrentUser } from '../auth/auth.api';
 import { useBootstrap } from './base-data.api';
@@ -36,7 +37,15 @@ export function SchoolsPage(): JSX.Element {
   const canWrite = user?.permissions.includes('base_data:write') ?? false;
 
   const bootstrap = useBootstrap();
-  const list = useSchools(page, search, districtId, status);
+  /*
+    متن جست‌وجو با تأخیر به کوئری می‌رسد.
+
+    هر نویسه یک درخواست سمت سرور می‌ساخت؛ نوشتن یک نام یعنی چند درخواست که همه‌شان
+    جز آخری پیش از رسیدن پاسخ بی‌مصرف شده‌اند.
+  */
+  const debouncedSearch = useDebouncedValue(search, 300);
+
+  const list = useSchools(page, debouncedSearch, districtId, status);
   const update = useUpdateSchool();
   const remove = useDeleteSchool();
 

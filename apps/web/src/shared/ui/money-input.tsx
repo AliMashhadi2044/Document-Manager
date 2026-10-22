@@ -22,6 +22,8 @@ export function MoneyInput({
   disabled = false,
   error,
   hint,
+  compact = false,
+  ariaLabel,
 }: {
   label?: ReactNode;
   value: string;
@@ -30,6 +32,14 @@ export function MoneyInput({
   disabled?: boolean;
   error?: string | undefined;
   hint?: ReactNode;
+  /**
+   * بدون خط راهنما و بدون پیش‌نمایش گروه‌بندی‌شده.
+   *
+   * در ردیف‌های هم‌تراز (مثل شرط‌های فیلتر)، همین خطِ زیرِ کادر — که با پر شدن
+   * مقدار ظاهر می‌شود — ارتفاع خانه را عوض می‌کند و ردیف را از تراز می‌اندازد.
+   */
+  compact?: boolean;
+  ariaLabel?: string | undefined;
 }): JSX.Element {
   const inputId = useId();
   const errorId = `${inputId}-error`;
@@ -53,6 +63,7 @@ export function MoneyInput({
         autoComplete="off"
         required={required}
         disabled={disabled}
+        aria-label={ariaLabel}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
         value={value}
@@ -64,7 +75,7 @@ export function MoneyInput({
         <p id={errorId} role="alert" className={cn(HELP_CLASS, 'text-destructive')}>
           {error}
         </p>
-      ) : value ? (
+      ) : compact ? null : value ? (
         <p className={cn(HELP_CLASS, 'money text-muted-foreground')}>
           {toPersianDigits(groupDigits(value))} ریال
         </p>

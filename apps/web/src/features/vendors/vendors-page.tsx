@@ -8,6 +8,7 @@ import { Badge } from '../../shared/ui/badge';
 import { Icon } from '../../shared/ui/icon';
 import { DataTable, type Column } from '../../shared/ui/data-table';
 import { ApiError } from '../../shared/api/client';
+import { useDebouncedValue } from '../../shared/hooks/use-debounced-value';
 import { formatServerMessage, toPersianDigits } from '../../shared/format/money';
 import { useCurrentUser } from '../auth/auth.api';
 import { useUpdateVendor, useVendors, type VendorRow } from './vendors.api';
@@ -38,7 +39,15 @@ export function VendorsPage(): JSX.Element {
   const canWrite = user?.permissions.includes('vendor:write') ?? false;
   const canManageAccounts = user?.permissions.includes('vendor_bank_account:write') ?? false;
 
-  const list = useVendors(page, search, status);
+  /*
+    متن جست‌وجو با تأخیر به کوئری می‌رسد.
+
+    هر نویسه یک درخواست سمت سرور می‌ساخت؛ نوشتن یک نام یعنی چند درخواست که همه‌شان
+    جز آخری پیش از رسیدن پاسخ بی‌مصرف شده‌اند.
+  */
+  const debouncedSearch = useDebouncedValue(search, 300);
+
+  const list = useVendors(page, debouncedSearch, status);
   const update = useUpdateVendor();
 
   const act = (action: Promise<unknown>, done: string): void => {

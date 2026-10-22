@@ -55,6 +55,7 @@ export function JalaliDatePicker({
   disabled = false,
   error,
   hint,
+  compact = false,
 }: {
   label: string;
   /** `YYYY-MM-DD` یا با ساعت `YYYY-MM-DDTHH:mm`. */
@@ -65,6 +66,8 @@ export function JalaliDatePicker({
   disabled?: boolean;
   error?: string;
   hint?: ReactNode;
+  /** بدون خط راهنمای زیر کادر — برای ردیف‌هایی که باید هم‌تراز بمانند. */
+  compact?: boolean;
 }): JSX.Element {
   const inputId = useId();
   const parts = splitDateTime(value);
@@ -77,6 +80,7 @@ export function JalaliDatePicker({
       disabled={disabled}
       error={error}
       hint={hint}
+      compact={compact}
       summary={parts.date ? describeDate(parts.date, parts.time) : null}
       text={
         <DateTextInput
@@ -119,6 +123,7 @@ export function JalaliDateRangePicker({
   disabled = false,
   error,
   hint,
+  compact = false,
 }: {
   label: string;
   value: DateRangeValue;
@@ -128,6 +133,8 @@ export function JalaliDateRangePicker({
   disabled?: boolean;
   error?: string;
   hint?: ReactNode;
+  /** بدون خط راهنمای زیر کادر — برای ردیف‌هایی که باید هم‌تراز بمانند. */
+  compact?: boolean;
 }): JSX.Element {
   const from = splitDateTime(value.from);
   const to = splitDateTime(value.to);
@@ -145,6 +152,7 @@ export function JalaliDateRangePicker({
       disabled={disabled}
       error={error}
       hint={hint}
+      compact={compact}
       summary={
         from.date && to.date
           ? `از ${describeDate(from.date, from.time)} تا ${describeDate(to.date, to.time)}`
@@ -233,6 +241,7 @@ function PickerShell({
   disabled,
   error,
   hint,
+  compact = false,
   summary,
   text,
   time,
@@ -251,6 +260,7 @@ function PickerShell({
   disabled: boolean;
   error?: string | undefined;
   hint?: ReactNode;
+  compact?: boolean;
   summary: string | null;
   text: ReactNode;
   time: ReactNode;
@@ -293,7 +303,8 @@ function PickerShell({
 
   return (
     <div className="space-y-1.5">
-      <label id={id} htmlFor={labelFor} className={LABEL_CLASS}>
+      {/* در حالت فشرده برچسب فقط برای صفحه‌خوان می‌ماند؛ سرستونِ جدول آن را می‌گوید. */}
+      <label id={id} htmlFor={labelFor} className={compact ? 'sr-only' : LABEL_CLASS}>
         {label}
         {required ? (
           <span className="text-destructive ms-1" aria-hidden="true">
@@ -320,6 +331,7 @@ function PickerShell({
           borderClass(Boolean(error)),
           disabled && 'opacity-60',
         )}
+        title={compact ? (summary ?? undefined) : undefined}
       >
         <div className="min-w-0 flex-1">{text}</div>
         {time}
@@ -340,9 +352,12 @@ function PickerShell({
         </button>
       </div>
 
-      <p className={cn(HELP_CLASS, error ? 'text-destructive' : 'text-muted-foreground')}>
-        {error ?? summary ?? hint ?? 'قالب: سال/ماه/روز'}
-      </p>
+      {/* در حالت فشرده، خلاصه روی خودِ کادر می‌نشیند تا ارتفاع ردیف ثابت بماند. */}
+      {compact && !error ? null : (
+        <p className={cn(HELP_CLASS, error ? 'text-destructive' : 'text-muted-foreground')}>
+          {error ?? summary ?? hint ?? 'قالب: سال/ماه/روز'}
+        </p>
+      )}
 
       {open
         ? createPortal(
