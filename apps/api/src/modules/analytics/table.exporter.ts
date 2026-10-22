@@ -142,6 +142,25 @@ function writeCell(
     return;
   }
 
+  /*
+    مقدار enum با **برچسب فارسی‌اش** نوشته می‌شود، نه کلید دیتابیس.
+
+    جدول روی صفحه این نگاشت را سمت کلاینت انجام می‌داد و خروجی Excel نمی‌داد؛ پس
+    همان ستونی که در سامانه «ستاد» بود، در فایل `STAD` می‌شد — و فایل، جایی می‌رود
+    که کسی کلیدهای دیتابیس را نمی‌شناسد. نگاشت از همان `enumValues`ای می‌آید که
+    فیلترساز هم با آن فهرست می‌سازد، پس دو جدول برچسب وجود ندارد.
+
+    مقداری که در فهرست نباشد خام نوشته می‌شود: یک مقدار ناشناخته را پنهان کردن،
+    بدتر از نشان دادنش است.
+  */
+  if (column.enumValues) {
+    const raw = String(value);
+    const option = column.enumValues.find((item) => item.value === raw);
+    writeText(cell, option?.label ?? raw);
+    cell.alignment = { horizontal: 'center' };
+    return;
+  }
+
   switch (column.type) {
     case 'money':
       // مقدار از مرز API به‌صورت **رشته عددی** می‌آید (ADR-0003).

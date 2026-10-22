@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import {
+  DOCUMENT_STATUS_LABELS,
+  DOCUMENT_TYPE_LABELS,
+  INVOICE_KIND_LABELS,
+  PERSON_TYPE_LABELS,
   aggregateByVendor,
   isoDateToJalali,
   formatJalali,
@@ -126,7 +130,7 @@ export class DatasetService {
         vendorName: snapshot?.name ?? '',
         // شخص حقوقی شماره اقتصادی دارد و شخص حقیقی کد ملی؛ ستون یکی است.
         vendorIdentifier: snapshot?.economicCode ?? snapshot?.nationalId ?? '',
-        personType: snapshot?.personType ?? '',
+        personType: label(PERSON_TYPE_LABELS, snapshot?.personType),
         representativeName: snapshot?.representativeName ?? '',
         address: snapshot?.addressLine ?? '',
         phone: snapshot?.phone ?? '',
@@ -148,7 +152,7 @@ export class DatasetService {
       index: index + 1,
       invoiceNumber: invoice.invoiceNumber ?? '',
       invoiceDate: invoice.invoiceDate.toISOString().slice(0, 10),
-      invoiceKind: invoice.invoiceKind,
+      invoiceKind: label(INVOICE_KIND_LABELS, invoice.invoiceKind),
       chapterTitle: invoice.chapterTitleSnapshot,
       vendorName: invoice.vendorSnapshot?.name ?? '',
       grossAmount: invoice.grossAmount.toString(),
@@ -170,8 +174,8 @@ export class DatasetService {
         },
         document: {
           title: document.title,
-          type: document.type,
-          status: document.status,
+          type: label(DOCUMENT_TYPE_LABELS, document.type),
+          status: label(DOCUMENT_STATUS_LABELS, document.status),
           fiscalYear: document.fiscalYear,
           jalaliYear: document.jalaliYear,
           documentNumber: document.documentNumber ?? '',
@@ -223,6 +227,18 @@ export class DatasetService {
         })),
       }));
   }
+}
+
+/**
+ * برچسب فارسی یک مقدار enum برای **نمایش**.
+ *
+ * قالب گزارش این مقدار را همان‌طور که هست چاپ می‌کند؛ `STAD` و `FINAL` نامی نیستند
+ * که کسی بیرون از سامانه بخواند. مقدار ناشناخته خام می‌ماند — پنهان کردنش بدتر از
+ * نشان دادنش است.
+ */
+function label(labels: Readonly<Record<string, string>>, value: string | null | undefined): string {
+  if (!value) return '';
+  return labels[value] ?? value;
 }
 
 function safeJalali(iso: string): string {
