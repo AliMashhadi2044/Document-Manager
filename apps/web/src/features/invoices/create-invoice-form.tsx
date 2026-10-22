@@ -162,6 +162,22 @@ export function CreateInvoiceForm({
     );
   }, [categoryOptions]);
 
+  /*
+    روش‌های پرداختِ قابل انتخاب، بر اساس **نوع فاکتور**.
+
+    مثال خودِ سامانه: «قبض» برای انشعابات معنا دارد و برای خرید کالا نه. تا پیش از
+    این، همهٔ روش‌ها در همهٔ فاکتورها دیده می‌شدند و جلوگیری از انتخاب اشتباه فقط به
+    حواس کاربر بند بود.
+
+    نبودِ محدودیت (`null`) یعنی همهٔ روش‌های فعال — نه فهرست خالی.
+  */
+  const allowedMethods = useMemo(() => {
+    const all = bootstrap.data?.paymentMethods ?? [];
+    const allowed = selectedType?.allowedPaymentMethodIds ?? null;
+    if (allowed === null) return all;
+    return all.filter((method) => allowed.includes(method.id));
+  }, [bootstrap.data?.paymentMethods, selectedType?.allowedPaymentMethodIds]);
+
   const chapters = useMemo(
     () =>
       (categories.data ?? [])
@@ -384,7 +400,7 @@ export function CreateInvoiceForm({
                 setPaymentTouched(true);
                 setPayment(next);
               }}
-              methods={reference.paymentMethods}
+              methods={allowedMethods}
               vendorId={vendorId}
             />
 

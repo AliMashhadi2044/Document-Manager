@@ -472,6 +472,7 @@ model InvoiceType {
   chapters             ChapterInvoiceType[]
   taxRates             TaxRate[]
   invoices             Invoice[]
+  paymentMethods       InvoiceTypePaymentMethod[]
 
   @@index([isActive, sortOrder])
   @@map("invoice_types")
@@ -508,9 +509,29 @@ model PaymentMethod {
 
   invoiceTypes    InvoiceType[]
   invoicePayments InvoicePayment[]
+  allowedFor      InvoiceTypePaymentMethod[]
 
   @@index([isActive, sortOrder])
   @@map("payment_methods")
+}
+
+/// روش‌های پرداخت **مجاز** برای یک نوع فاکتور.
+///
+/// قاعده: نبودِ هیچ ردیفی یعنی «همه روش‌های فعال مجازند». این عمدی است و نه
+/// فراموشی — با قاعدهٔ وارونه (نبودِ ردیف یعنی هیچ‌کدام)، همین که جدول اضافه می‌شد،
+/// ثبت فاکتور در کل سامانه می‌خوابید تا وقتی مدیر برای **هر** نوع فاکتور فهرست را
+/// پر کند.
+model InvoiceTypePaymentMethod {
+  invoiceTypeId   String @map("invoice_type_id") @db.Uuid
+  paymentMethodId String @map("payment_method_id") @db.Uuid
+  sortOrder       Int    @default(0) @map("sort_order")
+
+  invoiceType   InvoiceType   @relation(fields: [invoiceTypeId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+
+  @@id([invoiceTypeId, paymentMethodId])
+  @@index([paymentMethodId])
+  @@map("invoice_type_payment_methods")
 }
 
 model TaxRate {

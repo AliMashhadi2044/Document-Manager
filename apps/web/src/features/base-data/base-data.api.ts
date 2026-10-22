@@ -192,6 +192,63 @@ export function useInvoiceTypes() {
   });
 }
 
+export interface PaymentMethodChoice {
+  readonly id: string;
+  readonly key: string;
+  readonly kind: string;
+  readonly titleFa: string;
+  readonly allowed: boolean;
+}
+
+export interface InvoiceTypePaymentMethods {
+  readonly invoiceTypeId: string;
+  readonly titleFa: string;
+  readonly defaultPaymentMethodId: string | null;
+  /** هیچ محدودیتی تعریف نشده: همهٔ روش‌های فعال مجازند. */
+  readonly unrestricted: boolean;
+  readonly methods: readonly PaymentMethodChoice[];
+}
+
+/** روش‌های پرداخت یک نوع فاکتور، با علامتِ مجاز بودن. */
+export function useInvoiceTypePaymentMethods(invoiceTypeId: string | null) {
+  return useQuery({
+    queryKey: ['base-data', 'invoice-types', invoiceTypeId, 'payment-methods'] as const,
+    queryFn: () =>
+      apiFetch<InvoiceTypePaymentMethods>(
+        `/base-data/chapters/invoice-types/${invoiceTypeId as string}/payment-methods`,
+      ),
+    enabled: invoiceTypeId !== null,
+  });
+}
+
+/**
+ * جایگزینی کامل فهرست مجاز.
+ *
+ * فهرست خالی یعنی «محدودیت را بردار»، نه «هیچ روشی مجاز نیست» — همان قراردادی که
+ * سرور دارد.
+ */
+export function useSetInvoiceTypePaymentMethods() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      invoiceTypeId,
+      paymentMethodIds,
+    }: {
+      invoiceTypeId: string;
+      paymentMethodIds: readonly string[];
+    }) =>
+      apiFetch<InvoiceTypePaymentMethods>(
+        `/base-data/chapters/invoice-types/${invoiceTypeId}/payment-methods`,
+        { method: 'PUT', json: { paymentMethodIds } },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['base-data', 'invoice-types'] });
+      // فرم فاکتور فهرست مجاز را از همین مسیر می‌خواند.
+      void queryClient.invalidateQueries({ queryKey: ['base-data', 'chapters'] });
+    },
+  });
+}
+
 function useInvalidateChapters(): () => void {
   const queryClient = useQueryClient();
   return () => {

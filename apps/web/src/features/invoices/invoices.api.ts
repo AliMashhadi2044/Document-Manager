@@ -22,6 +22,13 @@ export interface ChapterInvoiceTypeOption {
     readonly kind: PaymentMethodKind;
     readonly titleFa: string;
   } | null;
+  /**
+   * روش‌های پرداخت مجاز این نوع فاکتور.
+   *
+   * `null` یعنی محدودیتی تعریف نشده و همهٔ روش‌های فعال مجازند — که با فهرست خالی
+   * یکی نیست.
+   */
+  readonly allowedPaymentMethodIds: readonly string[] | null;
 }
 
 export interface ChapterInvoiceTypes {

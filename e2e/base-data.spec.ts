@@ -236,11 +236,16 @@ test.describe('ترتیب اطلاعات پایه', () => {
     await gotoSection(page, 'اطلاعات پایه');
 
     const titles = page.getByRole('row').locator('td:nth-child(2)');
+    // صبر برای **داده**، نه اسکلت بارگذاری: بدون این، فهرست ردیف‌ها در یک اجرای
+    // کندتر نیمه‌ساخته خوانده می‌شد و شمارش با دستگیره‌ها نمی‌خواند.
+    await expect(titles.first()).toBeVisible();
+
     const before = await titles.allInnerTexts();
     expect(before.length).toBeGreaterThan(1);
 
     // دستگیره ردیف اول، تا میانه ردیف آخر کشیده می‌شود.
     const handles = page.getByRole('button', { name: /^جابه‌جایی ردیف/ });
+    await expect(handles).toHaveCount(before.length);
     const from = await handles.first().boundingBox();
     const to = await handles.nth(before.length - 1).boundingBox();
     expect(from && to).toBeTruthy();

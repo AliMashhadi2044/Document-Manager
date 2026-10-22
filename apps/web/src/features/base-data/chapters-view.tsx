@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { INVOICE_KIND_LABELS } from '@dm/shared';
 
 import { Button } from '../../shared/ui/button';
@@ -17,12 +17,15 @@ import {
   useBudgetCategories,
   useCreateChapter,
   useDeleteChapter,
+  useInvoiceTypePaymentMethods,
   useInvoiceTypes,
   useLinkInvoiceType,
+  useSetInvoiceTypePaymentMethods,
   useUnlinkInvoiceType,
   useUpdateChapter,
   type CategoryRow,
   type ChapterRow,
+  type InvoiceTypeRef,
 } from './base-data.api';
 
 /**
@@ -231,6 +234,8 @@ export function ChaptersView(): JSX.Element {
         </Card>
       ))}
 
+      <PaymentMethodsCard canWrite={canWrite} />
+
       {editing ? (
         <ChapterDialog
           chapter={editing.chapter}
@@ -352,6 +357,185 @@ function ChapterDialog({
 }
 
 /** اتصال یک نوع فاکتور به فصل. */
+/**
+ * روش‌های پرداخت مجاز، به تفکیک **نوع فاکتور**.
+ *
+ * چرا اینجا و نه در «اطلاعات پایه»: این یک محدودیت روی نوع فاکتور است و نه یک قلم
+ * داده؛ کنار همان جایی می‌نشیند که انواع فاکتور به فصل وصل می‌شوند.
+ *
+ * چرا اصلاً: «قبض» برای انشعابات معنا دارد و برای خرید کالا نه. بدون این فهرست،
+ * جلوگیری از انتخاب اشتباه فقط به حواس کاربر بند بود.
+ */
+function PaymentMethodsCard({ canWrite }: { canWrite: boolean }): JSX.Element | null {
+  const types = useInvoiceTypes();
+  const [editing, setEditing] = useState<InvoiceTypeRef | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  if ((types.data ?? []).length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader
+        icon="money"
+        title="روش‌های پرداخت مجاز"
+        description="برای هر نوع فاکتور تعیین کنید کدام روش‌های پرداخت در فرم دیده شوند."
+      />
+      <CardBody>
+        {message ? (
+          <p role="status" className="mb-3 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+            {message}
+          </p>
+        ) : null}
+
+        <ul className="divide-y divide-border">
+          {(types.data ?? []).map((type) => (
+            <li key={type.id} className="flex flex-wrap items-center gap-2 py-2.5">
+              <span className="min-w-0 flex-1 truncate text-sm font-medium" title={type.titleFa}>
+                {type.titleFa}
+              </span>
+              <Badge tone="neutral">{INVOICE_KIND_LABELS[type.kind]}</Badge>
+
+              {canWrite ? (
+                <Button size="sm" variant="secondary" onClick={() => setEditing(type)}>
+                  روش‌های پرداخت
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </CardBody>
+
+      {editing ? (
+        <PaymentMethodsDialog
+          invoiceType={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(text) => {
+            setEditing(null);
+            setMessage(text);
+          }}
+        />
+      ) : null}
+    </Card>
+  );
+}
+
+function PaymentMethodsDialog({
+  invoiceType,
+  onClose,
+  onSaved,
+}: {
+  invoiceType: InvoiceTypeRef;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}): JSX.Element {
+  const detail = useInvoiceTypePaymentMethods(invoiceType.id);
+  const save = useSetInvoiceTypePaymentMethods();
+
+  /*
+    `null` یعنی هنوز از سرور نیامده. پس از آن، مجموعهٔ تیک‌خورده‌ها محلی نگه داشته
+    می‌شود تا کاربر چند تیک را با هم عوض کند و یک‌بار ذخیره شود.
+  */
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!detail.data) return;
+    setPicked(
+      new Set(
+        detail.data.unrestricted
+          ? []
+          : detail.data.methods.filter((method) => method.allowed).map((method) => method.id),
+      ),
+    );
+  }, [detail.data]);
+
+  const toggle = (id: string): void =>
+    setPicked((current) => {
+      const next = new Set(current ?? []);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const submit = (event: FormEvent): void => {
+    event.preventDefault();
+    setError(null);
+
+    void save
+      .mutateAsync({ invoiceTypeId: invoiceType.id, paymentMethodIds: [...(picked ?? [])] })
+      .then(
+        () =>
+          onSaved(
+            (picked?.size ?? 0) === 0
+              ? 'محدودیت برداشته شد؛ همهٔ روش‌های پرداخت مجازند.'
+              : 'روش‌های پرداخت مجاز ذخیره شد.',
+          ),
+        (failure: unknown) =>
+          setError(
+            failure instanceof ApiError ? formatServerMessage(failure.message) : 'ذخیره ناموفق بود',
+          ),
+      );
+  };
+
+  return (
+    <Modal title={`روش‌های پرداخت «${invoiceType.titleFa}»`} onClose={onClose}>
+      <form className="space-y-4" onSubmit={submit}>
+        {detail.isPending ? (
+          <p className="text-sm text-muted-foreground">در حال دریافت…</p>
+        ) : detail.isError ? (
+          <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            دریافت روش‌های پرداخت ناموفق بود.
+          </p>
+        ) : (
+          <>
+            <ul className="space-y-1">
+              {(detail.data?.methods ?? []).map((method) => {
+                const isDefault = method.id === detail.data?.defaultPaymentMethodId;
+
+                return (
+                  <li key={method.id}>
+                    <label className="flex cursor-pointer items-center gap-2.5 rounded-lg p-2 text-sm hover:bg-muted/50">
+                      <input
+                        type="checkbox"
+                        checked={picked?.has(method.id) ?? false}
+                        onChange={() => toggle(method.id)}
+                        className="size-4 rounded border-input accent-[var(--color-primary)]"
+                      />
+                      <span className="flex-1 truncate">{method.titleFa}</span>
+                      {isDefault ? <Badge tone="primary">پیش‌فرض این نوع</Badge> : null}
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <p className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+              {(picked?.size ?? 0) === 0
+                ? 'هیچ روشی تیک نخورده است: یعنی محدودیتی اعمال نمی‌شود و همهٔ روش‌های فعال در فرم دیده می‌شوند.'
+                : 'فقط روش‌های تیک‌خورده در فرم این نوع فاکتور دیده می‌شوند. روش پیش‌فرض این نوع باید میانشان بماند.'}
+            </p>
+          </>
+        )}
+
+        {error ? (
+          <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="flex gap-2 border-t border-border pt-4">
+          <Button type="submit" loading={save.isPending} disabled={picked === null}>
+            ذخیره
+          </Button>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            انصراف
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function LinkDialog({
   chapter,
   onClose,

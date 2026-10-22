@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 
@@ -19,6 +19,11 @@ const chapterInputSchema = z.object({
   description: z.string().trim().max(1000).optional().transform((v) => (v ? v : null)),
   isActive: z.boolean().default(true),
   sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
+});
+
+/** فهرست مجاز؛ خالی یعنی «محدودیتی نیست». */
+const allowedMethodsSchema = z.object({
+  paymentMethodIds: z.array(z.string().uuid()).max(50),
 });
 
 const linkInputSchema = z.object({
@@ -84,7 +89,16 @@ export class ChaptersController {
       include: {
         invoiceTypes: {
           where: { invoiceType: { isActive: true } },
-          include: { invoiceType: { include: { defaultPaymentMethod: true } } },
+          include: {
+            invoiceType: {
+              include: {
+                defaultPaymentMethod: true,
+                // فهرست مجاز در همین رفت‌وبرگشت می‌آید؛ یک درخواست دیگر برای فرم
+                // فاکتور یعنی یک حالت میانی که در آن همهٔ روش‌ها دیده می‌شوند.
+                paymentMethods: { orderBy: { sortOrder: 'asc' } },
+              },
+            },
+          },
           orderBy: [{ isDefault: 'desc' }, { sortOrder: 'asc' }],
         },
       },
@@ -108,6 +122,17 @@ export class ChaptersController {
               titleFa: link.invoiceType.defaultPaymentMethod.titleFa,
             }
           : null,
+        /*
+          فهرست روش‌های پرداخت مجاز.
+
+          `null` یعنی «محدودیتی تعریف نشده، همهٔ روش‌های فعال مجازند» — که با فهرست
+          خالی یکی نیست. اگر هر دو را خالی می‌فرستادیم، فرم نمی‌توانست بین «محدود
+          نشده» و «هیچ روشی مجاز نیست» فرق بگذارد.
+        */
+        allowedPaymentMethodIds:
+          link.invoiceType.paymentMethods.length === 0
+            ? null
+            : link.invoiceType.paymentMethods.map((row) => row.paymentMethodId),
       })),
     };
   }
@@ -122,6 +147,116 @@ export class ChaptersController {
       orderBy: { titleFa: 'asc' },
       select: { id: true, key: true, kind: true, titleFa: true },
     });
+  }
+
+  /**
+   * روش‌های پرداخت یک نوع فاکتور: فهرست کامل، با علامتِ مجاز بودن.
+   *
+   * پاسخ همهٔ روش‌های فعال را می‌دهد و نه فقط مجازها، چون صفحهٔ مدیریت باید
+   * تیک‌نخورده‌ها را هم نشان بدهد.
+   */
+  @RequirePermission('base_data:read')
+  @Get('invoice-types/:invoiceTypeId/payment-methods')
+  @ApiOperation({ summary: 'روش‌های پرداخت مجاز یک نوع فاکتور' })
+  async paymentMethods(@Param('invoiceTypeId') invoiceTypeId: string) {
+    const invoiceType = await this.prisma.invoiceType.findUnique({
+      where: { id: invoiceTypeId },
+      include: { paymentMethods: true },
+    });
+    if (!invoiceType) throw AppError.notFound('نوع فاکتور یافت نشد');
+
+    const methods = await this.prisma.paymentMethod.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, key: true, kind: true, titleFa: true },
+    });
+
+    const allowed = new Set(invoiceType.paymentMethods.map((row) => row.paymentMethodId));
+
+    return {
+      invoiceTypeId: invoiceType.id,
+      titleFa: invoiceType.titleFa,
+      defaultPaymentMethodId: invoiceType.defaultPaymentMethodId,
+      /** هیچ محدودیتی تعریف نشده: همهٔ روش‌های فعال مجازند. */
+      unrestricted: allowed.size === 0,
+      methods: methods.map((method) => ({ ...method, allowed: allowed.size === 0 || allowed.has(method.id) })),
+    };
+  }
+
+  /**
+   * جایگزینی کامل فهرست مجاز.
+   *
+   * چرا PUT و جایگزینی کامل و نه افزودن/حذف تک‌تک: کاربر در یک گفت‌وگو چند تیک را
+   * با هم عوض می‌کند و ارسال تک‌تک، حالت‌های میانی می‌ساخت — مثلاً لحظه‌ای که روش
+   * پیش‌فرض از فهرست افتاده ولی جایگزینش هنوز نیامده.
+   *
+   * فهرست خالی یعنی «محدودیت را بردار»، نه «هیچ روشی مجاز نیست»؛ اگر دومی را
+   * می‌خواستیم، ثبت فاکتور آن نوع برای همیشه غیرممکن می‌شد.
+   */
+  @RequirePermission('base_data:write')
+  @Put('invoice-types/:invoiceTypeId/payment-methods')
+  @ApiOperation({ summary: 'تعیین روش‌های پرداخت مجاز یک نوع فاکتور' })
+  async setPaymentMethods(
+    @Param('invoiceTypeId') invoiceTypeId: string,
+    @Body(new ZodBody(allowedMethodsSchema)) body: z.infer<typeof allowedMethodsSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const invoiceType = await this.prisma.invoiceType.findUnique({
+      where: { id: invoiceTypeId },
+      include: { paymentMethods: true },
+    });
+    if (!invoiceType) throw AppError.notFound('نوع فاکتور یافت نشد');
+
+    const ids = [...new Set(body.paymentMethodIds)];
+
+    if (ids.length > 0) {
+      const found = await this.prisma.paymentMethod.count({
+        where: { id: { in: ids }, isActive: true },
+      });
+      if (found !== ids.length) {
+        throw AppError.validation('یکی از روش‌های پرداخت یافت نشد یا غیرفعال است');
+      }
+
+      /*
+        روش پیش‌فرضِ همین نوع فاکتور باید در فهرست بماند.
+
+        وگرنه فرم فاکتور روشی را از پیش انتخاب می‌کرد که در فهرست گزینه‌هایش نیست —
+        همان دسته باگی که یک‌بار با «روش پیش‌فرض نوع قبلی» دیده شد.
+      */
+      if (
+        invoiceType.defaultPaymentMethodId !== null &&
+        !ids.includes(invoiceType.defaultPaymentMethodId)
+      ) {
+        throw AppError.conflict(
+          'DEFAULT_METHOD_NOT_ALLOWED',
+          'روش پیش‌فرض این نوع فاکتور باید در فهرست مجاز بماند',
+        );
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.invoiceTypePaymentMethod.deleteMany({ where: { invoiceTypeId } });
+      if (ids.length > 0) {
+        await tx.invoiceTypePaymentMethod.createMany({
+          data: ids.map((paymentMethodId, index) => ({
+            invoiceTypeId,
+            paymentMethodId,
+            sortOrder: index,
+          })),
+        });
+      }
+    });
+
+    await this.audit.record({
+      actorId: user.id,
+      action: 'INVOICE_TYPE_PAYMENT_METHODS_SET',
+      entityType: 'invoiceType',
+      entityId: invoiceTypeId,
+      before: { paymentMethodIds: invoiceType.paymentMethods.map((row) => row.paymentMethodId) },
+      after: { paymentMethodIds: ids },
+    });
+
+    return this.paymentMethods(invoiceTypeId);
   }
 
   @RequirePermission('base_data:write')

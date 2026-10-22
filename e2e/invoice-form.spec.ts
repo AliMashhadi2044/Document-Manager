@@ -8,8 +8,14 @@ import { gotoSection, login, pickOption, unique } from './helpers';
  * هر دو آزمون یک سند تازه می‌سازند و دست‌نخورده رهایش می‌کنند (پیش‌نویس می‌ماند)؛
  * ساختن سند ارزان‌تر از وابسته شدن به داده‌ای است که آزمون دیگری ممکن است عوضش کند.
  */
-async function newDraft(page: import('@playwright/test').Page, title: string): Promise<void> {
-  await login(page, 'admin');
+async function newDraft(
+  page: import('@playwright/test').Page,
+  title: string,
+  options: { signIn?: boolean } = {},
+): Promise<void> {
+  // آزمونی که از پیش وارد شده، نباید دوباره وارد شود: صفحهٔ ورود اصلاً نمی‌آید و
+  //  تا ابد منتظر فیلد نام کاربری می‌ماند.
+  if (options.signIn !== false) await login(page, 'admin');
   await gotoSection(page, 'اسناد');
 
   await page.getByRole('button', { name: 'ایجاد سند', exact: true }).first().click();
@@ -110,5 +116,66 @@ test.describe('فرم فاکتور', () => {
     await expect(page.getByRole('button', { name: 'باز کردن تقویم' })).toBeFocused();
     // تاریخ با بستنِ بی‌انتخاب عوض نمی‌شود.
     await expect(field).toHaveValue('۱۴۰۵/۰۷/۲۰');
+  });
+});
+
+/**
+ * روش‌های پرداخت مجاز، به تفکیک نوع فاکتور.
+ *
+ * ادعای این آزمون این نیست که «گفت‌وگو باز می‌شود»، بلکه این است که تیک‌ها واقعاً
+ * **فرم فاکتور** را محدود می‌کنند. آزمون در پایان محدودیت را برمی‌دارد، چون این یک
+ * تنظیم سراسری است و جا ماندنش روی اجراهای بعدی اثر می‌گذارد.
+ */
+test.describe('روش پرداخت مجاز', () => {
+  test('تیک‌های یک نوع فاکتور، فهرست فرم را محدود می‌کند', async ({ page }) => {
+    await login(page, 'admin');
+    await gotoSection(page, 'فصل‌ها و انواع فاکتور');
+
+    /*
+     * ردیف را با **دکمه‌اش** پیدا می‌کنیم و نه فقط با متن: نام نوع فاکتور در فهرست
+     * فصل‌ها هم می‌آید و آنجا دکمه‌ای نیست.
+     */
+    const typeRow = page
+      .getByRole('listitem')
+      .filter({ has: page.getByRole('button', { name: 'روش‌های پرداخت' }) })
+      .filter({ hasText: 'فاکتور عادی' });
+    await typeRow.getByRole('button', { name: 'روش‌های پرداخت' }).click();
+
+    const dialog = page.getByRole('dialog', { name: /روش‌های پرداخت/ });
+    await expect(dialog).toBeVisible();
+
+    /*
+     * از حالت معلوم شروع کن.
+     *
+     * این یک تنظیم سراسری است؛ اگر آزمون حالت اولیه را **فرض** کند، یک اجرای ناتمام
+     * اجرای بعدی را می‌شکند. پس اول هر تیکی که هست برداشته می‌شود.
+     */
+    const ticked = dialog.locator('input[type="checkbox"]:checked');
+    for (let index = (await ticked.count()) - 1; index >= 0; index -= 1) {
+      await ticked.nth(index).uncheck();
+    }
+    await expect(dialog.getByText(/محدودیتی اعمال نمی‌شود/)).toBeVisible();
+
+    // فقط «تنخواه» مجاز باشد — پس «قبض» نباید در فرم دیده شود.
+    await dialog.getByRole('checkbox', { name: /تنخواه/ }).check();
+    await dialog.getByRole('button', { name: 'ذخیره' }).click();
+    await expect(page.getByText('روش‌های پرداخت مجاز ذخیره شد.')).toBeVisible();
+
+    // ───── اثرش در فرم فاکتور ─────
+    await newDraft(page, unique('سند آزمون روش پرداخت'), { signIn: false });
+    await pickOption(page, 'فصل', { search: 'مواد مصرفی', nth: 0 });
+
+    await page.getByRole('combobox', { name: 'روش پرداخت' }).click();
+    const options = await page.getByRole('option').allTextContents();
+    expect(options.join(' ')).toContain('تنخواه');
+    expect(options.join(' '), 'روش غیرمجاز هنوز در فهرست است').not.toContain('قبض');
+    await page.keyboard.press('Escape');
+
+    // ───── پاک‌سازی: برداشتن محدودیت ─────
+    await gotoSection(page, 'فصل‌ها و انواع فاکتور');
+    await typeRow.getByRole('button', { name: 'روش‌های پرداخت' }).click();
+    await dialog.getByRole('checkbox', { name: /تنخواه/ }).uncheck();
+    await dialog.getByRole('button', { name: 'ذخیره' }).click();
+    await expect(page.getByText(/محدودیت برداشته شد/)).toBeVisible();
   });
 });
