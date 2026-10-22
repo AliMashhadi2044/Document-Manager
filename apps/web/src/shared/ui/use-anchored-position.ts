@@ -32,6 +32,14 @@ export function useAnchoredPosition(
   anchorRef: RefObject<HTMLElement>,
   open: boolean,
   container: Element,
+  /**
+   * کمینهٔ عرض فهرست.
+   *
+   * پیش‌فرض، عرضِ خودِ دکمه است (دست‌کم ۲۲۰ پیکسل) چون فهرست باید زیر همان چیزی که
+   * بازش کرده بنشیند. استثنا جایی است که محتوای فهرست شبکه‌ای است و با عرض دکمه
+   * له می‌شود — مثل حروف پلاک، که دکمه‌اش یک نویسه پهنا دارد.
+   */
+  minWidth = 220,
 ): CSSProperties {
   const [style, setStyle] = useState<CSSProperties>({ position: 'fixed', opacity: 0 });
 
@@ -46,7 +54,7 @@ export function useAnchoredPosition(
     const below = window.innerHeight - rect.bottom - gap;
     const above = rect.top - gap;
     const openUp = below < 220 && above > below;
-    const width = Math.min(Math.max(rect.width, 220), window.innerWidth - 2 * edge);
+    const width = Math.min(Math.max(rect.width, minWidth), window.innerWidth - 2 * edge);
     const maxHeight = Math.min(panelMax, Math.max(openUp ? above : below, 160) - edge);
     const left = Math.min(
       Math.max(edge, rect.left),
@@ -82,7 +90,7 @@ export function useAnchoredPosition(
         ? { bottom: host.bottom - rect.top + gap - container.scrollTop }
         : { top: rect.bottom - host.top + gap + container.scrollTop }),
     });
-  }, [anchorRef, container]);
+  }, [anchorRef, container, minWidth]);
 
   // layout، نه effect: فهرست نباید یک فریم در جای اشتباه دیده شود.
   useLayoutEffect(() => {

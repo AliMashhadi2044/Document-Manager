@@ -119,7 +119,8 @@ function LetterCell({
 
   const container =
     open && buttonRef.current ? (buttonRef.current.closest('dialog') ?? document.body) : document.body;
-  const position = useAnchoredPosition(buttonRef, open, container);
+  // دکمهٔ حرف یک نویسه پهنا دارد؛ شبکهٔ چهارستونی سری‌ها با آن عرض خوانا نیست.
+  const position = useAnchoredPosition(buttonRef, open, container, 380);
 
   useEffect(() => {
     if (!open) return;
