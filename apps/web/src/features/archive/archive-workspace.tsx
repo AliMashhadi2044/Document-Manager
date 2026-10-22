@@ -3,7 +3,7 @@ import { DOCUMENT_STATUS_LABELS } from '@dm/shared';
 
 import { Button } from '../../shared/ui/button';
 import { Input } from '../../shared/ui/input';
-import { JalaliDateInput } from '../../shared/ui/jalali-date-input';
+import { JalaliDatePicker } from '../../shared/ui/date-picker';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
 import { formatIsoAsJalali, formatMoney, formatServerMessage, toPersianDigits } from '../../shared/format/money';
@@ -207,11 +207,11 @@ function ArchiveInfoForm({
           maxLength={50}
           onChange={(event) => setNumber(event.target.value)}
         />
-        <JalaliDateInput
+        <JalaliDatePicker
           label="تاریخ سند"
           required
           disabled={disabled}
-          isoValue={isoDate}
+          value={isoDate}
           onChange={setIsoDate}
         />
       </div>

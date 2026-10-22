@@ -8,7 +8,7 @@ import {
 import { Button } from '../../shared/ui/button';
 import { Input } from '../../shared/ui/input';
 import { Select } from '../../shared/ui/select';
-import { JalaliDateInput } from '../../shared/ui/jalali-date-input';
+import { JalaliDatePicker, JalaliDateRangePicker } from '../../shared/ui/date-picker';
 import { MoneyInput } from '../../shared/ui/money-input';
 import { toPersianDigits } from '../../shared/format/money';
 import type { DatasetFieldDto } from './analytics.api';
@@ -302,6 +302,28 @@ function ValueInputs({
     );
   }
 
+  /*
+    بازهٔ تاریخ، **یک** کنترل است و نه دو تا.
+
+    با دو ورودی جدا، کاربر می‌توانست «از» را بعد از «تا» بگذارد و خطا را تازه موقع
+    اجرای گزارش ببیند؛ انتخابگر بازه خودش این را ممکن نمی‌کند و بازه‌های آماده
+    («۳۰ روز اخیر»، «ماه گذشته») را هم در دسترس می‌گذارد — همان چیزی که در
+    گزارش‌گیری مدام لازم است.
+  */
+  if (count === 2 && (field.type === 'date' || field.type === 'jalaliDate')) {
+    return (
+      <div className="w-full max-w-md">
+        <JalaliDateRangePicker
+          label="بازهٔ تاریخ"
+          value={{ from: condition.values[0] ?? null, to: condition.values[1] ?? null }}
+          onChange={(range) =>
+            onChange({ ...condition, values: [range.from ?? '', range.to ?? ''] })
+          }
+        />
+      </div>
+    );
+  }
+
   const inputs = count === 2 ? [0, 1] : [0];
 
   return (
@@ -356,9 +378,9 @@ function SingleValueInput({
       // مقدار بیرونی میلادی ISO است و تبدیل شمسی در خودِ ورودی انجام می‌شود — همان
       // قراردادی که فرم‌های سند و فاکتور دارند.
       return (
-        <JalaliDateInput
+        <JalaliDatePicker
           label={label}
-          isoValue={value === '' ? null : value}
+          value={value === '' ? null : value}
           onChange={(iso) => onChange(iso ?? '')}
         />
       );

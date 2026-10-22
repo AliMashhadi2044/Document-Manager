@@ -14,8 +14,11 @@ import { apiFetch, ApiError } from '../../shared/api/client';
 import { Button } from '../../shared/ui/button';
 import { Card, CardHeader } from '../../shared/ui/card';
 import { Input } from '../../shared/ui/input';
-import { formatServerMessage } from '../../shared/format/money';
+import { formatServerMessage, toPersianDigits } from '../../shared/format/money';
 import { Select } from '../../shared/ui/select';
+import { HELP_CLASS, LABEL_CLASS } from '../../shared/ui/field';
+import { Segmented } from '../../shared/ui/segmented';
+import { JalaliDatePicker } from '../../shared/ui/date-picker';
 import { useBudgetCategories } from '../base-data/base-data.api';
 import {
   useChapterInvoiceTypes,
@@ -72,6 +75,8 @@ export function CreateInvoiceForm({
   });
   const create = useCreateInvoice(documentId);
 
+  /** گروه بودجه (جاری / عمرانی) — فهرست فصل‌ها را فیلتر می‌کند. */
+  const [categoryId, setCategoryId] = useState('');
   const [chapterId, setChapterId] = useState('');
   const [invoiceTypeId, setInvoiceTypeId] = useState('');
   const [vendorId, setVendorId] = useState('');
@@ -123,18 +128,62 @@ export function CreateInvoiceForm({
     setPayment((current) => ({ ...EMPTY_PAYMENT, notes: current.notes, paymentMethodId: method?.id ?? '' }));
   }, [paymentTouched, selectedType?.invoiceTypeId, selectedType?.defaultPaymentMethod]);
 
-  const chapters = useMemo(
+  /*
+    گروه‌های بودجه، به‌شکل یک کلید چندحالته بالای فهرست فصل‌ها.
+
+    پیش از این عنوان گروه، پیشوندِ برچسبِ هر فصل بود («جاری — مواد مصرفی») و کاربر
+    باید در یک فهرست بلندِ درهم دنبال فصلش می‌گشت. حالا گروه یک انتخاب جداست و فهرست
+    فصل‌ها فقط همان گروه را نشان می‌دهد — پس برچسب‌ها هم کوتاه‌تر و خواناتر شدند.
+  */
+  const categoryOptions = useMemo(
     () =>
-      (categories.data ?? []).flatMap((category) =>
-        category.chapters
-          .filter((chapter) => chapter.isActive)
-          .map((chapter) => ({
-            value: chapter.id,
-            label: `${category.titleFa} — ${chapter.title}${chapter.code ? ` (${chapter.code})` : ''}`,
-          })),
-      ),
+      (categories.data ?? [])
+        .filter((category) => category.chapters.some((chapter) => chapter.isActive))
+        .map((category) => ({
+          value: category.id,
+          label: category.titleFa,
+          icon: (category.key === 'CAPITAL' ? 'layers' : 'store') as 'layers' | 'store',
+          badge: toPersianDigits(
+            String(category.chapters.filter((chapter) => chapter.isActive).length),
+          ),
+          hint: category.key === 'CAPITAL' ? 'بودجهٔ تملک دارایی' : 'هزینه‌های جاری',
+        })),
     [categories.data],
   );
+
+  // گروه پیش‌فرض: اولین گروهی که فصل فعال دارد. بدون این، کاربر اول باید یک انتخاب
+  // اضافه بکند تا فهرست فصل‌ها اصلاً پر شود.
+  useEffect(() => {
+    if (categoryOptions.length === 0) return;
+    setCategoryId((current) =>
+      categoryOptions.some((option) => option.value === current)
+        ? current
+        : (categoryOptions[0]?.value ?? ''),
+    );
+  }, [categoryOptions]);
+
+  const chapters = useMemo(
+    () =>
+      (categories.data ?? [])
+        .filter((category) => category.id === categoryId)
+        .flatMap((category) =>
+          category.chapters
+            .filter((chapter) => chapter.isActive)
+            .map((chapter) => ({
+              value: chapter.id,
+              label: `${chapter.title}${chapter.code ? ` (${chapter.code})` : ''}`,
+            })),
+        ),
+    [categories.data, categoryId],
+  );
+
+  // با عوض شدن گروه، فصلِ انتخاب‌شده ممکن است دیگر در فهرست نباشد؛ ماندنش یعنی فرم
+  // روی مقداری کار می‌کند که کاربر نمی‌بیند.
+  useEffect(() => {
+    setChapterId((current) =>
+      current === '' || chapters.some((chapter) => chapter.value === current) ? current : '',
+    );
+  }, [chapters]);
 
   const reference = bootstrap.data;
   const isoInvoiceDate = safeIso(invoiceDate);
@@ -188,7 +237,27 @@ export function CreateInvoiceForm({
       />
 
       <div className="space-y-6 p-5">
-        <div className="grid gap-x-5 gap-y-4 md:grid-cols-2">
+        {categoryOptions.length > 0 ? (
+          <div className="space-y-1.5">
+            <span className="block text-sm font-medium">گروه بودجه</span>
+            <Segmented
+              label="گروه بودجه"
+              size="lg"
+              options={categoryOptions}
+              value={categoryId}
+              onChange={setCategoryId}
+            />
+          </div>
+        ) : null}
+
+        {/*
+          `items-start` و خانه‌های هم‌ساخت: هر دو ستون باید از یک خط شروع شوند.
+
+          پیش از این، حالت‌های «در حال خواندن» و «تنها نوع مجاز» با `self-end` به کف
+          خانه می‌چسبیدند و ارتفاعشان هم با کنترل انتخاب یکی نبود؛ نتیجه این بود که
+          «فصل» و «نوع فاکتور» در یک راستا نمی‌نشستند.
+        */}
+        <div className="grid items-start gap-x-5 gap-y-4 md:grid-cols-2">
           <Select
             label="فصل"
             required
@@ -198,24 +267,29 @@ export function CreateInvoiceForm({
             hint="انواع فاکتور مجاز، از اتصال‌های همین فصل در اطلاعات پایه می‌آیند."
           />
 
-          {chapterId === '' ? null : invoiceTypes.isPending ? (
+          {chapterId === '' ? (
+            <ReadOnlyField
+              label="نوع فاکتور"
+              value="—"
+              hint="ابتدا فصل را انتخاب کنید."
+            />
+          ) : invoiceTypes.isPending ? (
             // تا وقتی پاسخ سرور نرسیده، «نوعی تعریف نشده» یک **خطای دروغ** است؛
             // فهرست خالی در حال بارگذاری با فهرست خالی واقعی یکی نیست.
-            <p className="self-end text-sm text-muted-foreground">
-              در حال خواندن انواع فاکتور مجاز این فصل…
-            </p>
+            <ReadOnlyField label="نوع فاکتور" value="در حال خواندن…" hint="انواع مجاز این فصل" />
           ) : options.length === 0 ? (
-            <p className="self-end rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              برای این فصل هیچ نوع فاکتوری در اطلاعات پایه تعریف نشده است. ابتدا در بخش
-              «فصل‌ها و انواع فاکتور» اتصال را بسازید.
-            </p>
+            <ReadOnlyField
+              label="نوع فاکتور"
+              value="تعریف نشده"
+              tone="error"
+              hint="برای این فصل هیچ نوع فاکتوری در «فصل‌ها و انواع فاکتور» وصل نشده است."
+            />
           ) : options.length === 1 ? (
-            <div className="self-end">
-              <span className="block text-sm font-medium">نوع فاکتور</span>
-              <p className="mt-1.5 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-sm">
-                {options[0]?.titleFa} — تنها نوع مجاز این فصل
-              </p>
-            </div>
+            <ReadOnlyField
+              label="نوع فاکتور"
+              value={options[0]?.titleFa ?? ''}
+              hint="تنها نوع مجاز این فصل"
+            />
           ) : (
             <Select
               label="نوع فاکتور"
@@ -227,6 +301,7 @@ export function CreateInvoiceForm({
                 value: option.invoiceTypeId,
                 label: option.titleFa,
               }))}
+              hint="از اتصال‌های همین فصل می‌آید."
             />
           )}
         </div>
@@ -264,13 +339,14 @@ export function CreateInvoiceForm({
                 hint="اختیاری"
               />
 
-              <Input
+              <JalaliDatePicker
                 label="تاریخ صورتحساب"
                 required
-                value={invoiceDate}
-                onChange={(event) => setInvoiceDate(event.target.value)}
-                error={isoInvoiceDate === null ? 'تاریخ شمسی معتبر نیست' : undefined}
-                hint="قالب ۱۴۰۵/۰۷/۱۲"
+                value={isoInvoiceDate}
+                onChange={(iso) => setInvoiceDate(iso === null ? '' : formatJalali(isoDateToJalali(iso)))}
+                {...(invoiceDate.trim() !== '' && isoInvoiceDate === null
+                  ? { error: 'تاریخ شمسی معتبر نیست' }
+                  : {})}
               />
             </div>
 
@@ -403,6 +479,42 @@ function buildDetails(
  * خواندن و تبدیل هر دو از `@dm/shared` می‌آیند (ارقام فارسی، جداکننده‌های مختلف و
  * اعتبار روز در ماه). نوشتن دوباره‌شان اینجا همان ریسک R12 است.
  */
+/**
+ * فیلدِ فقط‌خواندنی با همان ابعاد کنترل‌های فرم.
+ *
+ * چرا کامپوننت و نه چند `<p>` درجا: ارتفاع برچسب، ارتفاع کادر و خط راهنما باید
+ * **دقیقاً** مثل `Select` باشد، وگرنه دو ستون کنار هم ناهم‌تراز می‌شوند.
+ */
+function ReadOnlyField({
+  label,
+  value,
+  hint,
+  tone = 'muted',
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone?: 'muted' | 'error';
+}): JSX.Element {
+  return (
+    <div className="space-y-1.5">
+      <span className={LABEL_CLASS}>{label}</span>
+      <p
+        className={
+          tone === 'error'
+            ? 'flex h-10 items-center truncate rounded-lg border border-destructive/40 bg-destructive/10 px-3 text-sm text-destructive'
+            : 'flex h-10 items-center truncate rounded-lg border border-dashed border-border bg-muted/40 px-3 text-sm'
+        }
+      >
+        {value}
+      </p>
+      <p className={`${HELP_CLASS} ${tone === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
+        {hint}
+      </p>
+    </div>
+  );
+}
+
 function safeIso(jalaliText: string): string | null {
   try {
     return jalaliToIsoDate(parseJalali(jalaliText));

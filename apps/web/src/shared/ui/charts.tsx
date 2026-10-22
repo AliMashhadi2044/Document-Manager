@@ -349,13 +349,22 @@ export function AreaChart({
   const padding = 8;
   const step = (width - padding * 2) / (data.length - 1);
 
-  const points = data.map((item, index) => {
+  /*
+    داده **وارونه** رسم می‌شود تا زمان از راست به چپ برود.
+
+    باگی که این را لازم کرد: ردیف برچسب‌ها یک `flex` در صفحهٔ راست‌به‌چپ است، پس
+    اولین ماه سمت **راست** می‌نشیند؛ ولی SVG مختصاتش فیزیکی است و همان ماه را سمت
+    چپ می‌کشید. نتیجه دو چیز بود که کاربر دید: هاور روی نقطهٔ فروردین، عدد را زیرِ
+    برچسب اسفند می‌نشاند، و قلهٔ نمودار میله‌ای (که flex است و درست می‌چیند) با قلهٔ
+    روند یکی نبود — یکی مهر، دیگری شهریور.
+  */
+  const points = [...data].reverse().map((item, position) => {
     const share = ratioOf(toBigInt(item.value), max);
     return {
-      x: padding + index * step,
+      x: padding + position * step,
       y: height - padding - share * (height - padding * 2),
       item,
-      index,
+      index: data.length - 1 - position,
     };
   });
 
@@ -542,13 +551,15 @@ export function Sparkline({
   const width = 120;
   const height = 32;
   const step = width / (numbers.length - 1);
-  const points = numbers.map((value, index) => ({
-    x: index * step,
+  // وارونه، به همان دلیل `AreaChart`: زمان در سامانهٔ راست‌به‌چپ از راست می‌آید.
+  const points = [...numbers].reverse().map((value, position) => ({
+    x: position * step,
     y: height - 2 - ratioOf(value, max) * (height - 6),
   }));
 
   const line = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
-  const last = points[points.length - 1];
+  // تازه‌ترین مقدار، اولین نقطهٔ رسم‌شده است (سمت چپ).
+  const last = points[0];
 
   return (
     <div className={cn('relative', className)}>

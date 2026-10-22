@@ -157,6 +157,48 @@ test.describe('فیلتر سال داشبورد', () => {
     await expect(page.getByRole('combobox', { name: 'سال شمسی', exact: true })).toBeVisible();
     await expect(page.getByText('روند ماهانه فاکتورها').locator('..')).toContainText('سال شمسی');
   });
+
+  /**
+   * نمودار روند و ردیف برچسب‌هایش باید **هم‌جهت** باشند.
+   *
+   * باگی که این آزمون را لازم کرد: ردیف برچسب‌ها یک `flex` راست‌به‌چپ است و اولین
+   * ماه را سمت راست می‌گذارد، ولی SVG مختصاتش فیزیکی است و همان ماه را سمت چپ
+   * می‌کشید. نتیجه این بود که هاور روی نقطهٔ یک ماه، عدد را زیر برچسب ماه دیگری
+   * می‌نشاند و قلهٔ روند با قلهٔ نمودار میله‌ای یکی نبود.
+   */
+  test('نقطهٔ روند، بالای برچسب خودش است', async ({ page }) => {
+    await login(page, 'admin');
+    await gotoSection(page, 'داشبورد');
+
+    const trend = page.getByText('روند پیوسته همان داده').locator('..');
+    const labels = trend.locator('span').filter({ hasText: /^[^\d]+$/ });
+    const first = trend.getByRole('img', { name: 'روند مبلغ ماهانه' });
+    await expect(first).toBeVisible();
+
+    // نقطه‌ها عنصر HTML اند (و نه `circle`)، چون SVG کشیده می‌شود و دایره بیضی می‌شد.
+    const dots = trend.locator('span[aria-hidden="true"].absolute');
+    const dotCount = await dots.count();
+    expect(dotCount).toBeGreaterThan(1);
+
+    const dot = dots.first();
+    const dotBox = await dot.boundingBox();
+    await dot.hover();
+
+    // برچسبی که با هاور عوض می‌شود، باید **همان‌جایی** باشد که نقطه است.
+    const changed = trend.locator('span.font-medium').first();
+    await expect(changed).toBeVisible();
+    const labelBox = await changed.boundingBox();
+
+    expect(dotBox && labelBox).toBeTruthy();
+    const dotCenter = (dotBox?.x ?? 0) + (dotBox?.width ?? 0) / 2;
+    const labelCenter = (labelBox?.x ?? 0) + (labelBox?.width ?? 0) / 2;
+    expect(
+      Math.abs(dotCenter - labelCenter),
+      'نقطهٔ روند و برچسبی که روشن می‌شود، در یک جا نیستند',
+    ).toBeLessThan(40);
+
+    await expect(labels.first()).toBeVisible();
+  });
 });
 
 test.describe('ترتیب اطلاعات پایه', () => {
