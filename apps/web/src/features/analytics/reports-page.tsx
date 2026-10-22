@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { EMPTY_FILTER, type FilterGroup, type ReportSort } from '@dm/shared';
 
 import { Button } from '../../shared/ui/button';
+import { Icon } from '../../shared/ui/icon';
 import { Input } from '../../shared/ui/input';
 import { Select } from '../../shared/ui/select';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
-import { useDebouncedValue } from '../../shared/hooks/use-debounced-value';
 import { formatServerMessage, toPersianDigits } from '../../shared/format/money';
 import type { CurrentUser } from '../auth/auth.api';
 import {
@@ -120,27 +120,45 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  /*
+    پیش‌نویس در برابر آنچه اجرا شده.
+
+    گزارش با **دکمه** اجرا می‌شود، نه با هر تغییر. فیلتر و ستون و گروه‌بندی در
+    `draft` می‌نشینند و تا فشرده نشدن «اجرای گزارش» به سرور نمی‌روند؛ یک گزارش روی
+    صدها هزار ردیف می‌دود و کاربری که سه فیلتر پشت هم تنظیم می‌کند، سه اجرای کامل
+    را هدر می‌داد.
+
+    صفحه و مرتب‌سازی از این قاعده بیرون‌اند: آن‌ها روی **نتیجهٔ همین اجرا** کار
+    می‌کنند و واداشتن کاربر به زدن دوبارهٔ دکمه برای رفتن به صفحهٔ بعد، آزاردهنده
+    است.
+
+    اجرای اول خودکار است: صفحهٔ خالی، کاربر را پیش از دیدن هیچ داده‌ای به تنظیم
+    فیلتر وادار می‌کند.
+  */
+  const draft = useMemo(() => ({ columns, filter, groupBy }), [columns, filter, groupBy]);
+  const [applied, setApplied] = useState(draft);
+
   const request: ReportRequest = useMemo(
-    () => ({ columns: [...columns], filter, sort: [...sort], page, pageSize, groupBy }),
-    [columns, filter, sort, page, pageSize, groupBy],
+    () => ({
+      columns: [...applied.columns],
+      filter: applied.filter,
+      sort: [...sort],
+      page,
+      pageSize,
+      groupBy: applied.groupBy,
+    }),
+    [applied, sort, page, pageSize],
   );
 
-  /*
-    گزارش با **تأخیر** اجرا می‌شود.
+  /** پیش‌نویسی که هنوز اجرا نشده — دکمه با همین برجسته می‌شود. */
+  const dirty = JSON.stringify(draft) !== JSON.stringify(applied);
 
-    مقدار فیلترها متن آزاد است و هر نویسه، یک درخواست تازه می‌ساخت؛ همین‌طور هر
-    کلیک روی ستون‌ها. اینجا یک گزارش روی صدها هزار ردیف می‌دود، پس درخواستی که
-    پیش از رسیدن پاسخ بی‌مصرف می‌شود هزینهٔ واقعی دارد.
+  function runReport(): void {
+    setApplied(draft);
+    setPage(1);
+  }
 
-    تأخیر روی **کل درخواست** است، نه روی تک‌تک کنترل‌ها: یک جا، به‌جای پراکندن
-    همین منطق در هر ورودی فیلتر. `request` با `useMemo` مرجع پایدار دارد، پس
-    مقایسهٔ مرجعیِ هوک درست کار می‌کند.
-
-    خروجی Excel از `request` بی‌تأخیر می‌خواند: آنجا کاربر صریح دکمه زده است.
-  */
-  const settledRequest = useDebouncedValue(request, 350);
-  const result = useReportQuery(dataset.key, settledRequest);
-  const settling = settledRequest !== request;
+  const result = useReportQuery(dataset.key, request);
   const views = useSavedViews(dataset.key);
   const saveView = useSaveView();
   const deleteView = useDeleteView(dataset.key);
@@ -267,9 +285,32 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
             />
           </div>
 
-          <div className="ms-auto flex flex-wrap gap-2">
+          <div className="ms-auto flex flex-wrap items-center gap-2">
+            {/*
+              تا وقتی تغییری اجرا نشده، دکمه برجسته است و یک خط هم می‌گوید چیزی
+              منتظر مانده؛ وگرنه کاربر نمی‌فهمد چرا جدول با فیلتر تازه‌اش نمی‌خواند.
+            */}
+            {dirty ? (
+              <span className="text-xs text-muted-foreground">تغییرها هنوز اجرا نشده‌اند</span>
+            ) : null}
+            <Button
+              size="sm"
+              variant={dirty ? 'primary' : 'secondary'}
+              loading={result.isFetching}
+              onClick={runReport}
+            >
+              <Icon name="search" size={15} />
+              اجرای گزارش
+            </Button>
             {canExport ? (
-              <Button size="sm" loading={busy} onClick={() => void runExport()}>
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={busy}
+                disabled={dirty}
+                title={dirty ? 'ابتدا گزارش را اجرا کنید' : undefined}
+                onClick={() => void runExport()}
+              >
                 خروجی Excel
               </Button>
             ) : null}
@@ -305,6 +346,9 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
               setSort(view.sort);
               setPageSize(view.pageSize);
               setPage(1);
+              // نما خودش اجرا می‌شود: کاربر با انتخابش همان را خواسته است. نما
+              // گروه‌بندی را نگه نمی‌دارد، پس همان گروه‌بندی فعلی می‌ماند.
+              setApplied({ columns: view.columns, filter: view.filter, groupBy });
               setViewName(view.name);
               setShareView(view.isShared);
               setMessage(`نمای «${view.name}» اعمال شد.`);
@@ -317,7 +361,16 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
                   dataset: dataset.key,
                   name: viewName.trim(),
                   isShared: shareView,
-                  request: { ...request, page: 1 },
+                  // آنچه ذخیره می‌شود **پیش‌نویس** است، نه آخرین اجرا: کاربر همان
+                  // چیزی را می‌بیند که تنظیم کرده.
+                  request: {
+                    columns: [...draft.columns],
+                    filter: draft.filter,
+                    sort: [...sort],
+                    pageSize,
+                    page: 1,
+                    groupBy: draft.groupBy,
+                  },
                 },
                 {
                   onSuccess: () => setMessage(`نمای «${viewName.trim()}» ذخیره شد.`),
@@ -365,7 +418,7 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
           sort={sort}
           sortableKeys={sortableKeys}
           enumLabels={enumLabels}
-          isLoading={result.isFetching || settling}
+          isLoading={result.isFetching}
           onSortChange={(next) => {
             setSort(next);
             setPage(1);
