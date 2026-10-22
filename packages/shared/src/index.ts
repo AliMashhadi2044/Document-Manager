@@ -13,5 +13,6 @@ export * from './workflow/document-workflow.js';
 export * from './invoices/invoice-kind.js';
 export * from './invoices/fuel.js';
 export * from './vehicles/plate.js';
+export * from './vehicles/plate-format.js';
 export * from './files/file-types.js';
 export * from './analytics/filter.js';

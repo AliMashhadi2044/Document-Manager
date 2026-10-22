@@ -5,9 +5,10 @@ import { Input } from '../../shared/ui/input';
 import { Select } from '../../shared/ui/select';
 import { Badge } from '../../shared/ui/badge';
 import { Icon } from '../../shared/ui/icon';
+import { PlateBadge } from '../../shared/ui/plate-input';
 import { DataTable, type Column } from '../../shared/ui/data-table';
 import { ApiError } from '../../shared/api/client';
-import { formatServerMessage, toPersianDigits } from '../../shared/format/money';
+import { formatServerMessage } from '../../shared/format/money';
 import { useCurrentUser } from '../auth/auth.api';
 import { useBootstrap } from './base-data.api';
 import { VehicleDialog } from './vehicle-dialog';
@@ -52,9 +53,7 @@ export function VehiclesPage(): JSX.Element {
       sortKey: 'plateNumber',
       cell: (row) => (
         <div className="max-w-[28ch]">
-          <div dir="ltr" className="money truncate font-medium" title={row.plateNumber}>
-            {toPersianDigits(row.plateNumber)}
-          </div>
+          <PlateBadge plate={row.plateNumber} />
           {row.notes ? (
             <div className="truncate text-xs text-muted-foreground" title={row.notes}>
               {row.notes}

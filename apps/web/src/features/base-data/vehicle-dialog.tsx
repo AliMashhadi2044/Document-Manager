@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 
 import { Button } from '../../shared/ui/button';
 import { Input } from '../../shared/ui/input';
+import { PlateInput } from '../../shared/ui/plate-input';
 import { Select } from '../../shared/ui/select';
 import { Modal } from '../../shared/ui/modal';
 import { Toggle } from '../../shared/ui/toggle';
@@ -86,14 +87,7 @@ export function VehicleDialog({
             createLabel="افزودن نوع خودرو"
           />
 
-          <Input
-            label="پلاک"
-            required
-            dir="ltr"
-            value={plateNumber}
-            onChange={(event) => setPlateNumber(event.target.value)}
-            hint="همان‌طور که روی فاکتور سوخت نوشته می‌شود."
-          />
+          <PlateInput required label="پلاک" value={plateNumber} onChange={setPlateNumber} />
 
           <div className="md:col-span-2">
             <Input

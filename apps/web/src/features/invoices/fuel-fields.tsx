@@ -120,7 +120,8 @@ export function FuelFields({
           value={draft.vehicleId}
           options={(vehicles.data?.items ?? []).map((vehicle) => ({
             value: vehicle.id,
-            label: vehicle.plateNumber,
+            // پلاک هم مثل بقیهٔ ارقام سامانه با ارقام فارسی دیده می‌شود.
+            label: toPersianDigits(vehicle.plateNumber),
             description: vehicle.notes ?? undefined,
           }))}
           onChange={(vehicleId) => onChange({ ...draft, vehicleId })}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   DOCUMENT_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
@@ -10,6 +10,7 @@ import {
 } from '@dm/shared';
 
 import { Button } from '../../shared/ui/button';
+import { PlateBadge } from '../../shared/ui/plate-input';
 import { Input } from '../../shared/ui/input';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
@@ -463,7 +464,10 @@ function InvoiceCard({
       {invoice.fuelDetail ? (
         <dl className="grid gap-4 border-b border-border px-5 py-4 text-sm sm:grid-cols-4">
           <Field label="نوع خودرو" value={invoice.fuelDetail.vehicleTypeTitleSnapshot} />
-          <Field label="پلاک" value={toPersianDigits(invoice.fuelDetail.plateNumberSnapshot)} />
+          <Field
+            label="پلاک"
+            value={<PlateBadge plate={invoice.fuelDetail.plateNumberSnapshot} />}
+          />
           <Field label="نوع سوخت" value={invoice.fuelDetail.fuelTypeTitleSnapshot} />
           <Field
             label="ماه"
@@ -585,7 +589,7 @@ function Field({
   strong = false,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   strong?: boolean;
 }): JSX.Element {
   return (
