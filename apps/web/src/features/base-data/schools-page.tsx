@@ -11,6 +11,7 @@ import { formatServerMessage, toPersianDigits } from '../../shared/format/money'
 import { useCurrentUser } from '../auth/auth.api';
 import { useBootstrap } from './base-data.api';
 import { SchoolDialog } from './school-dialog';
+import { RowAction } from './row-action';
 import { useDeleteSchool, useSchools, useUpdateSchool, type SchoolRow } from './schools.api';
 
 /**
@@ -228,28 +229,3 @@ export function SchoolsPage(): JSX.Element {
   );
 }
 
-function RowAction({
-  icon,
-  label,
-  onClick,
-  danger = false,
-}: {
-  icon: 'edit' | 'power' | 'trash';
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className={`inline-flex size-8 shrink-0 items-center justify-center rounded-lg transition-all duration-150 hover:bg-muted active:scale-90 ${
-        danger ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'
-      }`}
-    >
-      <Icon name={icon} size={15} />
-    </button>
-  );
-}

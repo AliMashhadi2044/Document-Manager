@@ -12,6 +12,7 @@ import { formatServerMessage } from '../../shared/format/money';
 import { useCurrentUser } from '../auth/auth.api';
 import { useBootstrap } from './base-data.api';
 import { VehicleDialog } from './vehicle-dialog';
+import { RowAction } from './row-action';
 import { useDeleteVehicle, useUpdateVehicle, useVehicles, type VehicleRow } from './vehicles.api';
 
 /**
@@ -53,12 +54,12 @@ export function VehiclesPage(): JSX.Element {
       sortKey: 'plateNumber',
       cell: (row) => (
         <div className="max-w-[28ch]">
-          <PlateBadge plate={row.plateNumber} />
-          {row.notes ? (
-            <div className="truncate text-xs text-muted-foreground" title={row.notes}>
+            {row.notes ? (
+            <div className="truncate text-xs mb-2 text-muted-foreground" title={row.notes}>
               {row.notes}
             </div>
           ) : null}
+          <PlateBadge plate={row.plateNumber} />
         </div>
       ),
     },
@@ -220,28 +221,3 @@ export function VehiclesPage(): JSX.Element {
   );
 }
 
-function RowAction({
-  icon,
-  label,
-  onClick,
-  danger = false,
-}: {
-  icon: 'edit' | 'power' | 'trash';
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className={`inline-flex size-8 shrink-0 items-center justify-center rounded-lg transition-all duration-150 hover:bg-muted active:scale-90 ${
-        danger ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'
-      }`}
-    >
-      <Icon name={icon} size={15} />
-    </button>
-  );
-}

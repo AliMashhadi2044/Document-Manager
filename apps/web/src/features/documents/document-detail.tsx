@@ -501,6 +501,27 @@ function InvoiceCard({
               : 'انتخاب نشده'
           }
         />
+        {/* تنخواه‌دار فقط وقتی دیده می‌شود که ثبت شده باشد؛ خانهٔ خالی «—» ارزشی ندارد. */}
+        {invoice.payment?.pettyCashHolderNameSnapshot ? (
+          <Field
+            label="تنخواه‌دار"
+            value={
+              <>
+                {invoice.payment.pettyCashHolderNameSnapshot}
+                {invoice.payment.pettyCashAccountHolderSnapshot &&
+                invoice.payment.pettyCashAccountHolderSnapshot !==
+                  invoice.payment.pettyCashHolderNameSnapshot ? (
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {`حساب به نام ${invoice.payment.pettyCashAccountHolderSnapshot}`}
+                    {invoice.payment.pettyCashBankTitleSnapshot
+                      ? ` · ${invoice.payment.pettyCashBankTitleSnapshot}`
+                      : ''}
+                  </span>
+                ) : null}
+              </>
+            }
+          />
+        ) : null}
       </div>
 
       {invoice.items.length > 0 ? (

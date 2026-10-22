@@ -337,12 +337,27 @@ const PAYMENTS: DatasetDefinition = {
     { key: 'accountTitle', titleFa: 'عنوان حساب', type: 'text', path: 'accountTitleSnapshot' },
     { key: 'paymentIdentifier', titleFa: 'شناسه پرداخت', type: 'text', path: 'paymentIdentifier' },
     { key: 'billIdentifier', titleFa: 'شناسه قبض', type: 'text', path: 'billIdentifier' },
+    // اطلاعات تنخواه از snapshot خوانده می‌شود، نه از اطلاعات پایهٔ امروز: گزارش
+    // باید همان نامی را بدهد که روز پرداخت ثبت شده است.
     {
       key: 'pettyCashHolderName',
       titleFa: 'تنخواه‌دار',
       type: 'text',
-      path: 'pettyCashHolder.fullName',
+      path: 'pettyCashHolderNameSnapshot',
     },
+    {
+      key: 'pettyCashAccountHolder',
+      titleFa: 'صاحب حساب تنخواه',
+      type: 'text',
+      path: 'pettyCashAccountHolderSnapshot',
+    },
+    {
+      key: 'pettyCashBankTitle',
+      titleFa: 'بانک تنخواه',
+      type: 'text',
+      path: 'pettyCashBankTitleSnapshot',
+    },
+    { key: 'pettyCashIban', titleFa: 'شبای تنخواه', type: 'text', path: 'pettyCashIbanSnapshot' },
     { key: 'invoiceNumber', titleFa: 'شماره صورتحساب', type: 'text', path: 'invoice.invoiceNumber' },
     { key: 'invoiceDate', titleFa: 'تاریخ صورتحساب', type: 'jalaliDate', path: 'invoice.invoiceDate' },
     { key: 'totalAmount', titleFa: 'مبلغ فاکتور', type: 'money', path: 'invoice.totalAmount' },

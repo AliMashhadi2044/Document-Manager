@@ -27,14 +27,13 @@ model User {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  roles             UserRole[]
-  sessions          Session[]
-  createdDocuments  FinancialDocument[] @relation("DocumentCreatedBy")
-  createdInvoices   Invoice[]           @relation("InvoiceCreatedBy")
-  pettyCashPayments InvoicePayment[]    @relation("PettyCashHolder")
-  securityEvents    SecurityEvent[]
-  auditLogs         AuditLog[]
-  preferences       UserPreferences?
+  roles            UserRole[]
+  sessions         Session[]
+  createdDocuments FinancialDocument[] @relation("DocumentCreatedBy")
+  createdInvoices  Invoice[]           @relation("InvoiceCreatedBy")
+  securityEvents   SecurityEvent[]
+  auditLogs        AuditLog[]
+  preferences      UserPreferences?
 
   archivedDocuments    ArchiveMetadata[]             @relation("ArchiveCompletedBy")
   reportViews          ReportView[]                  @relation("ReportViewOwner")
@@ -303,6 +302,41 @@ model Signatory {
   @@map("signatories")
 }
 
+/// تنخواه‌دار — کسی که پرداخت به روش «کارپرداز / تنخواه» به حساب او انجام می‌شود.
+///
+/// چرا جدول جداست و نه `User`: تنخواه‌دار لزوماً کاربر سامانه نیست، و اطلاعاتی دارد
+/// (صاحب حساب، بانک، شبا) که به حساب کاربری ربطی ندارد. گره زدنش به `users` یعنی
+/// تعریف تنخواه‌دار در گرو ساختن حساب کاربری — که همان بن‌بستی بود که فرم فاکتور
+/// با پیام «پس از افزودن مدیریت کاربران» اعلامش می‌کرد.
+model PettyCashHolder {
+  id            String  @id @default(uuid()) @db.Uuid
+  fullName      String  @map("full_name") @db.VarChar(200)
+  positionTitle String? @map("position_title") @db.VarChar(200)
+  nationalId    String? @map("national_id") @db.VarChar(20)
+  phone         String? @db.VarChar(30)
+
+  /// نام صاحب حساب — همیشه با نام تنخواه‌دار یکی نیست (حساب همسر، حساب واحد).
+  accountHolderName String? @map("account_holder_name") @db.VarChar(200)
+  bankCode          String? @map("bank_code") @db.VarChar(3)
+  iban              String? @db.VarChar(34)
+  /// IR و ۲۴ رقم ASCII — همان صورت یکتاسازی که حساب فروشنده دارد.
+  ibanNormalized    String? @map("iban_normalized") @db.VarChar(26)
+  accountNumber     String? @map("account_number") @db.VarChar(50)
+
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+  notes     String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  bank     Bank?            @relation(fields: [bankCode], references: [code], onDelete: SetNull)
+  payments InvoicePayment[]
+
+  @@index([isActive, sortOrder])
+  @@map("petty_cash_holders")
+}
+
 // ─────────────────────── خریدار ───────────────────────
 
 model BuyerEntity {
@@ -378,7 +412,8 @@ model Bank {
   titleFa  String  @map("title_fa") @db.VarChar(100)
   isActive Boolean @default(true) @map("is_active")
 
-  accounts VendorBankAccount[]
+  accounts         VendorBankAccount[]
+  pettyCashHolders PettyCashHolder[]
 
   @@map("banks")
 }
@@ -468,7 +503,7 @@ model InvoiceType {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  defaultPaymentMethod PaymentMethod?       @relation(fields: [defaultPaymentMethodId], references: [id], onDelete: SetNull)
+  defaultPaymentMethod PaymentMethod?             @relation(fields: [defaultPaymentMethodId], references: [id], onDelete: SetNull)
   chapters             ChapterInvoiceType[]
   taxRates             TaxRate[]
   invoices             Invoice[]
@@ -874,11 +909,11 @@ model FinancialDocument {
   revisions    DocumentRevision[]
   transitions  DocumentStatusTransition[]
 
-  archiveMetadata ArchiveMetadata?
-  attachments     Attachment[]
-  feedbacks       ReviewFeedback[]
-  notifications   Notification[]
-  reportRuns      ReportRun[]
+  archiveMetadata    ArchiveMetadata?
+  attachments        Attachment[]
+  feedbacks          ReviewFeedback[]
+  notifications      Notification[]
+  reportRuns         ReportRun[]
   vendorProductTypes DocumentVendorProductType[]
 
   /// لازم برای FK ترکیبی از invoices — ستون فقرات محدودیت یک فاکتور ستاد (ADR-0006).
@@ -1066,19 +1101,25 @@ model InvoicePayment {
   accountTitleSnapshot String? @map("account_title_snapshot") @db.VarChar(200)
 
   /// شناسه پرداخت به **فاکتور** تعلق دارد، نه به شبا (§۱۳.۱).
-  paymentIdentifier String? @map("payment_identifier") @db.VarChar(100)
+  paymentIdentifier              String? @map("payment_identifier") @db.VarChar(100)
   /// قبض
-  billIdentifier    String? @map("bill_identifier") @db.VarChar(100)
+  billIdentifier                 String? @map("bill_identifier") @db.VarChar(100)
   /// تنخواه (تصمیم Q9)
-  pettyCashHolderId String? @map("petty_cash_holder_id") @db.Uuid
-  notes             String? @db.Text
+  pettyCashHolderId              String? @map("petty_cash_holder_id") @db.Uuid
+  /// نام و اطلاعات حساب در لحظه ثبت snapshot می‌شوند (ADR-0005): اصلاح بعدی
+  /// اطلاعات پایه، فاکتور تاریخی و خروجی‌های گرفته‌شده را عوض نمی‌کند.
+  pettyCashHolderNameSnapshot    String? @map("petty_cash_holder_name_snapshot") @db.VarChar(200)
+  pettyCashAccountHolderSnapshot String? @map("petty_cash_account_holder_snapshot") @db.VarChar(200)
+  pettyCashBankTitleSnapshot     String? @map("petty_cash_bank_title_snapshot") @db.VarChar(100)
+  pettyCashIbanSnapshot          String? @map("petty_cash_iban_snapshot") @db.VarChar(34)
+  notes                          String? @db.Text
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   invoice           Invoice            @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   paymentMethod     PaymentMethod      @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
   vendorBankAccount VendorBankAccount? @relation(fields: [vendorBankAccountId], references: [id], onDelete: SetNull)
-  pettyCashHolder   User?              @relation("PettyCashHolder", fields: [pettyCashHolderId], references: [id], onDelete: SetNull)
+  pettyCashHolder   PettyCashHolder?   @relation(fields: [pettyCashHolderId], references: [id], onDelete: SetNull)
 
   @@map("invoice_payments")
 }
@@ -1439,8 +1480,8 @@ enum ReportOutputFormat {
 
 /// نوع گزارش: دامنه داده‌ای که قالب‌های این نوع می‌توانند به آن دسترسی داشته باشند.
 model ReportType {
-  id     String @id @default(uuid()) @db.Uuid
-  key    String @unique @db.VarChar(60)
+  id      String @id @default(uuid()) @db.Uuid
+  key     String @unique @db.VarChar(60)
   titleFa String @map("title_fa") @db.VarChar(200)
 
   /// کلید دامنه داده در Data Dictionary؛ فعلاً فقط `document`.
@@ -1482,16 +1523,16 @@ model ReportDefinition {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  reportType     ReportType     @relation(fields: [reportTypeId], references: [id], onDelete: Restrict)
-  activeOfType   ReportType?    @relation("ActiveDefinition")
-  createdBy      User?          @relation("ReportDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  currentVersion ReportVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  reportType     ReportType      @relation(fields: [reportTypeId], references: [id], onDelete: Restrict)
+  activeOfType   ReportType?     @relation("ActiveDefinition")
+  createdBy      User?           @relation("ReportDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  currentVersion ReportVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
   versions       ReportVersion[] @relation("DefinitionVersions")
   runs           ReportRun[]
 
-  @@index([reportTypeId, status])
   /// ستون فقرات FK ترکیبی: قالب فعال یک نوع گزارش باید قالبی از **همان** نوع باشد.
   @@unique([id, reportTypeId])
+  @@index([reportTypeId, status])
   @@map("report_definitions")
 }
 
@@ -1510,10 +1551,10 @@ model ReportVersion {
   createdById String?   @map("created_by") @db.Uuid
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  definition        ReportDefinition  @relation("DefinitionVersions", fields: [definitionId], references: [id], onDelete: Cascade)
-  createdBy         User?             @relation("ReportVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  definition          ReportDefinition  @relation("DefinitionVersions", fields: [definitionId], references: [id], onDelete: Cascade)
+  createdBy           User?             @relation("ReportVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   currentOfDefinition ReportDefinition? @relation("CurrentVersion")
-  runs              ReportRun[]
+  runs                ReportRun[]
 
   @@unique([definitionId, versionNo])
   /// ستون فقرات FK ترکیبی: نسخه جاری یک قالب باید نسخه **همان** قالب باشد.
@@ -1523,10 +1564,10 @@ model ReportVersion {
 
 /// یک اجرای گزارش. خروجی فایلی به `attachments` وصل می‌شود.
 model ReportRun {
-  id           String             @id @default(uuid()) @db.Uuid
-  definitionId String             @map("definition_id") @db.Uuid
-  versionId    String             @map("version_id") @db.Uuid
-  documentId   String             @map("document_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  definitionId String @map("definition_id") @db.Uuid
+  versionId    String @map("version_id") @db.Uuid
+  documentId   String @map("document_id") @db.Uuid
 
   /// نسخه سند در لحظه اجرا — بدون آن، بازتولید خروجی تاریخی ممکن نیست.
   documentRevisionId String? @map("document_revision_id") @db.Uuid
@@ -1541,10 +1582,10 @@ model ReportRun {
   requestedById String   @map("requested_by") @db.Uuid
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  definition ReportDefinition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
-  version    ReportVersion     @relation(fields: [versionId], references: [id], onDelete: Restrict)
-  document   FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  requestedBy User             @relation("ReportRunRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+  definition  ReportDefinition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  version     ReportVersion     @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  document    FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  requestedBy User              @relation("ReportRunRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
 
   @@index([documentId, createdAt])
   @@index([requestedById, createdAt])
@@ -1617,10 +1658,10 @@ model ReportView {
   name       String @db.VarChar(120)
 
   /// فهرست کلید ستون‌ها، درخت فیلتر و ترتیب — همان قراردادی که API می‌گیرد.
-  columns Json
-  filter  Json
-  sort    Json
-  pageSize Int @default(25) @map("page_size")
+  columns  Json
+  filter   Json
+  sort     Json
+  pageSize Int  @default(25) @map("page_size")
 
   /// نمای اشتراکی را همه کاربرانِ دارای مجوز آن مجموعه‌داده می‌بینند، ولی تنها
   /// سازنده‌اش می‌تواند تغییرش دهد یا حذفش کند.
@@ -1657,8 +1698,8 @@ model ExportJob {
   /// پیام خطای کاربرپسند؛ هیچ stack trace یا جزئیات داخلی اینجا نمی‌نشیند.
   errorMessage String? @map("error_message") @db.Text
 
-  requestedById String   @map("requested_by_id") @db.Uuid
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  requestedById String    @map("requested_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   startedAt     DateTime? @map("started_at") @db.Timestamptz(3)
   finishedAt    DateTime? @map("finished_at") @db.Timestamptz(3)
   expiresAt     DateTime? @map("expires_at") @db.Timestamptz(3)

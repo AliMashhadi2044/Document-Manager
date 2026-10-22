@@ -9,6 +9,8 @@ import { BuyersController } from './buyers.controller';
 import { SchoolsController } from './schools.controller';
 import { VehiclesController } from './vehicles.controller';
 import { OrganizationController } from './organization.controller';
+import { SignatoriesController } from './signatories.controller';
+import { PettyCashHoldersController } from './petty-cash-holders.controller';
 import { FilesModule } from '../files/files.module';
 
 @Module({
@@ -22,6 +24,8 @@ import { FilesModule } from '../files/files.module';
     SchoolsController,
     VehiclesController,
     OrganizationController,
+    SignatoriesController,
+    PettyCashHoldersController,
   ],
   providers: [LookupService, AuditService],
   exports: [LookupService],

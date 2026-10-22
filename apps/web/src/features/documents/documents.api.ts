@@ -62,6 +62,11 @@ export interface InvoiceRow {
     readonly ibanSnapshot: string | null;
     readonly bankTitleSnapshot: string | null;
     readonly paymentIdentifier: string | null;
+    /** اطلاعات تنخواه در لحظهٔ ثبت — نه اطلاعات پایهٔ امروز. */
+    readonly pettyCashHolderNameSnapshot: string | null;
+    readonly pettyCashAccountHolderSnapshot: string | null;
+    readonly pettyCashBankTitleSnapshot: string | null;
+    readonly pettyCashIbanSnapshot: string | null;
     readonly paymentMethod: { readonly titleFa: string };
   } | null;
   readonly items: readonly InvoiceItemRow[];

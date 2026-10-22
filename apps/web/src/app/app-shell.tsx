@@ -11,6 +11,8 @@ import { VendorsPage } from '../features/vendors/vendors-page';
 import { BuyersPage } from '../features/buyers/buyers-page';
 import { SchoolsPage } from '../features/base-data/schools-page';
 import { VehiclesPage } from '../features/base-data/vehicles-page';
+import { SignatoriesPage } from '../features/base-data/signatories-page';
+import { PettyCashPage } from '../features/base-data/petty-cash-page';
 import { DocumentsPage } from '../features/documents/documents-page';
 import { ArchivePage } from '../features/archive/archive-page';
 import { ReportTemplatesPage } from '../features/report-designer/templates-page';
@@ -34,6 +36,8 @@ type SectionKey =
   | 'buyers'
   | 'schools'
   | 'vehicles'
+  | 'signatories'
+  | 'petty-cash'
   | 'vendors'
   | 'notifications';
 
@@ -148,6 +152,20 @@ const GROUPS: readonly SectionGroup[] = [
         titleFa: 'خودروها',
         icon: 'store',
         description: 'پلاک‌ها به تفکیک نوع خودرو — اطلاعات پایهٔ فاکتور سوخت',
+        permission: 'base_data:read',
+      },
+      {
+        key: 'signatories',
+        titleFa: 'امضاکنندگان',
+        icon: 'edit',
+        description: 'نام و سمتی که پای خروجی‌ها می‌نشیند',
+        permission: 'base_data:read',
+      },
+      {
+        key: 'petty-cash',
+        titleFa: 'تنخواه‌داران',
+        icon: 'money',
+        description: 'اشخاص و حساب‌های روش پرداخت «کارپرداز / تنخواه»',
         permission: 'base_data:read',
       },
       {
@@ -417,6 +435,8 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
             {section === 'buyers' ? <BuyersPage /> : null}
             {section === 'schools' ? <SchoolsPage /> : null}
             {section === 'vehicles' ? <VehiclesPage /> : null}
+            {section === 'signatories' ? <SignatoriesPage /> : null}
+            {section === 'petty-cash' ? <PettyCashPage /> : null}
             {section === 'vendors' ? <VendorsPage /> : null}
           </div>
         </main>

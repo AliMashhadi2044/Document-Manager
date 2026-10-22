@@ -6,6 +6,8 @@ import { Select } from '../../shared/ui/select';
 import { toPersianDigits } from '../../shared/format/money';
 import { useVendorBankAccounts } from './invoices.api';
 import { BankAccountsDialog } from '../vendors/bank-accounts-dialog';
+import { useActivePettyCashHolders } from '../base-data/people.api';
+import { PettyCashDialog } from '../base-data/petty-cash-dialog';
 
 export interface PaymentMethodRef {
   readonly id: string;
@@ -18,6 +20,7 @@ export interface PaymentMethodRef {
 export interface PaymentDraft {
   readonly paymentMethodId: string;
   readonly vendorBankAccountId: string;
+  readonly pettyCashHolderId: string;
   readonly paymentIdentifier: string;
   readonly billIdentifier: string;
   readonly notes: string;
@@ -26,6 +29,7 @@ export interface PaymentDraft {
 export const EMPTY_PAYMENT: PaymentDraft = {
   paymentMethodId: '',
   vendorBankAccountId: '',
+  pettyCashHolderId: '',
   paymentIdentifier: '',
   billIdentifier: '',
   notes: '',
@@ -56,9 +60,7 @@ export function PaymentFields({
   vendorName?: string;
 }): JSX.Element {
   const selected = methods.find((method) => method.id === draft.paymentMethodId);
-  const accounts = useVendorBankAccounts(
-    selected?.kind === 'BENEFICIARY_ACCOUNT' ? vendorId : '',
-  );
+  const accounts = useVendorBankAccounts(selected?.kind === 'BENEFICIARY_ACCOUNT' ? vendorId : '');
 
   /*
     گفت‌وگوی شباهای همان فروشنده، از داخل فرم فاکتور.
@@ -69,6 +71,15 @@ export function PaymentFields({
   */
   const [manageAccounts, setManageAccounts] = useState(false);
 
+  /*
+    تنخواه‌داران.
+
+    فهرست کوتاه است و همیشه خوانده می‌شود، نه فقط وقتی روش تنخواه انتخاب شده: با
+    عوض شدن روش پرداخت، یک درخواست تازه و یک لحظه «در حال بارگذاری» دیده می‌شد.
+  */
+  const holders = useActivePettyCashHolders();
+  const [newHolder, setNewHolder] = useState(false);
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
@@ -76,9 +87,16 @@ export function PaymentFields({
           label="روش پرداخت"
           value={draft.paymentMethodId}
           onChange={(nextValue) =>
-            onChange({ ...EMPTY_PAYMENT, notes: draft.notes, paymentMethodId: nextValue })
+            onChange({
+              ...EMPTY_PAYMENT,
+              notes: draft.notes,
+              paymentMethodId: nextValue,
+            })
           }
-          options={methods.map((method) => ({ value: method.id, label: method.titleFa }))}
+          options={methods.map((method) => ({
+            value: method.id,
+            label: method.titleFa,
+          }))}
           placeholder="ثبت نشود"
           hint="روش پیش‌فرض نوع فاکتور به‌صورت خودکار انتخاب می‌شود و قابل تغییر است."
         />
@@ -93,9 +111,7 @@ export function PaymentFields({
               label="شبای ذی‌نفع"
               required
               value={draft.vendorBankAccountId}
-              onChange={(nextValue) =>
-                onChange({ ...draft, vendorBankAccountId: nextValue })
-              }
+              onChange={(nextValue) => onChange({ ...draft, vendorBankAccountId: nextValue })}
               options={(accounts.data ?? []).map((account) => ({
                 value: account.id,
                 // عنوان حساب اختیاری است؛ بدون این بازگشت، برچسب گزینه «null — IR…»
@@ -124,6 +140,33 @@ export function PaymentFields({
           />
         ) : null}
 
+        {/*
+          تنخواه‌دار.
+
+          اختیاری است — فاکتورهای قدیمی بدون او ثبت شده‌اند — ولی با انتخابش، نام و
+          اطلاعات حسابش در لحظهٔ ثبت snapshot می‌شوند و گزارش‌ها از همان می‌خوانند.
+        */}
+        {selected?.kind === 'PETTY_CASH' ? (
+          <Select
+            label="تنخواه‌دار"
+            value={draft.pettyCashHolderId}
+            onChange={(nextValue) => onChange({ ...draft, pettyCashHolderId: nextValue })}
+            placeholder="ثبت نشود"
+            options={(holders.data?.items ?? []).map((holder) => ({
+              value: holder.id,
+              label: holder.fullName,
+              description:
+                holder.accountHolderName && holder.accountHolderName !== holder.fullName
+                  ? `حساب به نام ${holder.accountHolderName}`
+                  : (holder.bank?.titleFa ?? undefined),
+            }))}
+            onCreate={() => setNewHolder(true)}
+            createLabel="افزودن تنخواه‌دار"
+            emptyLabel="تنخواه‌داری ثبت نشده است"
+            hint="نام و اطلاعات حسابش در همین فاکتور ذخیره می‌شود و در گزارش‌ها می‌آید."
+          />
+        ) : null}
+
         {selected?.kind === 'BILL' ? (
           <Input
             label="شناسه قبض"
@@ -144,11 +187,15 @@ export function PaymentFields({
         ) : null}
       </div>
 
-      {selected?.kind === 'PETTY_CASH' ? (
-        <p className="rounded-md bg-muted p-3 text-xs text-muted-foreground">
-          تعیین کارپرداز تنخواه‌دار پس از افزودن مدیریت کاربران در دسترس قرار می‌گیرد؛ تا آن
-          زمان این فاکتور با روش «کارپرداز / تنخواه» و بدون انتخاب شخص ثبت می‌شود.
-        </p>
+      {newHolder ? (
+        <PettyCashDialog
+          holder={null}
+          onClose={() => setNewHolder(false)}
+          onSaved={(created) => {
+            onChange({ ...draft, pettyCashHolderId: created.id });
+            setNewHolder(false);
+          }}
+        />
       ) : null}
 
       {selected ? (
@@ -178,7 +225,7 @@ export function paymentToPayload(draft: PaymentDraft): {
     vendorBankAccountId: draft.vendorBankAccountId || null,
     paymentIdentifier: draft.paymentIdentifier.trim() || null,
     billIdentifier: draft.billIdentifier.trim() || null,
-    pettyCashHolderId: null,
+    pettyCashHolderId: draft.pettyCashHolderId || null,
     notes: draft.notes.trim() || null,
   };
 }

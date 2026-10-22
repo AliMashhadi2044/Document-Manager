@@ -357,11 +357,34 @@ export class InvoicesService {
       };
     }
 
+    /*
+      تنخواه.
+
+      تنخواه‌دار **اختیاری** است (فاکتورهای قدیمی بدون او ثبت شده‌اند)، ولی اگر
+      انتخاب شود، نام و اطلاعات حسابش همین‌جا snapshot می‌شوند: گزارشی که شش ماه
+      بعد گرفته می‌شود باید همان نامی را نشان دهد که آن روز پول به حسابش رفت، نه
+      نام امروزِ اطلاعات پایه.
+    */
+    if (!input.payment.pettyCashHolderId) return base;
+
+    const holder = await this.prisma.pettyCashHolder.findUnique({
+      where: { id: input.payment.pettyCashHolderId },
+      include: { bank: { select: { titleFa: true } } },
+    });
+    if (!holder || !holder.isActive) {
+      throw AppError.validation('تنخواه‌دار انتخاب‌شده معتبر یا فعال نیست', [
+        { path: 'payment.pettyCashHolderId', message: 'تنخواه‌دار معتبر نیست' },
+      ]);
+    }
+
     return {
       ...base,
-      ...(input.payment.pettyCashHolderId
-        ? { pettyCashHolder: { connect: { id: input.payment.pettyCashHolderId } } }
-        : {}),
+      pettyCashHolder: { connect: { id: holder.id } },
+      pettyCashHolderNameSnapshot: holder.fullName,
+      // نبودِ صاحب حساب یعنی حساب به نام خود تنخواه‌دار است.
+      pettyCashAccountHolderSnapshot: holder.accountHolderName ?? holder.fullName,
+      pettyCashBankTitleSnapshot: holder.bank?.titleFa ?? null,
+      pettyCashIbanSnapshot: holder.ibanNormalized,
     };
   }
 
