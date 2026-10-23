@@ -43,6 +43,23 @@ const createDocumentSchema = z
     }
   });
 
+/**
+ * ویرایش مشخصات سند، پیش از ثبت نهایی.
+ *
+ * همان فیلدهایی که هنگام ساخت پرسیده می‌شوند، منهای **نوع سند**: نوع، ساختار سند را
+ * تعیین می‌کند (سند ستاد فقط یک فاکتور می‌گیرد و جدول اطلاعات ستاد دارد) و روی
+ * فاکتورها هم denormal شده است. عوض کردنش یعنی ساختن سندی دیگر، نه ویرایش این یکی.
+ */
+const updateDocumentSchema = z
+  .object({
+    title: z.string().trim().min(1, 'شرح سند الزامی است').max(500),
+    fiscalYear: z.coerce.number().int().min(1300).max(1500),
+    jalaliYear: z.coerce.number().int().min(1300).max(1500),
+    buyerEntityId: z.string().uuid('مجموعه خریدار را انتخاب کنید'),
+    stad: stadSchema.nullable(),
+  })
+  .partial();
+
 /** پارامترهای بررسی تکرار — هر دو الزامی، چون بدون هر کدام سؤال بی‌معناست. */
 const utilityDuplicateQuery = z.object({
   schoolId: z.string().uuid(),
@@ -107,8 +124,7 @@ export class DocumentsController {
   @Patch(':id')
   async update(
     @Param('id') id: string,
-    @Body(new ZodBody(z.object({ title: z.string().trim().min(1).max(500) }).partial()))
-    body: { title?: string },
+    @Body(new ZodBody(updateDocumentSchema)) body: z.infer<typeof updateDocumentSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.documents.update(id, body, user);

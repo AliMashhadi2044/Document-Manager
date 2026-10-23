@@ -91,10 +91,13 @@ export interface DocumentDetail extends DocumentRow {
   readonly totalNet: string;
   readonly roundingPolicy: { readonly scope: 'LINE' | 'INVOICE'; readonly mode: 'HALF_UP' | 'FLOOR' | 'HALF_EVEN' };
   readonly buyerSnapshot: { readonly name: string; readonly economicCode: string | null };
+  /** رکورد زندهٔ خریدار — فرم ویرایش از همین پر می‌شود، نه از snapshot. */
+  readonly buyerEntityId: string;
   readonly stadMetadata: {
     readonly needNumber: string;
     readonly workflowNumber: string;
     readonly requestNumber: string;
+    readonly requestTypeId: string | null;
     readonly notes: string | null;
     readonly requestType: { readonly title: string } | null;
   } | null;
@@ -159,6 +162,36 @@ export function useCreateDocument() {
         notes: string | null;
       } | null;
     }) => apiFetch<DocumentRow>('/documents', { method: 'POST', json: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
+  });
+}
+
+/**
+ * ویرایش مشخصات سند — فقط تا پیش از ثبت نهایی (سرور همین را اجبار می‌کند).
+ *
+ * فیلدهای نیامده دست‌نخورده می‌مانند، پس همین یک تابع هم برای تغییر شرح به‌کار
+ * می‌آید و هم برای فرم کامل.
+ */
+export function useUpdateDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...input
+    }: {
+      id: string;
+      title?: string;
+      fiscalYear?: number;
+      jalaliYear?: number;
+      buyerEntityId?: string;
+      stad?: {
+        needNumber: string;
+        workflowNumber: string;
+        requestNumber: string;
+        requestTypeId: string | null;
+        notes: string | null;
+      };
+    }) => apiFetch<DocumentRow>(`/documents/${id}`, { method: 'PATCH', json: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
   });
 }

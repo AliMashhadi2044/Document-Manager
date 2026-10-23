@@ -25,6 +25,20 @@ import { NotificationsService } from '../notifications/notifications.service';
 
 const DOCUMENT_SORTABLE = ['createdAt', 'fiscalYear', 'documentDate', 'totalAmount'] as const;
 
+export interface UpdateDocumentInput {
+  readonly title?: string | undefined;
+  readonly fiscalYear?: number | undefined;
+  readonly jalaliYear?: number | undefined;
+  readonly buyerEntityId?: string | undefined;
+  readonly stad?: {
+    readonly needNumber: string;
+    readonly workflowNumber: string;
+    readonly requestNumber: string;
+    readonly requestTypeId: string | null;
+    readonly notes: string | null;
+  } | null | undefined;
+}
+
 export interface CreateDocumentInput {
   readonly title: string;
   readonly type: 'NORMAL' | 'STAD';
@@ -201,13 +215,27 @@ export class DocumentsService {
     return document;
   }
 
-  /** ویرایش سند — فقط در وضعیت‌های قابل ویرایش. */
+  /**
+   * ویرایش مشخصات سند — فقط در وضعیت‌های قابل ویرایش.
+   *
+   * همان چیزهایی که هنگام ساخت پرسیده می‌شوند، منهای نوع سند. تا پیش از این فقط
+   * «شرح» عوض می‌شد و کاربری که سال یا خریدار را اشتباه زده بود، باید سند را رها
+   * می‌کرد و از نو می‌ساخت.
+   *
+   * **عوض شدن خریدار، snapshot را هم تازه می‌کند** — و همان snapshot تازه روی
+   * فاکتورهای همین سند هم می‌نشیند. در سند ثبت‌نشده، snapshot هنوز سند تاریخی
+   * نیست؛ اگر دست‌نخورده می‌ماند، برگهٔ سند یک خریدار نشان می‌داد و فاکتورهایش
+   * خریدار دیگری — و این اختلاف تا بعد از ثبت نهایی پنهان می‌ماند.
+   */
   async update(
     id: string,
-    input: { title?: string },
+    input: UpdateDocumentInput,
     user: AuthenticatedUser,
   ): Promise<FinancialDocument> {
-    const before = await this.prisma.financialDocument.findUnique({ where: { id } });
+    const before = await this.prisma.financialDocument.findUnique({
+      where: { id },
+      include: { stadMetadata: true },
+    });
     if (!before) throw AppError.notFound('سند یافت نشد');
 
     if (!isEditableStatus(before.status as DocumentStatus)) {
@@ -217,19 +245,103 @@ export class DocumentsService {
       );
     }
 
-    const updated = await this.prisma.financialDocument.update({
-      where: { id },
-      data: input,
-    });
+    if (input.fiscalYear !== undefined && input.fiscalYear !== before.fiscalYear) {
+      const fiscalYear = await this.prisma.fiscalYear.findUnique({
+        where: { year: input.fiscalYear },
+      });
+      if (fiscalYear?.isClosed) {
+        throw AppError.validation('سال مالی بسته است و سند به آن منتقل نمی‌شود', [
+          { path: 'fiscalYear', message: 'سال مالی بسته است' },
+        ]);
+      }
+    }
 
-    await this.audit.record({
-      actorId: user.id,
-      action: 'DOCUMENT_UPDATE',
-      entityType: 'financialDocument',
-      entityId: id,
-      documentId: id,
-      before,
-      after: updated,
+    const buyer =
+      input.buyerEntityId !== undefined && input.buyerEntityId !== before.buyerEntityId
+        ? await this.prisma.buyerEntity.findUnique({ where: { id: input.buyerEntityId } })
+        : null;
+
+    if (input.buyerEntityId !== undefined && input.buyerEntityId !== before.buyerEntityId) {
+      if (!buyer || !buyer.isActive) {
+        throw AppError.validation('مجموعه خریدار انتخاب‌شده معتبر یا فعال نیست', [
+          { path: 'buyerEntityId', message: 'مجموعه خریدار معتبر نیست' },
+        ]);
+      }
+    }
+
+    // اطلاعات ستاد فقط روی سند ستاد معنا دارد، و روی آن حذف‌شدنی نیست.
+    if (input.stad !== undefined) {
+      if (before.type !== 'STAD') {
+        throw AppError.validation('این سند، سند سامانه ستاد نیست', [
+          { path: 'stad', message: 'اطلاعات ستاد فقط برای سند ستاد است' },
+        ]);
+      }
+      if (input.stad === null) {
+        throw AppError.validation('اطلاعات سامانه ستاد الزامی است', [
+          { path: 'stad', message: 'برای سند ستاد، اطلاعات ستاد الزامی است' },
+        ]);
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      let buyerSnapshotId: string | null = null;
+
+      if (buyer) {
+        const snapshot = await tx.buyerSnapshot.create({
+          data: {
+            buyerEntityId: buyer.id,
+            personType: buyer.personType,
+            name: buyer.name,
+            economicCode: buyer.economicCode,
+            registrationNumber: buyer.registrationNumber,
+            nationalId: buyer.nationalId,
+            addressLine: buyer.addressLine,
+            postalCode: buyer.postalCode,
+            phone: buyer.phone,
+            fax: buyer.fax,
+          },
+        });
+        buyerSnapshotId = snapshot.id;
+
+        await tx.invoice.updateMany({
+          where: { documentId: id },
+          data: { buyerSnapshotId: snapshot.id },
+        });
+      }
+
+      const row = await tx.financialDocument.update({
+        where: { id },
+        data: {
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.fiscalYear !== undefined ? { fiscalYear: input.fiscalYear } : {}),
+          ...(input.jalaliYear !== undefined ? { jalaliYear: input.jalaliYear } : {}),
+          ...(buyer ? { buyerEntityId: buyer.id, buyerSnapshotId: buyerSnapshotId as string } : {}),
+          ...(input.stad
+            ? {
+                stadMetadata: {
+                  // سند ستاد همیشه یک ردیف اطلاعات ستاد دارد؛ `upsert` هم ردیف
+                  // نداشتن (سند قدیمی) را می‌پوشاند و هم ویرایش را.
+                  upsert: { create: input.stad, update: input.stad },
+                },
+              }
+            : {}),
+        },
+      });
+
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'DOCUMENT_UPDATE',
+          entityType: 'financialDocument',
+          entityId: id,
+          documentId: id,
+          before,
+          after: row,
+        },
+        tx,
+      );
+
+      return row;
     });
 
     return updated;

@@ -10,6 +10,7 @@ import {
 } from '@dm/shared';
 
 import { Button } from '../../shared/ui/button';
+import { Icon } from '../../shared/ui/icon';
 import { PlateBadge } from '../../shared/ui/plate-input';
 import { Input } from '../../shared/ui/input';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
@@ -32,6 +33,7 @@ import {
   type InvoiceRow,
 } from './documents.api';
 import { CreateInvoiceForm } from '../invoices/create-invoice-form';
+import { DocumentEditDialog } from './document-edit-dialog';
 import { useDeleteInvoice } from '../invoices/invoices.api';
 import { AttachmentsPanel } from '../files/attachments-panel';
 import { FeedbackPanel } from '../feedback/feedback-panel';
@@ -61,6 +63,7 @@ export function DocumentDetailView({
   const [showAddInvoice, setShowAddInvoice] = useState(false);
   const removeInvoice = useDeleteInvoice();
   const [notice, setNotice] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
+  const [editing, setEditing] = useState(false);
 
   if (isPending) return <LoadingState label="در حال بارگذاری سند…" />;
   if (isError) {
@@ -287,9 +290,28 @@ export function DocumentDetailView({
               · سال شمسی {toPersianDigits(String(data.jalaliYear))}
             </p>
           </div>
-          <span className="rounded bg-muted px-2 py-1 text-xs">
-            {DOCUMENT_STATUS_LABELS[data.status]}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="rounded bg-muted px-2 py-1 text-xs">
+              {DOCUMENT_STATUS_LABELS[data.status]}
+            </span>
+
+            {/*
+              ویرایش کنار وضعیت است، نه در فهرست اقدام‌های پایین: همین‌جاست که کاربر
+              شرح و سال اشتباه را می‌بیند. پس از ثبت نهایی دکمه نیست — سند دیگر
+              ویرایش نمی‌شود و بازگشایی راه خودش را دارد.
+            */}
+            {editable ? (
+              <button
+                type="button"
+                aria-label="ویرایش مشخصات سند"
+                title="ویرایش مشخصات سند"
+                onClick={() => setEditing(true)}
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-all duration-150 hover:bg-muted hover:text-foreground active:scale-90"
+              >
+                <Icon name="edit" size={15} />
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -318,6 +340,18 @@ export function DocumentDetailView({
             <p className="mt-3 text-sm text-muted-foreground">{data.stadMetadata.notes}</p>
           ) : null}
         </section>
+      ) : null}
+
+      {editing ? (
+        <DocumentEditDialog
+          document={data}
+          onClose={() => setEditing(false)}
+          onSaved={(text) => {
+            setEditing(false);
+            void refetch();
+            setNotice({ kind: 'success', text });
+          }}
+        />
       ) : null}
 
       {showAddInvoice && editable ? (

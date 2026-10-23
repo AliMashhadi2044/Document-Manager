@@ -199,9 +199,6 @@ export function UtilityFields({
         <Preview label="خالص" value={preview?.net} />
         <Preview label="مالیات و عوارض" value={preview?.tax} />
         <Preview label="جمع" value={preview?.total} strong />
-        <div className="text-xs text-muted-foreground sm:col-span-4">
-          پیش‌نمایش با همان توابع محاسبه سرور ساخته می‌شود؛ مقدار قطعی پس از ثبت از سرور می‌آید.
-        </div>
       </dl>
     </div>
   );
