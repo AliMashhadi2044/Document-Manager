@@ -133,7 +133,12 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
  * ماتریس پیش‌فرض نقش‌ها.
  *
  * نکته‌های عمدی (تصمیم D9 و §۶ پرامپت):
- *  - کارپردازی `archive:write` و `attachment:upload` **ندارد** — تفکیک وظایف بایگانی.
+ *  - کارپردازی `archive:write` **ندارد** — تفکیک وظایف بایگانی سر جایش است: شماره و
+ *    تاریخ سند را بایگانی می‌زند، نه کارپردازی.
+ *  - ولی `attachment:upload` را **دارد**: بارگذاری اسکن، نگهداری سند است نه ثبت
+ *    بایگانی، و کارپردازی که سند را ساخته اسکن فاکتورها را هم در دست دارد. نداشتنش
+ *    یعنی او باید برای هر پیوست منتظر کس دیگری بماند. حذف پیوست همچنان نزد بایگانی
+ *    است: گذاشتن برگشت‌پذیر است، برداشتن نه.
  *  - کارپردازی `feedback:create` **ندارد** — ثبت بازخورد کار ناظر است.
  *  - `feedback:resolve` نزد کارپردازی است (او رسیدگی را تأیید می‌کند) ولی
  *    `feedback:reopen` نزد **ناظر**. این تقسیم عمدی است: شمارنده بازخورد باز، دروازه
@@ -171,6 +176,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'financial_settings:write',
     'archive:read',
     'attachment:read',
+    'attachment:upload',
     'feedback:read',
     'feedback:reply',
     'feedback:resolve',

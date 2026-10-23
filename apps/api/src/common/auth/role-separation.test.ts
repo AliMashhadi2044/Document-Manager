@@ -256,15 +256,21 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
     expect(canCall(reply as RouteInfo, procurement)).toBe(true);
   });
 
-  it('کارپردازی مجوز آپلود و حذف فایل ندارد — تفکیک وظایف بایگانی', () => {
+  /*
+    تفکیک وظایف بایگانی، با یک مرز دقیق‌تر.
+
+    کارپردازی **بارگذاری** می‌کند — اسکن فاکتورها دست خودِ اوست و منتظر ماندن برای
+    هر پیوست، کار را متوقف می‌کرد. ولی **حذف** پیوست و **ثبت بایگانی** نزد بایگانی
+    می‌ماند: گذاشتن برگشت‌پذیر است، برداشتن نه.
+  */
+  it('کارپردازی پیوست می‌گذارد ولی برنمی‌دارد، و بایگانی نمی‌زند', () => {
     const procurement = DEFAULT_ROLE_PERMISSIONS.PROCUREMENT;
 
-    expect(procurement).not.toContain('attachment:upload');
+    expect(procurement).toContain('attachment:read');
+    expect(procurement).toContain('attachment:upload');
+
     expect(procurement).not.toContain('attachment:delete');
     expect(procurement).not.toContain('archive:write');
-
-    // ولی می‌تواند فایل‌ها را ببیند و دانلود کند.
-    expect(procurement).toContain('attachment:read');
   });
 
   it('هیچ مسیر نوشتنی‌ای بدون اعلام دسترسی نیست', () => {

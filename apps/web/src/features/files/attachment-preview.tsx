@@ -1,30 +1,38 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { UPLOAD_TYPES } from '@dm/shared';
 
 import { Button } from '../../shared/ui/button';
+import { Icon } from '../../shared/ui/icon';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { Modal } from '../../shared/ui/modal';
+import { toPersianDigits } from '../../shared/format/money';
 import { attachmentContentUrl, type AttachmentRow } from './files.api';
 
+/*
+  pdf.js حدود ۳۵۰ کیلوبایت است و فقط وقتی لازم می‌شود که کاربر یک PDF باز کند.
+  بارگذاری تنبل یعنی این وزن روی اولین بارگذاری سامانه ننشیند.
+*/
+const PdfViewer = lazy(async () => ({ default: (await import('./pdf-viewer')).PdfViewer }));
+
 /**
- * پیش‌نمایش فایل.
+ * نمایشگر پیوست — تمام‌صفحه.
  *
- * معیار پذیرش ۶ فاز ۵: فایلی که مرورگر نمی‌تواند رندر کند (TIFF) باید **پیام صریح**
- * بگیرد، نه کادر خالی. تصمیمِ «قابل پیش‌نمایش است یا نه» از فهرست مشترک انواع مجاز
- * می‌آید (`UPLOAD_TYPES[...].previewable`)، نه از حدس اینجا؛ پس اگر فردا نوع تازه‌ای
- * اضافه شود، همان یک‌جا تعیین می‌کند.
+ * یک اسکن A4 در یک کادر ۵۶rem خوانا نیست؛ کاربر یا باید زوم کند و دنبال متن بگردد،
+ * یا فایل را دانلود کند و از سامانه بیرون برود. نمایشگر تمام‌صفحه همان کاری را
+ * می‌کند که نمایشگر سیستم می‌کرد، همین‌جا.
  *
- * چرا PDF از راه blob می‌آید و تصویر مستقیم:
- * سرویس API هدر `Content-Security-Policy: frame-ancestors 'none'` می‌فرستد، یعنی هیچ
- * پاسخی از آن — حتی هم‌مبدأ — داخل iframe قرار نمی‌گیرد. این هدر عمدی و درست است و
- * برای یک پیش‌نمایش ضعیف نمی‌شود. پس بایت‌ها با `fetch` هم‌مبدأ (با کوکی نشست)
- * خوانده و به `blob:` تبدیل می‌شوند؛ آن URL به خود صفحه تعلق دارد و قاب شدنش را
- * سیاست API محدود نمی‌کند. برای `<img>` اصلاً چنین محدودیتی وجود ندارد، پس تصویر
- * همان مسیر مستقیم و سبک‌تر را می‌گیرد.
+ * **بایت‌ها یک‌بار خوانده می‌شوند**، چه PDF چه تصویر: سرویس API هدر
+ * `frame-ancestors 'none'` می‌فرستد (عمدی و درست)، پس هیچ پاسخی از آن داخل قاب
+ * نمی‌نشیند؛ و برای pdf.js هم بافر لازم است، نه نشانی. از همان بافر، هم نمایش
+ * می‌آید و هم دانلود — بدون درخواست دوم.
  *
- * این محدودیت در آزمون مرورگری فاز ۵ پیدا شد: پیش‌نمایش PDF کادر خالی نشان می‌داد و
- * در کنسول `net::ERR_BLOCKED_BY_RESPONSE` ثبت شده بود.
+ * فایلی که مرورگر رندرش نمی‌کند (TIFF) پیام صریح می‌گیرد، نه کادر خالی؛ و تصمیمِ
+ * «قابل پیش‌نمایش است یا نه» از فهرست مشترک انواع مجاز می‌آید
+ * (`UPLOAD_TYPES[...].previewable`)، نه از حدس اینجا.
  */
+
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4] as const;
+
 export function AttachmentPreview({
   attachment,
   onClose,
@@ -34,82 +42,222 @@ export function AttachmentPreview({
 }): JSX.Element {
   const definition = UPLOAD_TYPES[attachment.typeKey];
   const isImage = attachment.detectedMime.startsWith('image/');
-  const needsBlob = attachment.previewable && !isImage;
+  const isPdf = attachment.detectedMime === 'application/pdf';
 
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [bytes, setBytes] = useState<ArrayBuffer | null>(null);
   const [failed, setFailed] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pages, setPages] = useState<{ pageCount: number; currentPage: number } | null>(null);
 
   useEffect(() => {
-    if (!needsBlob) return undefined;
+    if (!attachment.previewable) return undefined;
 
-    let revoked = false;
-    let objectUrl: string | null = null;
-
+    let cancelled = false;
     void (async () => {
       try {
         const response = await fetch(attachmentContentUrl(attachment.id, 'inline'), {
           credentials: 'same-origin',
         });
         if (!response.ok) throw new Error(String(response.status));
-        const blob = await response.blob();
-        if (revoked) return;
-        objectUrl = URL.createObjectURL(blob);
-        setBlobUrl(objectUrl);
+        const buffer = await response.arrayBuffer();
+        if (!cancelled) setBytes(buffer);
       } catch {
-        setFailed(true);
+        if (!cancelled) setFailed(true);
       }
     })();
 
     return () => {
-      revoked = true;
-      // بدون این، هر بار باز کردن پیش‌نمایش یک نسخه از فایل را در حافظه نگه می‌دارد.
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      cancelled = true;
     };
-  }, [attachment.id, needsBlob]);
+  }, [attachment.id, attachment.previewable]);
+
+  const changeZoom = (direction: 1 | -1): void => {
+    setZoom((current) => {
+      const index = ZOOM_STEPS.indexOf(current as (typeof ZOOM_STEPS)[number]);
+      const next = index === -1 ? 2 : index + direction;
+      return ZOOM_STEPS[Math.min(Math.max(next, 0), ZOOM_STEPS.length - 1)] ?? current;
+    });
+  };
+
+  /*
+    دانلود از همان بایت‌هایی که خوانده شده‌اند.
+
+    لینک مستقیم به API هم کار می‌کرد، ولی یعنی فایل دوبار از شبکه بیاید — روی یک
+    اسکن چند ده مگابایتی، همان یک‌بار هم کافی است.
+  */
+  const download = (): void => {
+    const url = bytes
+      ? URL.createObjectURL(new Blob([bytes], { type: attachment.detectedMime }))
+      : attachmentContentUrl(attachment.id, 'attachment');
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = attachment.originalFilename;
+    link.click();
+    if (bytes) URL.revokeObjectURL(url);
+  };
+
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {isPdf && pages ? (
+        <span className="money me-2 text-xs text-muted-foreground">
+          صفحهٔ {toPersianDigits(String(pages.currentPage))} از{' '}
+          {toPersianDigits(String(pages.pageCount))}
+        </span>
+      ) : null}
+
+      {attachment.previewable ? (
+        <>
+          <ToolButton icon="minus" label="کوچک‌نمایی" onClick={() => changeZoom(-1)} />
+          <button
+            type="button"
+            onClick={() => setZoom(1)}
+            title="بازگشت به اندازهٔ اصلی"
+            className="money h-8 min-w-14 rounded-lg border border-border px-2 text-xs hover:bg-muted"
+          >
+            {toPersianDigits(String(Math.round(zoom * 100)))}٪
+          </button>
+          <ToolButton icon="plus" label="بزرگ‌نمایی" onClick={() => changeZoom(1)} />
+        </>
+      ) : null}
+
+      <ToolButton icon="download" label="دانلود فایل" onClick={download} />
+      <Button size="sm" variant="secondary" onClick={onClose}>
+        بستن
+      </Button>
+    </div>
+  );
 
   return (
-    <Modal title={attachment.originalFilename} onClose={onClose}>
+    <Modal title={attachment.originalFilename} size="full" toolbar={toolbar} onClose={onClose}>
       {!attachment.previewable ? (
-        <div className="rounded-md border border-warning/40 bg-warning/5 p-5">
+        <div className="m-6 rounded-lg border border-warning/40 bg-warning/5 p-5">
           <p className="text-sm font-medium">این فایل در مرورگر قابل نمایش نیست</p>
           <p className="mt-1.5 text-sm text-muted-foreground">
             قالب {definition?.titleFa ?? attachment.typeKey} را هیچ مرورگری رندر نمی‌کند. فایل را
             دانلود کنید و با نمایشگر تصویر سیستم خود باز کنید. فایل سالم است و در بایگانی ثبت
             شده؛ فقط پیش‌نمایش آن ممکن نیست.
           </p>
-          <a
-            href={attachmentContentUrl(attachment.id, 'attachment')}
-            className="mt-4 inline-block rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground"
-          >
+          <Button className="mt-4" onClick={download}>
             دانلود فایل
-          </a>
+          </Button>
         </div>
-      ) : isImage ? (
-        <img
-          src={attachmentContentUrl(attachment.id, 'inline')}
-          alt={`پیش‌نمایش ${attachment.originalFilename}`}
-          className="mx-auto max-h-[70vh] w-auto rounded border border-border bg-muted"
-        />
       ) : failed ? (
         <ErrorState
           title="خواندن فایل برای پیش‌نمایش ناموفق بود"
           message="فایل را دانلود کنید؛ رکورد آن در بایگانی سالم است."
         />
-      ) : blobUrl === null ? (
-        <LoadingState label="در حال آماده‌سازی پیش‌نمایش…" />
+      ) : bytes === null ? (
+        <LoadingState label="در حال خواندن فایل…" />
+      ) : isImage ? (
+        <ImageViewer bytes={bytes} mime={attachment.detectedMime} name={attachment.originalFilename} zoom={zoom} />
+      ) : isPdf ? (
+        <Suspense fallback={<LoadingState label="در حال آماده‌سازی نمایشگر…" />}>
+          <PdfViewer data={bytes} scale={zoom} onState={setPages} />
+        </Suspense>
       ) : (
-        <iframe
-          src={blobUrl}
-          title={`پیش‌نمایش ${attachment.originalFilename}`}
-          className="h-[70vh] w-full rounded border border-border bg-muted"
+        <ErrorState
+          title="این قالب نمایشگر ندارد"
+          message="فایل را دانلود کنید؛ رکورد آن در بایگانی سالم است."
         />
       )}
-
-      <div className="mt-4 flex justify-end">
-        <Button variant="secondary" size="sm" onClick={onClose}>
-          بستن
-        </Button>
-      </div>
     </Modal>
+  );
+}
+
+/**
+ * تصویر با زوم و **جابه‌جایی با کشیدن**.
+ *
+ * بدون کشیدن، زوم روی یک اسکن بی‌فایده است: کاربر بزرگ می‌کند و بعد باید با دو
+ * نوار اسکرول دنبال گوشهٔ برگه بگردد. اینجا با درگ جابه‌جا می‌شود، مثل هر نمایشگر
+ * تصویری دیگری.
+ */
+function ImageViewer({
+  bytes,
+  mime,
+  name,
+  zoom,
+}: {
+  bytes: ArrayBuffer;
+  mime: string;
+  name: string;
+  zoom: number;
+}): JSX.Element {
+  const [url, setUrl] = useState<string | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    setUrl(objectUrl);
+    // بدون این، هر بار باز کردن نمایشگر یک نسخه از فایل را در حافظه نگه می‌دارد.
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [bytes, mime]);
+
+  const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const box = boxRef.current;
+    if (!box) return;
+    dragging.current = {
+      x: event.clientX,
+      y: event.clientY,
+      left: box.scrollLeft,
+      top: box.scrollTop,
+    };
+    box.setPointerCapture(event.pointerId);
+  }, []);
+
+  const onPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const box = boxRef.current;
+    const start = dragging.current;
+    if (!box || !start) return;
+    box.scrollLeft = start.left - (event.clientX - start.x);
+    box.scrollTop = start.top - (event.clientY - start.y);
+  }, []);
+
+  const endDrag = useCallback(() => {
+    dragging.current = null;
+  }, []);
+
+  if (!url) return <LoadingState label="در حال آماده‌سازی تصویر…" />;
+
+  return (
+    <div
+      ref={boxRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      className="h-full w-full cursor-grab overflow-auto p-4 active:cursor-grabbing"
+    >
+      <img
+        src={url}
+        alt={`پیش‌نمایش ${name}`}
+        draggable={false}
+        style={{ width: `${zoom * 100}%`, maxWidth: 'none' }}
+        className="mx-auto select-none bg-white shadow-[var(--shadow-soft)]"
+      />
+    </div>
+  );
+}
+
+function ToolButton({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: 'plus' | 'minus' | 'download';
+  label: string;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="inline-flex size-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-all duration-150 hover:bg-muted hover:text-foreground active:scale-90"
+    >
+      <Icon name={icon} size={15} />
+    </button>
   );
 }
