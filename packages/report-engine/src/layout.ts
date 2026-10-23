@@ -73,10 +73,24 @@ export interface LaidOutTable {
     readonly isNumeric: boolean;
   }[];
   readonly rows: readonly (readonly LaidOutCell[])[];
-  /** ردیف‌های خالیِ پرکننده تا `minRows`. */
-  readonly fillerRowCount: number;
+  /**
+   * ردیف‌های خالیِ پرکننده تا `minRows` — ساخته‌شده، نه فقط شمرده‌شده.
+   *
+   * پیش از این فقط تعدادشان می‌آمد و هر خروجی‌گیر خودش می‌ساختشان؛ نتیجه این بود
+   * که در HTML هر ستون عددی «۰» می‌گرفت. ردیفِ خالی یعنی خالی: فقط شمارهٔ ردیف
+   * دارد، که شمارش را پیوسته نگه می‌دارد.
+   */
+  readonly fillerRows: readonly (readonly LaidOutCell[])[];
   readonly totals: readonly LaidOutCell[] | null;
   readonly totalsLabel: string | null;
+  /**
+   * چند ستون را برچسب «جمع کل» می‌پوشاند.
+   *
+   * ستون اول «ردیف» است و عرضش چند میلی‌متر؛ نوشتن «جمع کل» در همان، متن را
+   * می‌شکند و از سلول بیرون می‌زند. برچسب ستون‌های ابتدایی را — همان‌هایی که جمع
+   * ندارند — با هم می‌گیرد، مثل خودِ فرم کاغذی.
+   */
+  readonly totalsLabelSpan: number;
   readonly repeatHeaderOnNewPage: boolean;
   readonly avoidRowBreak: boolean;
 }
@@ -150,17 +164,45 @@ export interface LaidOutReport {
   readonly generatedAt: string;
 }
 
-export function layoutReport(template: TemplateV1, dataset: ReportDataset): LaidOutReport {
+export interface LayoutOptions {
+  /**
+   * جایگزینیِ متنِ بلوک‌های متنی، با کلید شناسهٔ بلوک.
+   *
+   * قالب می‌گوید چه چیزی **معمولاً** بالای گزارش بنشیند؛ ولی یک خروجی مشخص گاهی
+   * عنوان یا توضیح دیگری می‌خواهد — نامهٔ همراه، اصلاحیه، عبارتی که اداره خواسته.
+   * تا پیش از این، تنها راهش عوض کردن خودِ قالب بود: یعنی عوض کردن همهٔ گزارش‌های
+   * بعدی برای یک بار.
+   *
+   * جایگزینی **پس از** جای‌گذاری متغیرها اعمال می‌شود؛ کاربر همان متن نهایی را
+   * می‌بیند و ویرایش می‌کند، نه قالب `{{...}}` را. پس اینجا هیچ متغیری تفسیر
+   * نمی‌شود و متن کاربر همان‌طور که هست می‌نشیند.
+   */
+  readonly textOverrides?: Readonly<Record<string, string>> | undefined;
+}
+
+export function layoutReport(
+  template: TemplateV1,
+  dataset: ReportDataset,
+  options: LayoutOptions = {},
+): LaidOutReport {
   const scope = makeScope(dataset);
+  const overrides = options.textOverrides ?? {};
+
+  const applyOverrides = (blocks: readonly LaidOutBlock[]): LaidOutBlock[] =>
+    blocks.map((block) =>
+      block.kind === 'text' && overrides[block.id] !== undefined
+        ? { ...block, text: overrides[block.id] as string }
+        : block,
+    );
 
   return {
     titleFa: template.titleFa,
     page: template.page,
     styles: template.styles,
-    header: layoutBlocks(template.header.blocks, scope, dataset),
+    header: applyOverrides(layoutBlocks(template.header.blocks, scope, dataset)),
     repeatHeader: template.header.repeatOnEveryPage,
-    body: layoutBlocks(template.body, scope, dataset),
-    footer: layoutBlocks(template.footer.blocks, scope, dataset),
+    body: applyOverrides(layoutBlocks(template.body, scope, dataset)),
+    footer: applyOverrides(layoutBlocks(template.footer.blocks, scope, dataset)),
     repeatFooter: template.footer.repeatOnEveryPage,
     generatedAt: dataset.generatedAt,
   };
@@ -307,10 +349,19 @@ function layoutTable(
         text: formatValue(raw, column.format),
         raw,
         align: column.align,
-        extraLines: (column.multiline?.lines ?? []).map((line) => ({
-          text: formatValue(evaluateExpression(line.value, rowScope), line.format),
-          muted: line.muted,
-        })),
+        /*
+          خط خالی، خط نیست.
+
+          ستون «شماره صورت‌حساب — تاریخ» وقتی تاریخ ندارد نباید نیمهٔ خالی بسازد؛
+          سلول باید مثل یک سلول معمولی دیده شود. پس خط‌های بی‌متن حذف می‌شوند و
+          تصمیمِ «این سلول دوبخشی است یا نه» به خروجی‌گیر می‌رسد، نه به حدس او.
+        */
+        extraLines: (column.multiline?.lines ?? [])
+          .map((line) => ({
+            text: formatValue(evaluateExpression(line.value, rowScope), line.format),
+            muted: line.muted,
+          }))
+          .filter((line) => line.text !== ''),
       };
     });
   });
@@ -347,6 +398,39 @@ function layoutTable(
       })
     : null;
 
+  /*
+    ردیف‌های پرکننده.
+
+    فقط ستونِ شمارهٔ ردیف پر می‌شود و شمارش از آخرین ردیف واقعی ادامه می‌یابد؛
+    بقیهٔ سلول‌ها خالی‌اند. «۰» در ستون مبلغِ یک ردیفِ خالی، عددی است که وجود
+    ندارد — و در یک فرم مالی، عدد نبودن با صفر بودن یکی نیست.
+  */
+  const fillerCount = Math.max(0, block.minRows - rows.length);
+  const fillerRows = Array.from({ length: fillerCount }, (_unused, offset) =>
+    columns.map((column): LaidOutCell => {
+      if (!column.rowNumber) {
+        return { text: '', raw: null, align: column.align, extraLines: [] };
+      }
+      const number = BigInt(rows.length + offset + 1);
+      return {
+        text: formatValue(number, column.format),
+        raw: number,
+        align: column.align,
+        extraLines: [],
+      };
+    }),
+  );
+
+  /*
+    گسترهٔ برچسب جمع: ستون‌های ابتدایی که جمعی ندارند.
+
+    حداقل یک ستون، تا وقتی جدول هیچ ستون جمع‌داری ندارد هم برچسب جایی داشته باشد.
+  */
+  const firstAggregated = columns.findIndex(
+    (column) => (block.totalsRow?.cells[column.key] ?? 'none') !== 'none',
+  );
+  const totalsLabelSpan = firstAggregated === -1 ? 1 : Math.max(1, firstAggregated);
+
   return {
     kind: 'table',
     id: block.id,
@@ -358,9 +442,10 @@ function layoutTable(
       isNumeric: column.format.kind === 'currency' || column.format.kind === 'integer',
     })),
     rows,
-    fillerRowCount: Math.max(0, block.minRows - rows.length),
+    fillerRows,
     totals,
     totalsLabel: block.totalsRow?.enabled ? block.totalsRow.labelFa : null,
+    totalsLabelSpan,
     repeatHeaderOnNewPage: block.pagination.repeatHeaderOnNewPage,
     avoidRowBreak: block.pagination.avoidRowBreak,
   };

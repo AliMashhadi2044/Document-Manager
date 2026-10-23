@@ -222,6 +222,7 @@ const MINIMAL_TEMPLATE: TemplateV1 = templateV1Schema.parse({
           titleFa: 'ردیف',
           width: { unit: 'mm', value: 10 },
           align: 'center',
+          rowNumber: true,
           value: { k: 'var', path: 'row.index' },
           format: { kind: 'integer', emptyText: '' },
         },
@@ -289,11 +290,44 @@ describe('چیدمان گزارش', () => {
     expect(table.totals?.[3]?.text).toBe('۳٬۰۹۰٬۴۸۱٬۵۱۰');
   });
 
-  it('کمبود ردیف با ردیف خالی پر می‌شود', () => {
+  /*
+    ردیف خالی یعنی **خالی**، نه صفر.
+
+    پیش از این هر ستون عددیِ ردیف پرکننده «۰» می‌گرفت: عددی که وجود ندارد. در یک
+    فرم مالی، نبودنِ عدد با صفر بودنش یکی نیست. فقط شمارهٔ ردیف می‌ماند، تا شمارش
+    فرم پیوسته باشد.
+  */
+  it('ردیف‌های پرکننده فقط شماره دارند و بقیهٔ سلول‌هایشان خالی است', () => {
     const report = layoutReport(MINIMAL_TEMPLATE, datasetOf(rows));
     const table = report.body[0];
     if (table?.kind !== 'table') throw new Error('جدول ساخته نشد');
-    expect(table.fillerRowCount).toBe(2);
+
+    expect(table.fillerRows).toHaveLength(2);
+
+    // دو ردیف واقعی هست، پس پرکننده‌ها ۳ و ۴ می‌شوند.
+    expect(table.fillerRows[0]?.[0]?.text).toBe('۳');
+    expect(table.fillerRows[1]?.[0]?.text).toBe('۴');
+
+    // بقیهٔ سلول‌ها خالی‌اند — حتی ستون‌های مبلغ.
+    for (const row of table.fillerRows) {
+      for (const cell of row.slice(1)) expect(cell.text).toBe('');
+    }
+  });
+
+  /*
+    برچسب «جمع کل» ستون‌های ابتدایی را با هم می‌گیرد.
+
+    در ستون «ردیف» که چند میلی‌متر عرض دارد، همین عبارت می‌شکست و از سلول بیرون
+    می‌زد. گستره تا اولین ستونی است که جمع دارد.
+  */
+  it('برچسب جمع، ستون‌های بی‌جمعِ ابتدایی را می‌پوشاند', () => {
+    const report = layoutReport(MINIMAL_TEMPLATE, datasetOf(rows));
+    const table = report.body[0];
+    if (table?.kind !== 'table') throw new Error('جدول ساخته نشد');
+
+    const firstAggregated = table.columns.findIndex((column) => column.key === 'goods');
+    expect(table.totalsLabelSpan).toBe(firstAggregated);
+    expect(table.totalsLabelSpan).toBeGreaterThan(1);
   });
 
   it('امضاکننده ثبت‌نشده، کادر امضا را حذف نمی‌کند', () => {

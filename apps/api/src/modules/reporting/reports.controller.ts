@@ -56,6 +56,21 @@ const setProductTypeSchema = z
     }
   });
 
+/**
+ * متن‌های سربرگ که کاربر برای **همین خروجی** عوض کرده است.
+ *
+ * کلید، شناسهٔ بلوک متنی قالب است و مقدار، متن نهایی. سقف‌ها سخاوتمندانه ولی
+ * بسته‌اند: این یک کانال ورودی کاربر به خروجی چاپی است و باید اندازه داشته باشد.
+ */
+const textOverridesSchema = z
+  .record(z.string().min(1).max(60), z.string().max(500))
+  .refine((value) => Object.keys(value).length <= 40, {
+    message: 'تعداد متن‌های جایگزین بیش از حد مجاز است',
+  })
+  .optional();
+
+const reportRunBodySchema = z.object({ textOverrides: textOverridesSchema });
+
 const copyTemplateSchema = z.object({
   name: z.string().trim().min(1, 'نام قالب الزامی است').max(200),
 });
@@ -114,9 +129,17 @@ export class ReportsController {
   async preview(
     @Param('reportTypeKey') reportTypeKey: string,
     @Param('documentId') documentId: string,
+    @Body(new ZodBody(reportRunBodySchema)) body: z.infer<typeof reportRunBodySchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    const result = await this.reports.run(reportTypeKey, documentId, 'HTML', user);
+    const result = await this.reports.run(
+      reportTypeKey,
+      documentId,
+      'HTML',
+      user,
+      new Date(),
+      body.textOverrides,
+    );
     return {
       runId: result.runId,
       rowCount: result.rowCount,
@@ -134,10 +157,18 @@ export class ReportsController {
   async html(
     @Param('reportTypeKey') reportTypeKey: string,
     @Param('documentId') documentId: string,
+    @Body(new ZodBody(reportRunBodySchema)) body: z.infer<typeof reportRunBodySchema>,
     @CurrentUser() user: AuthenticatedUser,
     @Res() response: Response,
   ): Promise<void> {
-    const result = await this.reports.run(reportTypeKey, documentId, 'HTML', user);
+    const result = await this.reports.run(
+      reportTypeKey,
+      documentId,
+      'HTML',
+      user,
+      new Date(),
+      body.textOverrides,
+    );
 
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -152,10 +183,18 @@ export class ReportsController {
   async excelExport(
     @Param('reportTypeKey') reportTypeKey: string,
     @Param('documentId') documentId: string,
+    @Body(new ZodBody(reportRunBodySchema)) body: z.infer<typeof reportRunBodySchema>,
     @CurrentUser() user: AuthenticatedUser,
     @Res() response: Response,
   ): Promise<void> {
-    const result = await this.reports.run(reportTypeKey, documentId, 'EXCEL', user);
+    const result = await this.reports.run(
+      reportTypeKey,
+      documentId,
+      'EXCEL',
+      user,
+      new Date(),
+      body.textOverrides,
+    );
     const buffer = await this.excel.build(result.report);
 
     response.setHeader(
@@ -178,10 +217,18 @@ export class ReportsController {
   async pdfExport(
     @Param('reportTypeKey') reportTypeKey: string,
     @Param('documentId') documentId: string,
+    @Body(new ZodBody(reportRunBodySchema)) body: z.infer<typeof reportRunBodySchema>,
     @CurrentUser() user: AuthenticatedUser,
     @Res() response: Response,
   ): Promise<void> {
-    const result = await this.reports.run(reportTypeKey, documentId, 'PDF', user);
+    const result = await this.reports.run(
+      reportTypeKey,
+      documentId,
+      'PDF',
+      user,
+      new Date(),
+      body.textOverrides,
+    );
     const html = this.reports.renderHtml(result.report);
     const margins = result.report.page.margins;
 

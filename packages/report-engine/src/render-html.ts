@@ -118,13 +118,11 @@ function renderTable(table: LaidOutTable): string {
 
   const body = table.rows.map((row) => `<tr>${row.map(renderCell).join('')}</tr>`).join('\n');
 
-  // ردیف‌های خالی پرکننده: فرم چاپی تعداد ردیف ثابت دارد (docs/15 §۳).
-  const fillers = Array.from({ length: table.fillerRowCount }, () => {
-    const cells = table.columns
-      .map((column) => `<td class="align-${column.align}">${column.isNumeric ? '۰' : ''}</td>`)
-      .join('');
-    return `<tr class="filler-row">${cells}</tr>`;
-  }).join('\n');
+  // ردیف‌های خالی پرکننده: فرم چاپی تعداد ردیف ثابت دارد. محتوایشان را چیدمان
+  // ساخته است — فقط شمارهٔ ردیف دارند، نه «۰» در ستون‌های عددی.
+  const fillers = table.fillerRows
+    .map((row) => `<tr class="filler-row">${row.map(renderCell).join('')}</tr>`)
+    .join('\n');
 
   /**
    * ردیف جمع، **آخرین ردیف بدنه** است، نه `<tfoot>`.
@@ -136,15 +134,24 @@ function renderTable(table: LaidOutTable): string {
    *
    * (در آزمون PDF چهارصفحه‌ای فاز ۶ همین دیده شد.)
    */
+  /*
+    برچسب جمع، ستون‌های ابتدایی را **با هم** می‌گیرد.
+
+    پیش از این فقط در ستون اول می‌نشست — ستون «ردیف» با چند میلی‌متر عرض — و
+    «جمع کل» آنجا می‌شکست و از سلول بیرون می‌زد.
+  */
   const totals =
     table.totals === null
       ? ''
       : `<tr class="totals-row">${table.totals
-          .map((cell, index) =>
-            index === 0 && table.totalsLabel !== null
-              ? `<td class="align-center">${escapeHtml(table.totalsLabel)}</td>`
-              : renderCell(cell),
-          )
+          .map((cell, index) => {
+            if (table.totalsLabel === null) return renderCell(cell);
+            if (index === 0) {
+              const span = table.totalsLabelSpan > 1 ? ` colspan="${table.totalsLabelSpan}"` : '';
+              return `<td class="align-center"${span}>${escapeHtml(table.totalsLabel)}</td>`;
+            }
+            return index < table.totalsLabelSpan ? '' : renderCell(cell);
+          })
           .join('')}</tr>`;
 
   return `<table class="report-table${table.avoidRowBreak ? ' avoid-row-break' : ''}">
@@ -158,17 +165,30 @@ ${totals}
 </table>`;
 }
 
+/**
+ * یک سلول.
+ *
+ * سلولی که دو مقدار دارد (شمارهٔ صورت‌حساب و تاریخش، نام و کد ملی) با یک خط افقی
+ * به دو نیمه تقسیم می‌شود — همان کاری که فرم کاغذی می‌کند. اگر مقدار دوم نباشد،
+ * سلول مثل هر سلول دیگری یک‌تکه می‌ماند؛ خط جداکننده روی یک نیمهٔ خالی فقط جدول را
+ * شلوغ می‌کند. (خط‌های بی‌متن را چیدمان از قبل حذف کرده است.)
+ */
 function renderCell(cell: LaidOutCell): string {
-  const extra = cell.extraLines
-    .map(
-      (line) =>
-        `<span class="cell-line${line.muted ? ' muted' : ''}">${escapeHtml(line.text)}</span>`,
-    )
-    .join('');
+  if (cell.extraLines.length === 0) {
+    return `<td class="align-${cell.align}"><span class="cell-line">${escapeHtml(
+      cell.text,
+    )}</span></td>`;
+  }
 
-  return `<td class="align-${cell.align}"><span class="cell-line">${escapeHtml(
-    cell.text,
-  )}</span>${extra}</td>`;
+  const parts = [
+    `<span class="cell-part">${escapeHtml(cell.text)}</span>`,
+    ...cell.extraLines.map(
+      (line) =>
+        `<span class="cell-part${line.muted ? ' muted' : ''}">${escapeHtml(line.text)}</span>`,
+    ),
+  ].join('');
+
+  return `<td class="align-${cell.align} split-cell">${parts}</td>`;
 }
 
 function buildCss(report: LaidOutReport, fontFaceCss: string): string {
@@ -222,6 +242,11 @@ html, body {
 }
 .report-table th { font-weight: 700; background: #ffffff; }
 .report-table .cell-line { display: block; line-height: 1.6; }
+/* سلول دوبخشی: خط افقی میانش، مثل فرم کاغذی. */
+.report-table .split-cell { padding: 0; }
+.report-table .split-cell .cell-part { display: block; padding: 1mm 1.5mm; line-height: 1.5; }
+.report-table .split-cell .cell-part + .cell-part { border-top: ${styles.borderWidthPx}px solid ${styles.borderColor}; }
+.report-table .split-cell .cell-part.muted { color: ${styles.mutedTextColor}; font-size: 0.9em; }
 .report-table .cell-line.muted { color: ${styles.mutedTextColor}; font-size: 0.9em; }
 .report-table .filler-row td { height: 8mm; }
 .report-table .totals-row td { font-weight: 700; }

@@ -88,6 +88,13 @@ export const tableColumnSchema = z.object({
   value: expressionSchema,
   format: formatSpecSchema,
   multiline: multilineSchema.optional(),
+  /**
+   * این ستون، **شمارهٔ ردیف** است.
+   *
+   * ردیف‌های خالیِ پرکننده هم شماره می‌گیرند و شمارش پیوسته می‌ماند؛ بدون این
+   * نشان، موتور نمی‌داند کدام ستون شماره است و همه‌شان خالی می‌مانند.
+   */
+  rowNumber: z.boolean().default(false),
   visibleWhen: conditionSchema.optional(),
 });
 export type TableColumn = z.infer<typeof tableColumnSchema>;

@@ -100,7 +100,7 @@
           "titleFa": "ردیف",
           "width": {
             "unit": "mm",
-            "value": 7
+            "value": 10
           },
           "align": "center",
           "value": {
@@ -113,7 +113,8 @@
             "thousandSeparator": false,
             "decimals": 0,
             "emptyText": ""
-          }
+          },
+          "rowNumber": true
         },
         {
           "key": "counterparty",

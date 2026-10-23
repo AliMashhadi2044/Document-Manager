@@ -247,6 +247,8 @@ export function newBlock(type: Block['type'], id: string, firstCollection: strin
             titleFa: 'ردیف',
             width: { unit: 'mm', value: 10 },
             align: 'center',
+            // ستون شماره: ردیف‌های خالیِ فرم هم شماره می‌گیرند.
+            rowNumber: true,
             value: { k: 'var', path: 'row.index' },
             format: INTEGER_FORMAT,
           },
@@ -288,6 +290,7 @@ export function newColumn(key: string): TableColumn {
     titleFa: 'ستون تازه',
     width: { unit: 'mm', value: 20 },
     align: 'start',
+    rowNumber: false,
     value: { k: 'const', type: 'text', v: '' },
     format: TEXT_FORMAT,
   };

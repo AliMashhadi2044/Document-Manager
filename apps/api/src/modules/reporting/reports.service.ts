@@ -172,6 +172,8 @@ export class ReportsService {
     outputFormat: 'HTML' | 'EXCEL' | 'PDF',
     user: AuthenticatedUser,
     generatedAt = new Date(),
+    /** متن‌های سربرگ که کاربر برای **همین خروجی** عوض کرده است. */
+    textOverrides?: Readonly<Record<string, string>>,
   ): Promise<ReportRunResult> {
     const { definitionId, versionId, template } = await this.publishedTemplate(reportTypeKey);
     return this.execute(
@@ -180,6 +182,7 @@ export class ReportsService {
       outputFormat,
       user,
       generatedAt,
+      textOverrides,
     );
   }
 
@@ -257,6 +260,7 @@ export class ReportsService {
     outputFormat: 'HTML' | 'EXCEL' | 'PDF',
     user: AuthenticatedUser,
     generatedAt: Date,
+    textOverrides?: Readonly<Record<string, string>>,
   ): Promise<ReportRunResult> {
     const started = Date.now();
 
@@ -273,7 +277,13 @@ export class ReportsService {
     this.datasets.assertPathsAllowed(paths, user);
 
     const dataset = await this.datasets.buildDocumentDataset(documentId, user, generatedAt);
-    const report = layoutReport(source.template, dataset);
+    /*
+      متن‌های سربرگ **برای همین خروجی** عوض می‌شوند، نه در قالب.
+
+      عوض کردن قالب یعنی عوض کردن همهٔ گزارش‌های بعدی برای یک بار نیاز؛ اینجا
+      تغییر به همین اجرا محدود است و قالب دست‌نخورده می‌ماند.
+    */
+    const report = layoutReport(source.template, dataset, { textOverrides });
 
     const aggregateRows = dataset.collections['document.vendorAggregates'] ?? [];
     const rowCount = aggregateRows.length;

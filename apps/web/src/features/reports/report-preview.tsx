@@ -4,7 +4,8 @@ import { Button } from '../../shared/ui/button';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
 import { formatServerMessage, toPersianDigits } from '../../shared/format/money';
-import { downloadReport, useReportPreview } from './reports.api';
+import { downloadReport, useReportPreview, type TextOverrides } from './reports.api';
+import { HeaderEditDialog } from './header-edit-dialog';
 import { ReportView } from './report-view';
 import { ProductTypeDialog } from './product-type-dialog';
 import { AmountDetailsDialog } from './amount-details-dialog';
@@ -32,7 +33,17 @@ export function ReportPreview({
   user: CurrentUser;
   onBack: () => void;
 }): JSX.Element {
-  const preview = useReportPreview(REPORT_TYPE_KEY, documentId);
+  /*
+    متن‌های سربرگ که کاربر برای همین خروجی عوض کرده است.
+
+    در حالت صفحه می‌مانند، نه در قالب: تغییر به همین اجرا محدود است و همان متن‌ها
+    با هر خروجی (چاپ، PDF، Excel، HTML) می‌روند، تا فایل با آنچه روی صفحه دیده
+    می‌شود یکی باشد.
+  */
+  const [textOverrides, setTextOverrides] = useState<TextOverrides>({});
+  const [editingHeader, setEditingHeader] = useState(false);
+
+  const preview = useReportPreview(REPORT_TYPE_KEY, documentId, textOverrides);
   const [productTypeFor, setProductTypeFor] = useState<{ vendorId: string; vendorName: string } | null>(
     null,
   );
@@ -73,6 +84,7 @@ export function ReportPreview({
         documentId,
         format,
         `${report.titleFa}.${format === 'excel' ? 'xlsx' : format}`,
+        textOverrides,
       );
     } catch (error) {
       setDownloadError(
@@ -91,6 +103,12 @@ export function ReportPreview({
         </Button>
 
         <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setEditingHeader(true)}>
+            ویرایش سربرگ
+            {Object.keys(textOverrides).length > 0
+              ? ` (${toPersianDigits(String(Object.keys(textOverrides).length))})`
+              : ''}
+          </Button>
           <Button size="sm" onClick={() => window.print()}>
             چاپ
           </Button>
@@ -163,6 +181,18 @@ export function ReportPreview({
           vendorName={productTypeFor.vendorName}
           reportTypeKey={REPORT_TYPE_KEY}
           onClose={() => setProductTypeFor(null)}
+        />
+      ) : null}
+
+      {editingHeader ? (
+        <HeaderEditDialog
+          blocks={[...report.header, ...report.footer]}
+          overrides={textOverrides}
+          onClose={() => setEditingHeader(false)}
+          onApply={(next) => {
+            setTextOverrides(next);
+            setEditingHeader(false);
+          }}
         />
       ) : null}
 

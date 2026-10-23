@@ -185,17 +185,34 @@ function ReportTable({
                 {row.map((cell, cellIndex) => (
                   <td
                     key={table.columns[cellIndex]?.key ?? cellIndex}
-                    className={`border border-border px-1.5 py-1 align-middle ${alignClass(cell.align)}`}
+                    className={
+                      cell.extraLines.length === 0
+                        ? `border border-border px-1.5 py-1 align-middle ${alignClass(cell.align)}`
+                        : `border border-border align-middle ${alignClass(cell.align)}`
+                    }
                   >
-                    <span className="block leading-6">{cell.text}</span>
-                    {cell.extraLines.map((line, lineIndex) => (
-                      <span
-                        key={`line-${lineIndex}`}
-                        className={`block leading-6 ${line.muted ? 'text-[0.9em] text-muted-foreground' : ''}`}
-                      >
-                        {line.text}
-                      </span>
-                    ))}
+                    {/*
+                      سلولی که دو مقدار دارد، با یک خط افقی به دو نیمه تقسیم
+                      می‌شود — مثل فرم کاغذی. مقدار دومِ خالی اصلاً خطی نمی‌سازد
+                      (چیدمان از قبل حذفش کرده)، پس سلول یک‌تکه می‌ماند.
+                    */}
+                    {cell.extraLines.length === 0 ? (
+                      <span className="block leading-6">{cell.text}</span>
+                    ) : (
+                      <>
+                        <span className="block px-1.5 py-1 leading-6">{cell.text}</span>
+                        {cell.extraLines.map((line, lineIndex) => (
+                          <span
+                            key={`line-${lineIndex}`}
+                            className={`block border-t border-border px-1.5 py-1 leading-6 ${
+                              line.muted ? 'text-[0.9em] text-muted-foreground' : ''
+                            }`}
+                          >
+                            {line.text}
+                          </span>
+                        ))}
+                      </>
+                    )}
                   </td>
                 ))}
                 {hasActions ? (
@@ -212,15 +229,19 @@ function ReportTable({
             );
           })}
 
-          {/* ردیف‌های خالی فرم چاپی — در پیش‌نمایش هم همان شکل را دارد. */}
-          {Array.from({ length: table.fillerRowCount }, (_, index) => (
+          {/*
+            ردیف‌های خالی فرم چاپی — محتوایشان را چیدمان ساخته است: فقط شمارهٔ
+            ردیف، تا شمارش پیوسته بماند. «۰» در ستون مبلغِ یک ردیف خالی، عددی
+            است که وجود ندارد.
+          */}
+          {table.fillerRows.map((row, index) => (
             <tr key={`filler-${index}`}>
-              {table.columns.map((column) => (
+              {row.map((cell, cellIndex) => (
                 <td
-                  key={column.key}
-                  className={`h-8 border border-border px-1.5 py-1 ${alignClass(column.align)}`}
+                  key={table.columns[cellIndex]?.key ?? cellIndex}
+                  className={`h-8 border border-border px-1.5 py-1 ${alignClass(cell.align)}`}
                 >
-                  {column.isNumeric ? '۰' : ''}
+                  {cell.text}
                 </td>
               ))}
               {hasActions ? <td className="no-print border border-border" /> : null}
@@ -236,14 +257,45 @@ function ReportTable({
         {table.totals ? (
           <tbody>
             <tr className="font-bold">
-              {table.totals.map((cell, index) => (
-                <td
-                  key={table.columns[index]?.key ?? index}
-                  className={`border border-border px-1.5 py-1 ${alignClass(cell.align)}`}
-                >
-                  {index === 0 && table.totalsLabel !== null ? table.totalsLabel : cell.text}
-                </td>
-              ))}
+              {/*
+                برچسب «جمع کل» ستون‌های ابتدایی را با هم می‌گیرد؛ در ستون «ردیف»
+                که چند میلی‌متر عرض دارد، می‌شکست و از سلول بیرون می‌زد.
+              */}
+              {table.totals.map((cell, index) => {
+                if (table.totalsLabel === null) {
+                  return (
+                    <td
+                      key={table.columns[index]?.key ?? index}
+                      className={`border border-border px-1.5 py-1 ${alignClass(cell.align)}`}
+                    >
+                      {cell.text}
+                    </td>
+                  );
+                }
+
+                if (index === 0) {
+                  return (
+                    <td
+                      key={table.columns[index]?.key ?? index}
+                      colSpan={table.totalsLabelSpan}
+                      className="border border-border px-1.5 py-1 text-center"
+                    >
+                      {table.totalsLabel}
+                    </td>
+                  );
+                }
+
+                if (index < table.totalsLabelSpan) return null;
+
+                return (
+                  <td
+                    key={table.columns[index]?.key ?? index}
+                    className={`border border-border px-1.5 py-1 ${alignClass(cell.align)}`}
+                  >
+                    {cell.text}
+                  </td>
+                );
+              })}
               {hasActions ? <td className="no-print border border-border" /> : null}
             </tr>
           </tbody>

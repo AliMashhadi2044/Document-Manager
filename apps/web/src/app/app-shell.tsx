@@ -315,7 +315,7 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
   );
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[17rem_1fr]">
+    <div className="app-shell min-h-dvh lg:grid lg:grid-cols-[17rem_1fr]">
       {/*
         پرش به محتوا: برای کاربر صفحه‌کلید، اولین Tab در هر صفحه نباید عبور از کل
         منو باشد. پیوند تا وقتی فوکوس نگیرد دیده نمی‌شود.
@@ -327,7 +327,8 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
         پرش به محتوای اصلی
       </a>
       {/* ───────────── نوار کناری (دسکتاپ) ───────────── */}
-      <aside className="sticky top-0 hidden h-dvh flex-col border-e border-border bg-card lg:flex">
+      {/* `no-print`: نوار کناری و سربرگ، رابط‌اند نه محتوا؛ روی کاغذ جایی ندارند. */}
+      <aside className="no-print sticky top-0 hidden h-dvh flex-col border-e border-border bg-card lg:flex">
         <BrandHeader />
         {navigation}
         <UserCard user={user} />
@@ -352,7 +353,7 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
 
       <div className="flex min-w-0 flex-col">
         {/* ───────────── سربرگ ───────────── */}
-        <header className="surface sticky top-0 z-40 border-b border-border">
+        <header className="no-print surface sticky top-0 z-40 border-b border-border">
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <Button
@@ -405,7 +406,7 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
             // گزارش‌گیری و طراح گزارش ستون‌های زیادی دارند و در عرض معمول خفه می‌شوند.
             section === 'reports' || section === 'report-templates' || section === 'dashboard'
               ? 'max-w-[110rem]'
-              : 'max-w-6xl',
+              : 'max-w-7xl',
           )}
         >
           <div key={section} className="animate-[var(--animate-fade-in)]">

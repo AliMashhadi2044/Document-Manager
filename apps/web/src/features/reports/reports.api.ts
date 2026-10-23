@@ -26,9 +26,12 @@ export interface ReportTableBlock {
     readonly isNumeric: boolean;
   }[];
   readonly rows: readonly (readonly ReportCell[])[];
-  readonly fillerRowCount: number;
+  /** ردیف‌های خالیِ فرم چاپی — فقط شمارهٔ ردیف دارند. */
+  readonly fillerRows: readonly (readonly ReportCell[])[];
   readonly totals: readonly ReportCell[] | null;
   readonly totalsLabel: string | null;
+  /** چند ستون را برچسب «جمع کل» می‌پوشاند. */
+  readonly totalsLabelSpan: number;
 }
 
 export interface ReportTextBlock {
@@ -154,13 +157,28 @@ export const reportKeys = {
  * یک «خواندن» است که با باز شدن صفحه انجام می‌شود. `staleTime` صفر است تا تغییر نوع
  * کالا بلافاصله در گزارش دیده شود.
  */
-export function useReportPreview(reportTypeKey: string, documentId: string | null) {
+/**
+ * متن‌های سربرگ که کاربر برای همین خروجی عوض کرده است.
+ *
+ * به قالب دست نمی‌زند: تغییر به همین اجرا محدود است و با بستن صفحه می‌رود.
+ */
+export type TextOverrides = Readonly<Record<string, string>>;
+
+export function useReportPreview(
+  reportTypeKey: string,
+  documentId: string | null,
+  textOverrides: TextOverrides = {},
+) {
+  // کلید کوئری متن‌ها را هم در بر می‌گیرد، وگرنه ویرایش سربرگ پیش‌نمایش را تازه
+  // نمی‌کرد و کاربر تغییرش را نمی‌دید.
+  const signature = JSON.stringify(textOverrides);
+
   return useQuery({
-    queryKey: reportKeys.preview(reportTypeKey, documentId ?? ''),
+    queryKey: [...reportKeys.preview(reportTypeKey, documentId ?? ''), signature],
     queryFn: () =>
       apiFetch<ReportPreview>(
         `/reports/${reportTypeKey}/documents/${documentId as string}/preview`,
-        { method: 'POST' },
+        { method: 'POST', json: { textOverrides } },
       ),
     enabled: documentId !== null,
     staleTime: 0,
@@ -228,6 +246,7 @@ export async function downloadReport(
   documentId: string,
   format: 'excel' | 'html' | 'pdf',
   filename: string,
+  textOverrides: TextOverrides = {},
 ): Promise<void> {
   const csrf = document.cookie
     .split('; ')
@@ -239,7 +258,12 @@ export async function downloadReport(
     {
       method: 'POST',
       credentials: 'same-origin',
-      ...(csrf ? { headers: { 'x-csrf-token': decodeURIComponent(csrf) } } : {}),
+      headers: {
+        'content-type': 'application/json',
+        ...(csrf ? { 'x-csrf-token': decodeURIComponent(csrf) } : {}),
+      },
+      // همان متن‌هایی که روی صفحه دیده می‌شوند، در فایل هم می‌نشینند.
+      body: JSON.stringify({ textOverrides }),
     },
   );
 
