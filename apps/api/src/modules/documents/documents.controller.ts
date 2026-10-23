@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 
@@ -247,6 +247,34 @@ export class DocumentsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.invoices.create(documentId, body, user);
+  }
+
+  @RequirePermission('document:read')
+  @Get('invoices/:invoiceId/draft')
+  @ApiOperation({ summary: 'فاکتور به شکل ورودی ساخت، برای پر کردن فرم ویرایش' })
+  async invoiceDraft(
+    @Param('invoiceId') invoiceId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.draft(invoiceId, user);
+  }
+
+  /**
+   * ویرایش فاکتور — بدنه‌اش **همان** بدنهٔ ساخت است.
+   *
+   * ویرایش، بازسازی فاکتور در جای خودش است و نه وصله زدن؛ پس همان ورودی کامل
+   * می‌آید و همان قاعده‌ها رویش اجرا می‌شوند. شناسهٔ فاکتور و جایگاهش در سند
+   * می‌مانند، تا ارجاع‌های بیرونی نشکنند.
+   */
+  @RequirePermission('invoice:update')
+  @Put('invoices/:invoiceId')
+  @ApiOperation({ summary: 'ویرایش فاکتور، پیش از ثبت نهایی' })
+  async updateInvoice(
+    @Param('invoiceId') invoiceId: string,
+    @Body(new ZodBody(createInvoiceSchema)) body: z.infer<typeof createInvoiceSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.update(invoiceId, body, user);
   }
 
   @RequirePermission('invoice:delete')

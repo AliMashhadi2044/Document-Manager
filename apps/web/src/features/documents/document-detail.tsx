@@ -66,6 +66,8 @@ export function DocumentDetailView({
   const [notice, setNotice] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  /** فاکتوری که ویرایش می‌شود؛ همان فرمِ افزودن، در حالت ویرایش. */
+  const [editingInvoice, setEditingInvoice] = useState<string | null>(null);
 
   if (isPending) return <LoadingState label="در حال بارگذاری سند…" />;
   if (isError) {
@@ -387,6 +389,21 @@ export function DocumentDetailView({
         />
       ) : null}
 
+      {editingInvoice !== null && editable ? (
+        <CreateInvoiceForm
+          documentId={documentId}
+          invoiceId={editingInvoice}
+          documentJalaliYear={data.jalaliYear}
+          policy={data.roundingPolicy}
+          lockedCategoryKey={data.invoices[0]?.chapter.category.key ?? null}
+          onClose={() => setEditingInvoice(null)}
+          onCreated={() => {
+            void refetch();
+            setNotice({ kind: 'success', text: 'فاکتور اصلاح شد.' });
+          }}
+        />
+      ) : null}
+
       {showAddInvoice && editable ? (
         <CreateInvoiceForm
           documentId={documentId}
@@ -416,6 +433,7 @@ export function DocumentDetailView({
           <InvoiceCard
             key={invoice.id}
             invoice={invoice}
+            onEdit={editable ? () => setEditingInvoice(invoice.id) : undefined}
             onRemove={
               editable
                 ? () => {
@@ -503,9 +521,11 @@ const TRIGGER_LABELS: Record<string, string> = {
 
 function InvoiceCard({
   invoice,
+  onEdit,
   onRemove,
 }: {
   invoice: InvoiceRow;
+  onEdit?: (() => void) | undefined;
   onRemove?: (() => void) | undefined;
 }): JSX.Element {
   return (
@@ -528,6 +548,11 @@ function InvoiceCard({
           <span className="text-sm font-medium money">
             {formatMoney(invoice.totalAmount)}
           </span>
+          {onEdit ? (
+            <Button size="sm" variant="ghost" onClick={onEdit}>
+              ویرایش
+            </Button>
+          ) : null}
           {onRemove ? (
             <Button size="sm" variant="ghost" onClick={onRemove}>
               حذف فاکتور

@@ -62,13 +62,23 @@ export function FuelFields({
   onChange,
   vehicleTypes,
   fuelTypes,
+  initialPlateSearch = '',
 }: {
+  /** پلاکِ از پیش انتخاب‌شده (ویرایش فاکتور). */
+  initialPlateSearch?: string;
   draft: FuelDraft;
   onChange: (next: FuelDraft) => void;
   vehicleTypes: ReadonlyArray<{ id: string; title: string }>;
   fuelTypes: ReadonlyArray<{ id: string; title: string }>;
 }): JSX.Element {
-  const [plateSearch, setPlateSearch] = useState('');
+  /*
+    متن جست‌وجوی پلاک.
+
+    در ویرایش با مقدار پلاکِ ثبت‌شده شروع می‌شود: فهرست پلاک‌ها سمت سرور جست‌وجو
+    می‌شود و بدون این، گزینهٔ انتخاب‌شده در نتیجهٔ خالیِ اول نیست و کادر خالی
+    به‌نظر می‌رسد.
+  */
+  const [plateSearch, setPlateSearch] = useState(initialPlateSearch);
   /** گفت‌وگوی ساخت سریع: پلاک، نوع خودرو یا نوع سوخت. */
   const [quick, setQuick] = useState<'vehicle' | 'vehicle-type' | 'fuel-type' | null>(null);
   const vehicles = useVehicleSearch(draft.vehicleTypeId, plateSearch);

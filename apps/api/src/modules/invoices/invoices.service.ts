@@ -9,6 +9,7 @@ import { FinancialService, parseRoundingPolicy } from '../financial/financial.se
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
 import { InvoiceKindService } from './invoice-kind.service';
 import { UtilityDuplicateService } from './utility-duplicate.service';
+import { DocumentAccessService } from '../documents/document-access.service';
 import type { InvoiceDetailsBody } from './invoice.schema';
 
 export interface CreateInvoiceInput {
@@ -42,13 +43,24 @@ export class InvoicesService {
     private readonly financial: FinancialService,
     private readonly kinds: InvoiceKindService,
     private readonly duplicates: UtilityDuplicateService,
+    private readonly access: DocumentAccessService,
   ) {}
 
-  async create(
+  /**
+   * بررسی‌ها و محاسبه‌های مشترک ساخت و ویرایش فاکتور.
+   *
+   * ویرایش، **بازسازی** فاکتور در جای خودش است: همان بررسی‌ها، همان آماده‌سازی
+   * خانواده، همان موتور مالی. اگر ویرایش مسیر خودش را می‌داشت، اولین قاعده‌ای که
+   * فردا به ساخت اضافه شود، از ویرایش جا می‌ماند.
+   *
+   * `excludeInvoiceId` برای ویرایش است: خودِ فاکتوری که ویرایش می‌شود نباید با
+   * خودش تداخل داشته باشد — نه در قاعدهٔ تکرار انشعاب و نه در گروه بودجه.
+   */
+  private async prepare(
     documentId: string,
     input: CreateInvoiceInput,
-    user: AuthenticatedUser,
-  ): Promise<Invoice> {
+    excludeInvoiceId?: string,
+  ) {
     const document = await this.prisma.financialDocument.findFirst({
       // سندِ در سطل زباله فاکتور نمی‌گیرد؛ «یافت نشد» هم همان چیزی است که کاربر
       // باید بشنود، چون آن سند دیگر در فهرستش نیست.
@@ -101,7 +113,11 @@ export class InvoicesService {
       چرا سندی که خودش تازه ساخته «عمرانی» است.
     */
     const otherGroup = await this.prisma.invoice.findFirst({
-      where: { documentId, chapter: { categoryId: { not: link.chapter.categoryId } } },
+      where: {
+        documentId,
+        chapter: { categoryId: { not: link.chapter.categoryId } },
+        ...(excludeInvoiceId ? { id: { not: excludeInvoiceId } } : {}),
+      },
       orderBy: { sortIndex: 'asc' },
       include: { chapter: { include: { category: true } } },
     });
@@ -131,6 +147,7 @@ export class InvoicesService {
         schoolId: input.details.schoolId,
         utilityTypeId: input.details.utilityTypeId,
         fiscalYear: document.fiscalYear,
+        ...(excludeInvoiceId ? { excludeInvoiceId } : {}),
       });
 
       if (duplicate && !input.acknowledgeDuplicate) {
@@ -157,6 +174,17 @@ export class InvoicesService {
     }
 
     const paymentData = await this.resolvePayment(input, vendor?.id ?? null);
+
+    return { document, link, prepared, computed, vendor, paymentData, duplicateNotice };
+  }
+
+  async create(
+    documentId: string,
+    input: CreateInvoiceInput,
+    user: AuthenticatedUser,
+  ): Promise<Invoice> {
+    const { document, link, prepared, computed, vendor, paymentData, duplicateNotice } =
+      await this.prepare(documentId, input);
 
     try {
       const invoice = await this.prisma.$transaction(async (tx) => {
@@ -253,6 +281,303 @@ export class InvoicesService {
         );
 
         return created;
+      });
+
+      return invoice;
+    } catch (error) {
+      throw this.translateConstraint(error, document.type);
+    }
+  }
+
+  /**
+   * فاکتور، به شکل **ورودی ساخت**.
+   *
+   * فرم ویرایش همان فرم ساخت است؛ پس چیزی که برای پر کردنش لازم دارد، دقیقاً همان
+   * شکلی است که خودش پس می‌فرستد. برگرداندن ردیف‌های خام دیتابیس یعنی رابط باید
+   * نگاشت معکوس را از نو بنویسد — و آن نگاشت، جایی است که اولین ناسازگاری ظاهر
+   * می‌شود.
+   *
+   * چند قلم **فقط برای نمایش** هم همراهش می‌آید (نام فروشنده، ناحیه، نوع خودرو):
+   * فرم بی آن‌ها کنترل‌هایش را خالی نشان می‌دهد تا کاربر دوباره انتخاب کند.
+   */
+  async draft(invoiceId: string, user: AuthenticatedUser) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, document: { deletedAt: null } },
+      include: {
+        document: { select: { id: true } },
+        chapter: { select: { categoryId: true } },
+        vendor: { select: { id: true, name: true } },
+        items: { orderBy: { rowNo: 'asc' }, include: { fuelEntry: true } },
+        payment: true,
+        utilityDetail: true,
+        fuelDetail: { include: { vehicle: { select: { vehicleTypeId: true, plateNumber: true } } } },
+      },
+    });
+    if (!invoice) throw AppError.notFound('فاکتور یافت نشد');
+
+    await this.access.assertDocumentVisible(invoice.documentId, user);
+
+    return {
+      documentId: invoice.documentId,
+      /** گروه بودجه — کلید سوییچ بالای فرم، که فهرست فصل‌ها را فیلتر می‌کند. */
+      categoryId: invoice.chapter.categoryId,
+      chapterId: invoice.chapterId,
+      invoiceTypeId: invoice.invoiceTypeId,
+      vendorId: invoice.vendorId,
+      vendorName: invoice.vendor?.name ?? null,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: invoice.invoiceDate.toISOString().slice(0, 10),
+      description: invoice.description,
+      notes: invoice.notes,
+      details: this.draftDetails(invoice),
+      payment: invoice.payment
+        ? {
+            paymentMethodId: invoice.payment.paymentMethodId,
+            vendorBankAccountId: invoice.payment.vendorBankAccountId,
+            pettyCashHolderId: invoice.payment.pettyCashHolderId,
+            paymentIdentifier: invoice.payment.paymentIdentifier,
+            billIdentifier: invoice.payment.billIdentifier,
+            notes: invoice.payment.notes,
+          }
+        : null,
+    };
+  }
+
+  /** بخش اختصاصی پیش‌نویس، بر اساس خانوادهٔ فاکتور. */
+  private draftDetails(invoice: {
+    invoiceKind: string;
+    taxMode: string;
+    taxRateBp: number | null;
+    taxAmount: bigint;
+    items: readonly {
+      rowNo: number;
+      description: string;
+      productCode: string | null;
+      quantity: Prisma.Decimal;
+      unitId: string | null;
+      unitPrice: bigint;
+      discountAmount: bigint;
+      taxMode: string;
+      taxRateBp: number | null;
+      taxAmount: bigint;
+      fuelEntry: { jalaliDay: number } | null;
+    }[];
+    utilityDetail: {
+      schoolId: string;
+      utilityTypeId: string;
+      districtTitleSnapshot: string;
+      schoolTitleSnapshot: string;
+    } | null;
+    fuelDetail: {
+      fuelTypeId: string;
+      jalaliYear: number;
+      jalaliMonth: number;
+      vehicleId: string;
+      vehicle: { vehicleTypeId: string; plateNumber: string };
+    } | null;
+  }): Record<string, unknown> {
+    if (invoice.utilityDetail) {
+      // انشعابات یک ردیف مالی دارد؛ مبلغ پایه و تخفیفش از همان ردیف می‌آید.
+      const row = invoice.items[0];
+      return {
+        kind: 'UTILITY',
+        schoolId: invoice.utilityDetail.schoolId,
+        utilityTypeId: invoice.utilityDetail.utilityTypeId,
+        baseAmount: (row?.unitPrice ?? 0n).toString(),
+        discountAmount: (row?.discountAmount ?? 0n).toString(),
+        taxMode: invoice.taxMode,
+        taxRateBp: invoice.taxRateBp,
+        taxAmount: invoice.taxAmount.toString(),
+        districtTitle: invoice.utilityDetail.districtTitleSnapshot,
+        schoolTitle: invoice.utilityDetail.schoolTitleSnapshot,
+      };
+    }
+
+    if (invoice.fuelDetail) {
+      return {
+        kind: 'FUEL',
+        vehicleId: invoice.fuelDetail.vehicleId,
+        fuelTypeId: invoice.fuelDetail.fuelTypeId,
+        jalaliYear: invoice.fuelDetail.jalaliYear,
+        jalaliMonth: invoice.fuelDetail.jalaliMonth,
+        entries: invoice.items
+          .filter((item) => item.fuelEntry !== null)
+          .map((item) => ({
+            day: (item.fuelEntry as { jalaliDay: number }).jalaliDay,
+            amount: item.unitPrice.toString(),
+          })),
+        vehicleTypeId: invoice.fuelDetail.vehicle.vehicleTypeId,
+        plateNumber: invoice.fuelDetail.vehicle.plateNumber,
+      };
+    }
+
+    return {
+      kind: invoice.invoiceKind,
+      taxMode: invoice.taxMode,
+      taxRateBp: invoice.taxRateBp,
+      taxAmount: invoice.taxAmount.toString(),
+      items: invoice.items.map((item) => ({
+        rowNo: item.rowNo,
+        description: item.description,
+        productCode: item.productCode,
+        quantity: item.quantity.toString(),
+        unitId: item.unitId,
+        unitPrice: item.unitPrice.toString(),
+        discountAmount: item.discountAmount.toString(),
+        taxMode: item.taxMode,
+        taxRateBp: item.taxRateBp,
+        taxAmount: item.taxAmount.toString(),
+      })),
+    };
+  }
+
+  /**
+   * ویرایش فاکتور، پیش از ثبت نهایی.
+   *
+   * **بازسازی در جای خود**، نه وصله زدن: ردیف‌ها، جزئیات اختصاصی و پرداخت پاک و از
+   * نو ساخته می‌شوند، با همان مسیری که ساخت از آن می‌گذرد. دلیلش ساده است — یک
+   * فاکتور می‌تواند نوع و خانواده‌اش هم عوض شود (خرید عادی که در واقع انشعاب بوده)،
+   * و «به‌روزرسانی انتخابی» یعنی نوشتن دوبارهٔ همهٔ قاعده‌ها با احتمال جا افتادن یکی.
+   *
+   * شناسهٔ فاکتور و جایگاهش در سند **نگه داشته می‌شوند**: ارجاع‌های بیرونی (بازخورد
+   * ناظر روی همین فاکتور) نمی‌شکنند و ترتیب ردیف‌های سند به‌هم نمی‌ریزد. همین است که
+   * ویرایش را از «حذف و ساخت دوباره» جدا می‌کند.
+   */
+  async update(
+    invoiceId: string,
+    input: CreateInvoiceInput,
+    user: AuthenticatedUser,
+  ): Promise<Invoice> {
+    const before = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { document: { select: { id: true, status: true, type: true, deletedAt: true } } },
+    });
+    if (!before || before.document.deletedAt !== null) throw AppError.notFound('فاکتور یافت نشد');
+
+    if (!isEditableStatus(before.document.status as DocumentStatus)) {
+      throw AppError.conflict(
+        'DOCUMENT_NOT_EDITABLE',
+        'سند در وضعیت فعلی قابل ویرایش نیست. برای اصلاح، آن را بازگشایی کنید.',
+      );
+    }
+
+    const { document, link, prepared, computed, vendor, paymentData, duplicateNotice } =
+      await this.prepare(before.documentId, input, invoiceId);
+
+    try {
+      const invoice = await this.prisma.$transaction(async (tx) => {
+        /*
+          snapshot فروشنده هم تازه می‌شود.
+
+          فاکتور ویرایش‌شده ممکن است فروشندهٔ دیگری داشته باشد، و حتی با همان
+          فروشنده، snapshot باید عکسِ **لحظهٔ ثبت فعلی** باشد. snapshot قدیمی
+          دست‌نخورده می‌ماند چون رکوردی تاریخی است و جای دیگری هم ممکن است به آن
+          اشاره کند.
+        */
+        const vendorSnapshotId = vendor
+          ? (
+              await tx.vendorSnapshot.create({
+                data: {
+                  vendorId: vendor.id,
+                  personType: vendor.personType,
+                  name: vendor.name,
+                  representativeName: vendor.representativeName,
+                  economicCode: vendor.economicCode,
+                  registrationNumber: vendor.registrationNumber,
+                  nationalId: vendor.nationalId,
+                  addressLine: vendor.addressLine,
+                  postalCode: vendor.postalCode,
+                  phone: vendor.phone,
+                  fax: vendor.fax,
+                },
+              })
+            ).id
+          : null;
+
+        /*
+          فرزندان قدیمی می‌روند.
+
+          خانوادهٔ فاکتور می‌تواند عوض شده باشد، پس جزئیات هر دو خانواده پاک
+          می‌شوند، نه فقط خانوادهٔ فعلی؛ قید دیتابیس اجازه نمی‌دهد جزئیات یک خانواده
+          روی فاکتور خانوادهٔ دیگر بماند. ردیف‌های تاریخ سوخت با خودِ ردیف مالی
+          می‌روند (آبشاری).
+        */
+        await tx.invoiceItem.deleteMany({ where: { invoiceId } });
+        await tx.invoiceUtilityDetail.deleteMany({ where: { invoiceId } });
+        await tx.invoiceFuelDetail.deleteMany({ where: { invoiceId } });
+        await tx.invoicePayment.deleteMany({ where: { invoiceId } });
+
+        const updated = await tx.invoice.update({
+          where: { id: invoiceId },
+          data: {
+            invoiceTypeId: link.invoiceTypeId,
+            invoiceKind: link.invoiceType.kind,
+            chapterId: link.chapterId,
+            chapterCodeSnapshot: link.chapter.code,
+            chapterTitleSnapshot: link.chapter.title,
+            vendorId: vendor?.id ?? null,
+            vendorSnapshotId,
+            invoiceNumber: input.invoiceNumber,
+            invoiceDate: new Date(`${input.invoiceDate}T00:00:00.000Z`),
+            taxMode: prepared.invoiceTax.mode,
+            taxRateBp: prepared.invoiceTax.mode === 'PERCENT' ? prepared.invoiceTax.rateBp : null,
+            grossAmount: computed.grossAmount,
+            discountAmount: computed.discountAmount,
+            netAmount: computed.netAmount,
+            taxAmount: computed.taxAmount,
+            totalAmount: computed.totalAmount,
+            description: input.description,
+            notes: input.notes,
+            items: {
+              create: computed.items.map((item) => ({
+                rowNo: item.rowNo,
+                description: item.description,
+                productCode: item.productCode,
+                quantity: item.quantity,
+                unitId: item.unitId,
+                unitPrice: item.unitPrice,
+                grossAmount: item.grossAmount,
+                discountAmount: item.discountAmount,
+                netAmount: item.netAmount,
+                taxMode: item.taxMode,
+                taxRateBp: item.taxRateBp,
+                taxAmount: item.taxAmount,
+                totalAmount: item.totalAmount,
+              })),
+            },
+            ...(paymentData ? { payment: { create: paymentData } } : {}),
+          },
+          include: { items: { select: { id: true, rowNo: true } } },
+        });
+
+        await prepared.writeDetails(tx, updated);
+        await this.financial.refreshDocumentTotals(tx, document.id);
+
+        await this.audit.record(
+          {
+            actorId: user.id,
+            action: 'INVOICE_UPDATE',
+            entityType: 'invoice',
+            entityId: invoiceId,
+            documentId: document.id,
+            before: {
+              id: invoiceId,
+              invoiceKind: before.invoiceKind,
+              chapterTitle: before.chapterTitleSnapshot,
+              totalAmount: before.totalAmount.toString(),
+            },
+            after: {
+              id: invoiceId,
+              invoiceKind: updated.invoiceKind,
+              chapterTitle: updated.chapterTitleSnapshot,
+              totalAmount: updated.totalAmount.toString(),
+              ...(duplicateNotice === null ? {} : { acknowledgedDuplicate: duplicateNotice }),
+            },
+          },
+          tx,
+        );
+
+        return updated;
       });
 
       return invoice;

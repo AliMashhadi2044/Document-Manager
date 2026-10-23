@@ -24,6 +24,8 @@ import { useBudgetCategories } from '../base-data/base-data.api';
 import {
   useChapterInvoiceTypes,
   useCreateInvoice,
+  useInvoiceDraft,
+  useUpdateInvoice,
   useVendorSearch,
   type ChapterInvoiceTypeOption,
   type CreateInvoicePayload,
@@ -60,10 +62,18 @@ export function CreateInvoiceForm({
   documentJalaliYear,
   policy,
   lockedCategoryKey,
+  invoiceId = null,
   onClose,
   onCreated,
 }: {
   documentId: string;
+  /**
+   * فاکتوری که ویرایش می‌شود — `null` یعنی فاکتور تازه.
+   *
+   * همین یک فرم برای هر دو: فرم ویرایشِ جدا یعنی دو جا برای هر قاعده‌ای که فردا
+   * اضافه شود، و اولین تغییر یکی از آن‌ها را جا می‌گذارد.
+   */
+  invoiceId?: string | null;
   documentJalaliYear: number;
   policy: RoundingPolicyRef;
   /**
@@ -83,6 +93,9 @@ export function CreateInvoiceForm({
     staleTime: 5 * 60_000,
   });
   const create = useCreateInvoice(documentId);
+  const update = useUpdateInvoice(documentId);
+  const draft = useInvoiceDraft(invoiceId);
+  const editing = invoiceId !== null;
 
   /** گروه بودجه (جاری / عمرانی) — فهرست فصل‌ها را فیلتر می‌کند. */
   const [categoryId, setCategoryId] = useState('');
@@ -104,6 +117,104 @@ export function CreateInvoiceForm({
   const [itemsDraft, setItemsDraft] = useState<ItemsDraft>(() => emptyItemsDraft(null));
   const [utilityDraft, setUtilityDraft] = useState<UtilityDraft>(EMPTY_UTILITY);
   const [fuelDraft, setFuelDraft] = useState<FuelDraft>(() => emptyFuelDraft(documentJalaliYear));
+
+  /*
+    پر کردن فرم از فاکتور موجود — **یک بار**.
+
+    `hydrated` لازم است چون همین اثر با هر رسیدن داده دوباره اجرا می‌شود و بدون آن،
+    هر ویرایشی که کاربر انجام داده با مقدار سرور بازنویسی می‌شد.
+
+    ترتیب هم مهم است: گروه بودجه و فصل و نوع فاکتور پیش از بقیه می‌نشینند، چون
+    شکلِ بقیهٔ فرم از همان‌ها می‌آید.
+  */
+  const [hydrated, setHydrated] = useState(false);
+  /** پلاکِ فاکتورِ در حال ویرایش — فهرست پلاک سمت سرور جست‌وجو می‌شود. */
+  const [initialPlate, setInitialPlate] = useState('');
+
+  useEffect(() => {
+    const data = draft.data;
+    if (!data || hydrated) return;
+
+    setCategoryId(data.categoryId);
+    setChapterId(data.chapterId);
+    setInvoiceTypeId(data.invoiceTypeId);
+    setVendorId(data.vendorId ?? '');
+    setVendorSearch(data.vendorName ?? '');
+    setInvoiceNumber(data.invoiceNumber ?? '');
+    // با ارقام لاتین، چون همین رشته دوباره خوانده و به سرور تبدیل می‌شود.
+    setInvoiceDate(formatJalali(isoDateToJalali(data.invoiceDate), { persianDigits: false }));
+    setDescription(data.description ?? '');
+    setNotes(data.notes ?? '');
+
+    const details = data.details as Record<string, unknown>;
+
+    if (details.kind === 'UTILITY') {
+      setUtilityDraft({
+        schoolId: String(details.schoolId),
+        districtTitle: String(details.districtTitle ?? ''),
+        utilityTypeId: String(details.utilityTypeId),
+        baseAmount: String(details.baseAmount),
+        discountAmount: String(details.discountAmount),
+        tax: {
+          mode: details.taxMode as 'PERCENT' | 'AMOUNT',
+          rateBp: (details.taxRateBp as number | null) ?? 1000,
+          amount: String(details.taxAmount ?? ''),
+        },
+        // تأیید تکرار دوباره گرفته می‌شود: شرایط ممکن است از آن زمان عوض شده باشد.
+        acknowledgeDuplicate: false,
+      });
+    } else if (details.kind === 'FUEL') {
+      setFuelDraft({
+        vehicleTypeId: String(details.vehicleTypeId ?? ''),
+        vehicleId: String(details.vehicleId),
+        fuelTypeId: String(details.fuelTypeId),
+        jalaliYear: Number(details.jalaliYear),
+        jalaliMonth: Number(details.jalaliMonth),
+        entries: (details.entries as { day: number; amount: string }[]).map((entry) => ({
+          key: crypto.randomUUID(),
+          day: entry.day,
+          amount: entry.amount,
+        })),
+      });
+      setInitialPlate(String(details.plateNumber ?? ''));
+    } else {
+      setItemsDraft({
+        invoiceTax: {
+          mode: details.taxMode as 'PERCENT' | 'AMOUNT',
+          rateBp: (details.taxRateBp as number | null) ?? 1000,
+          amount: String(details.taxAmount ?? ''),
+        },
+        items: (details.items as Record<string, unknown>[]).map((item) => ({
+          key: crypto.randomUUID(),
+          description: String(item.description),
+          productCode: String(item.productCode ?? ''),
+          quantity: String(item.quantity),
+          unitId: String(item.unitId ?? ''),
+          unitPrice: String(item.unitPrice),
+          discountAmount: String(item.discountAmount),
+          tax: {
+            mode: item.taxMode as 'PERCENT' | 'AMOUNT',
+            rateBp: (item.taxRateBp as number | null) ?? 1000,
+            amount: String(item.taxAmount ?? ''),
+          },
+        })),
+      });
+    }
+
+    if (data.payment) {
+      setPaymentTouched(true);
+      setPayment({
+        paymentMethodId: data.payment.paymentMethodId,
+        vendorBankAccountId: data.payment.vendorBankAccountId ?? '',
+        pettyCashHolderId: data.payment.pettyCashHolderId ?? '',
+        paymentIdentifier: data.payment.paymentIdentifier ?? '',
+        billIdentifier: data.payment.billIdentifier ?? '',
+        notes: data.payment.notes ?? '',
+      });
+    }
+
+    setHydrated(true);
+  }, [draft.data, hydrated]);
 
   const invoiceTypes = useChapterInvoiceTypes(chapterId);
   const vendors = useVendorSearch(vendorSearch);
@@ -253,21 +364,27 @@ export function CreateInvoiceForm({
       acknowledgeDuplicate: kind === 'UTILITY' ? utilityDraft.acknowledgeDuplicate : false,
     };
 
-    create.mutate(payload, {
+    const handlers = {
       onSuccess: () => {
         onCreated();
         onClose();
       },
-      onError: (error) =>
+      onError: (error: unknown) =>
         setMessage(error instanceof ApiError ? describeError(error) : 'خطا در ثبت فاکتور'),
-    });
+    };
+
+    if (editing) {
+      update.mutate({ invoiceId: invoiceId as string, ...payload }, handlers);
+    } else {
+      create.mutate(payload, handlers);
+    }
   };
 
   return (
     <Card>
       <CardHeader
-        icon="plus"
-        title="افزودن فاکتور"
+        icon={editing ? 'edit' : 'plus'}
+        title={editing ? 'ویرایش فاکتور' : 'افزودن فاکتور'}
         description="فصل و نوع فاکتور، شکل بقیه فرم را تعیین می‌کنند."
         action={
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -424,6 +541,7 @@ export function CreateInvoiceForm({
                 onChange={setFuelDraft}
                 vehicleTypes={reference.vehicleTypes}
                 fuelTypes={reference.fuelTypes}
+                initialPlateSearch={initialPlate}
               />
             ) : null}
 
@@ -471,8 +589,12 @@ export function CreateInvoiceForm({
             ) : null}
 
             <div className="flex gap-2">
-              <Button loading={create.isPending} onClick={submit}>
-                ثبت فاکتور
+              <Button
+                loading={create.isPending || update.isPending}
+                disabled={editing && !hydrated}
+                onClick={submit}
+              >
+                {editing ? 'ثبت ویرایش' : 'ثبت فاکتور'}
               </Button>
               <Button variant="secondary" onClick={onClose}>
                 انصراف

@@ -189,6 +189,57 @@ export interface CreateInvoicePayload {
   readonly acknowledgeDuplicate?: boolean;
 }
 
+/**
+ * فاکتور به شکل **ورودی ساخت** — ورودیِ فرم ویرایش.
+ *
+ * فرم ویرایش همان فرم ساخت است، پس چیزی که برای پر شدن لازم دارد همان شکلی است که
+ * خودش پس می‌فرستد؛ چند قلم فقط برای نمایش هم همراهش می‌آید.
+ */
+export interface InvoiceDraft {
+  readonly documentId: string;
+  readonly categoryId: string;
+  readonly chapterId: string;
+  readonly invoiceTypeId: string;
+  readonly vendorId: string | null;
+  readonly vendorName: string | null;
+  readonly invoiceNumber: string | null;
+  readonly invoiceDate: string;
+  readonly description: string | null;
+  readonly notes: string | null;
+  readonly details: Record<string, unknown>;
+  readonly payment: {
+    readonly paymentMethodId: string;
+    readonly vendorBankAccountId: string | null;
+    readonly pettyCashHolderId: string | null;
+    readonly paymentIdentifier: string | null;
+    readonly billIdentifier: string | null;
+    readonly notes: string | null;
+  } | null;
+}
+
+export function useInvoiceDraft(invoiceId: string | null) {
+  return useQuery({
+    queryKey: ['invoices', invoiceId, 'draft'],
+    queryFn: () => apiFetch<InvoiceDraft>(`/documents/invoices/${invoiceId as string}/draft`),
+    enabled: invoiceId !== null,
+    // فرم باید هر بار مقدار تازه بگیرد؛ ویرایشِ ذخیره‌نشده نباید دوباره برگردد.
+    gcTime: 0,
+    staleTime: 0,
+  });
+}
+
+export function useUpdateInvoice(documentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ invoiceId, ...payload }: CreateInvoicePayload & { invoiceId: string }) =>
+      apiFetch<unknown>(`/documents/invoices/${invoiceId}`, { method: 'PUT', json: payload }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['documents', documentId] });
+      void queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
+}
+
 export function useCreateInvoice(documentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
