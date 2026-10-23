@@ -217,6 +217,13 @@ const INVOICES: DatasetDefinition = {
       path: 'invoiceKind',
       enumValues: INVOICE_KIND_VALUES,
     },
+    {
+      key: 'description',
+      titleFa: 'شرح فاکتور',
+      type: 'text',
+      path: 'description',
+      width: 35,
+    },
     { key: 'invoiceTypeTitle', titleFa: 'عنوان نوع فاکتور', type: 'text', path: 'invoiceType.titleFa' },
     { key: 'chapterTitle', titleFa: 'فصل بودجه', type: 'text', path: 'chapterTitleSnapshot', width: 25 },
     { key: 'chapterCode', titleFa: 'کد فصل', type: 'text', path: 'chapterCodeSnapshot' },

@@ -47,6 +47,8 @@ export interface InvoiceRow {
   readonly invoiceDate: string;
   readonly invoiceKind: 'NORMAL' | 'STAD' | 'UTILITY' | 'FUEL';
   readonly chapterTitleSnapshot: string;
+  /** شرح فاکتور — عنوانی یک‌خطی؛ پیش‌فرضِ «نوع کالا» در گزارش مالیات. */
+  readonly description: string | null;
   /** گروه بودجهٔ فصل — سند فقط یکی از دو گروه را می‌پذیرد. */
   readonly chapter: { readonly category: { readonly key: 'CURRENT' | 'CAPITAL' } };
   readonly grossAmount: string;

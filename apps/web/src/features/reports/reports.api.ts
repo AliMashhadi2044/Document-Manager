@@ -105,13 +105,25 @@ export interface AmountDetails {
 }
 
 export interface ProductTypeSuggestions {
-  readonly current: { readonly id: string; readonly title: string } | null;
+  /** ثبت‌شده برای همین سند و فروشنده؛ `id` خالی یعنی متن آزاد بوده است. */
+  readonly current: { readonly id: string | null; readonly title: string } | null;
   readonly suggestions: readonly { readonly id: string; readonly title: string; readonly useCount: number }[];
   readonly allTypes: readonly { readonly id: string; readonly title: string }[];
+  /** شرح فاکتورهای همین فروشنده در **همین سند** — اولی، پیش‌فرض است. */
+  readonly invoiceDescriptions: readonly {
+    readonly invoiceId: string;
+    readonly description: string;
+    readonly invoiceTypeTitle: string;
+    readonly chapterTitle: string;
+    readonly invoiceDate: string;
+    readonly totalAmount: string;
+  }[];
+  /** تاریخچه: فاکتورهای قبلی همین فروشنده که شرح دارند. */
   readonly recentPurchases: readonly {
     readonly id: string;
     readonly invoiceNumber: string | null;
     readonly invoiceDate: string;
+    readonly description: string;
     readonly totalAmount: string;
     readonly chapterTitle: string;
     readonly document: { readonly id: string; readonly title: string; readonly fiscalYear: number };
@@ -187,10 +199,17 @@ export function useAmountDetails() {
 export function useSetProductType(reportTypeKey: string, documentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ vendorId, productTypeId }: { vendorId: string; productTypeId: string }) =>
-      apiFetch<{ id: string; title: string }>(
+    mutationFn: ({
+      vendorId,
+      ...body
+    }: {
+      vendorId: string;
+      productTypeId?: string | null;
+      customTitle?: string | null;
+    }) =>
+      apiFetch<{ id: string | null; title: string }>(
         `/reports/documents/${documentId}/vendors/${vendorId}/product-type`,
-        { method: 'POST', json: { productTypeId } },
+        { method: 'POST', json: body },
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: reportKeys.preview(reportTypeKey, documentId) });

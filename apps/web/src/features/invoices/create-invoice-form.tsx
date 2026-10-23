@@ -92,6 +92,7 @@ export function CreateInvoiceForm({
   const [vendorSearch, setVendorSearch] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(todayJalali());
+  const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
   const [payment, setPayment] = useState<PaymentDraft>(EMPTY_PAYMENT);
   /** تا وقتی کاربر روش پرداخت را دست نزده، پیش‌فرض **نوع فعلی** فاکتور حاکم است. */
@@ -244,6 +245,7 @@ export function CreateInvoiceForm({
       vendorId: vendorId || null,
       invoiceNumber: invoiceNumber.trim() || null,
       invoiceDate: isoInvoiceDate,
+      description: description.trim() || null,
       notes: notes.trim() || null,
       details,
       payment: paymentToPayload(payment),
@@ -436,6 +438,20 @@ export function CreateInvoiceForm({
                 (vendors.data?.items ?? []).find((vendor) => vendor.id === vendorId)?.name ?? ''
               }
               vendorId={vendorId}
+            />
+
+            {/*
+              شرح، یک **عنوان** است و توضیحات یک یادداشت.
+
+              جدا نگه داشتنشان به‌خاطر گزارش مالیات است: ستون «نوع کالا» از شرح پر
+              می‌شود و یک یادداشت چندخطی آنجا جا نمی‌شود.
+            */}
+            <Input
+              label="شرح فاکتور"
+              maxLength={500}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              hint="یک خط: این فاکتور بابت چیست. در گزارش مالیات، پیش‌فرض ستون «نوع کالا» می‌شود."
             />
 
             <Input

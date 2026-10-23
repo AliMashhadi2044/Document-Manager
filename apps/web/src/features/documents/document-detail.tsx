@@ -516,6 +516,9 @@ function InvoiceCard({
             {invoice.invoiceType.titleFa}
             {invoice.invoiceNumber ? ` — شماره ${toPersianDigits(invoice.invoiceNumber)}` : ''}
           </h4>
+          {invoice.description ? (
+            <p className="mt-0.5 text-sm">{invoice.description}</p>
+          ) : null}
           <p className="mt-0.5 text-xs text-muted-foreground">
             فصل {invoice.chapterTitleSnapshot} · تاریخ صورتحساب{' '}
             {formatIsoAsJalali(invoice.invoiceDate)}

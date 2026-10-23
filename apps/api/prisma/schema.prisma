@@ -1030,6 +1030,11 @@ model Invoice {
   taxAmount      BigInt @default(0) @map("tax_amount") @db.BigInt
   totalAmount    BigInt @map("total_amount") @db.BigInt
 
+  /// شرح کوتاه فاکتور — یک خط که می‌گوید این فاکتور بابت چیست.
+  ///
+  /// جدا از `notes` است: `notes` یادداشت آزاد و بلند است، این یک **عنوان** است و
+  /// همین است که در گزارش مالیات، پیش‌فرضِ ستون «نوع کالا» می‌شود.
+  description               String? @db.VarChar(500)
   customFields              Json?   @map("custom_fields")
   customFieldsSchemaVersion Int     @default(1) @map("custom_fields_schema_version")
   notes                     String? @db.Text
@@ -1613,16 +1618,23 @@ model ReportRun {
 /// کلید ترکیبی `(document_id, vendor_id)` است نه فقط فروشنده: یک فروشنده در سندهای
 /// مختلف نوع کالای متفاوت دارد (docs/03-erd.md §۵).
 model DocumentVendorProductType {
-  documentId    String @map("document_id") @db.Uuid
-  vendorId      String @map("vendor_id") @db.Uuid
-  productTypeId String @map("product_type_id") @db.Uuid
+  documentId String @map("document_id") @db.Uuid
+  vendorId   String @map("vendor_id") @db.Uuid
+
+  /// یکی از این دو پر است، نه هر دو و نه هیچ‌کدام (قید CHECK در migration).
+  ///
+  /// چرا هر دو: «نوع کالا» گاهی یکی از انواع تعریف‌شده است و گاهی متنی که کاربر
+  /// همان‌جا می‌نویسد — معمولاً شرح همان فاکتور. بستنِ آن به فهرست، کاربر را وادار
+  /// می‌کرد برای هر عبارت تازه یک «نوع کالا» بسازد.
+  productTypeId String? @map("product_type_id") @db.Uuid
+  customTitle   String? @map("custom_title") @db.VarChar(500)
 
   setById String   @map("set_by") @db.Uuid
   setAt   DateTime @default(now()) @map("set_at") @db.Timestamptz(3)
 
   document    FinancialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   vendor      Vendor            @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  productType ProductType       @relation(fields: [productTypeId], references: [id], onDelete: Restrict)
+  productType ProductType?      @relation(fields: [productTypeId], references: [id], onDelete: Restrict)
   setBy       User              @relation("ProductTypeSetBy", fields: [setById], references: [id], onDelete: Cascade)
 
   @@id([documentId, vendorId])

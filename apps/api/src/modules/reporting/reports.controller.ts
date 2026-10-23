@@ -30,9 +30,31 @@ import { ExcelExporter, safeSheetName } from './excel.exporter';
 import { PdfRenderer } from './pdf.renderer';
 import { TemplatesService } from './templates.service';
 
-const setProductTypeSchema = z.object({
-  productTypeId: z.string().uuid('نوع کالا را انتخاب کنید'),
-});
+/**
+ * نوع کالا: یا از فهرست، یا متن آزاد — دقیقاً یکی.
+ *
+ * متن آزاد لازم است چون «نوع کالا» در عمل همان شرح فاکتور است و بستنش به فهرست،
+ * کاربر را وادار می‌کرد برای هر عبارت تازه یک نوع کالای تازه بسازد.
+ */
+const setProductTypeSchema = z
+  .object({
+    productTypeId: z.string().uuid().nullable().default(null),
+    customTitle: z.string().trim().min(1).max(500).nullable().default(null),
+  })
+  .superRefine((value, ctx) => {
+    const fromList = value.productTypeId !== null;
+    const fromText = value.customTitle !== null;
+
+    if (fromList === fromText) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['productTypeId'],
+        message: fromList
+          ? 'یا نوع کالا را از فهرست انتخاب کنید یا متن بنویسید، نه هر دو'
+          : 'نوع کالا را انتخاب کنید یا متنی بنویسید',
+      });
+    }
+  });
 
 const copyTemplateSchema = z.object({
   name: z.string().trim().min(1, 'نام قالب الزامی است').max(200),
@@ -236,7 +258,7 @@ export class ReportsController {
     @Body(new ZodBody(setProductTypeSchema)) body: z.infer<typeof setProductTypeSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.productTypes.set(documentId, vendorId, body.productTypeId, user);
+    return this.productTypes.set(documentId, vendorId, body, user);
   }
 
   // ───────────────────────── طراح گزارش (فاز ۷) ─────────────────────────

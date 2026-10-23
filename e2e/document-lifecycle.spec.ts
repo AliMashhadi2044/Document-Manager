@@ -113,15 +113,16 @@ test.describe('چرخه کامل سند', () => {
     //
     // گفت‌وگوی showModal در «لایه بالا»ی مرورگر نقاشی می‌شود؛ فهرستی که در body
     // باز شود زیر آن پنهان می‌ماند. این بررسی، همان حالت را می‌سنجد.
+    const typeList = 'یا یکی از انواع تعریف‌شده';
     await page.getByRole('button', { name: 'نوع کالا' }).first().click();
-    await page.getByRole('combobox', { name: 'نوع کالا', exact: true }).click();
-    await expect(page.getByRole('listbox', { name: 'نوع کالا' })).toBeVisible();
+    await page.getByRole('combobox', { name: typeList, exact: true }).click();
+    await expect(page.getByRole('listbox', { name: typeList })).toBeVisible();
     // یک Escape فهرست را می‌بندد و دومی گفت‌وگو را — فهرست باز نباید Escape را به
     // گفت‌وگو بدهد، وگرنه کاربر با یک کلید هر دو را از دست می‌دهد.
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('listbox', { name: 'نوع کالا' })).toHaveCount(0);
+    await expect(page.getByRole('listbox', { name: typeList })).toHaveCount(0);
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('combobox', { name: 'نوع کالا', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('combobox', { name: typeList, exact: true })).toHaveCount(0);
 
     // ───── خروجی Excel: فایل واقعی دانلود می‌شود ─────
     const download = page.waitForEvent('download');

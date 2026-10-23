@@ -17,6 +17,8 @@ export interface CreateInvoiceInput {
   readonly vendorId: string | null;
   readonly invoiceNumber: string | null;
   readonly invoiceDate: string;
+  /** شرح فاکتور — عنوانی یک‌خطی؛ پیش‌فرضِ «نوع کالا» در گزارش مالیات. */
+  readonly description: string | null;
   readonly notes: string | null;
   /** ساختار ردیف‌ها، وابسته به خانواده فاکتور (فاز ۴). */
   readonly details: InvoiceDetailsBody;
@@ -201,6 +203,7 @@ export class InvoicesService {
             netAmount: computed.netAmount,
             taxAmount: computed.taxAmount,
             totalAmount: computed.totalAmount,
+            description: input.description,
             notes: input.notes,
             createdById: user.id,
             items: {

@@ -109,9 +109,30 @@ export class DatasetService {
 
     const { rows, skippedInvoiceIds } = aggregateByVendor(aggregatable);
 
+    /*
+      «نوع کالا» با سه منبع، به ترتیب.
+
+      اول آنچه کاربر ثبت کرده (از فهرست یا متن آزاد)؛ اگر ثبت نکرده، **شرح اولین
+      فاکتور** همان فروشنده در همین سند — کاربر شرح را موقع ثبت فاکتور نوشته و
+      دوباره پرسیدنش کار اضافه است. پس این ستون بدون هیچ کاری هم معمولاً درست است.
+
+      ترتیب «اولین» همان ترتیب قطعی گزارش است (تاریخ صعودی، سپس شناسه) و فاکتورها
+      از همان `include` با همین ترتیب آمده‌اند.
+    */
     const productTypeByVendor = new Map(
-      productTypes.map((item) => [item.vendorId, item.productType.title]),
+      productTypes.map((item) => [
+        item.vendorId,
+        item.productType?.title ?? (item.customTitle as string),
+      ]),
     );
+
+    const descriptionByVendor = new Map<string, string>();
+    for (const invoice of full.invoices) {
+      if (!invoice.vendorId || !invoice.description) continue;
+      if (!descriptionByVendor.has(invoice.vendorId)) {
+        descriptionByVendor.set(invoice.vendorId, invoice.description);
+      }
+    }
 
     // هویت فروشنده از **snapshot همان فاکتورها** خوانده می‌شود، نه از رکورد زنده:
     // گزارش یک سند ثبت‌شده باید همان چیزی را نشان دهد که در زمان ثبت بوده است.
@@ -138,7 +159,8 @@ export class DatasetService {
         invoiceNumber: row.invoiceNumber ?? '',
         invoiceDate: row.invoiceDate,
         invoiceCount: row.invoiceCount,
-        productTypeTitle: productTypeByVendor.get(row.vendorId) ?? '',
+        productTypeTitle:
+          productTypeByVendor.get(row.vendorId) ?? descriptionByVendor.get(row.vendorId) ?? '',
         goodsAmount: moneyToString(row.goodsAmount),
         discount: moneyToString(row.discount),
         net: moneyToString(row.net),

@@ -12,7 +12,20 @@ import { DocumentAccessService } from '../documents/document-access.service';
  * کلید `(document_id, vendor_id)` است، نه فروشنده به‌تنهایی: یک فروشنده در سند مهرماه
  * «انشعاب برق» فروخته و در سند آبان «چاه ارت» (docs/03-erd.md §۵).
  *
- * در کنارش یک حافظه کوچک نگه داشته می‌شود: هر انتخاب، شمارنده
+ * ─────── مقدار از کجا می‌آید ───────
+ *
+ * سه منبع، به همین ترتیب:
+ *
+ *  ۱. آنچه کاربر برای همین سند و همین فروشنده **ثبت کرده** — یکی از انواع تعریف‌شده
+ *     یا متنی که خودش نوشته.
+ *  ۲. اگر ثبت نکرده: **شرح اولین فاکتور** همان فروشنده در همین سند. کاربر شرح را
+ *     موقع ثبت فاکتور نوشته؛ دوباره پرسیدنش کار اضافه است.
+ *  ۳. وگرنه خالی.
+ *
+ * پس ستون «نوع کالا» بدون هیچ کاری هم معمولاً درست است، و تغییرش یک کلیک فاصله
+ * دارد — نه یک کار اجباری روی تک‌تک ردیف‌ها.
+ *
+ * در کنارش یک حافظه کوچک نگه داشته می‌شود: هر انتخاب **از فهرست**، شمارنده
  * `vendor_product_type_suggestions` همان فروشنده را بالا می‌برد تا دفعه بعد پیشنهاد
  * اول، همان چیزی باشد که کاربر معمولاً انتخاب می‌کند. این حافظه به سند بسته نیست و با
  * حذف سند از بین نمی‌رود.
@@ -34,7 +47,7 @@ export class ProductTypesService {
   async suggestions(documentId: string, vendorId: string, user: AuthenticatedUser) {
     await this.access.assertDocumentVisible(documentId, user);
 
-    const [suggestions, allTypes, current, recentPurchases] = await Promise.all([
+    const [suggestions, allTypes, current, recentPurchases, invoicesHere] = await Promise.all([
       this.prisma.vendorProductTypeSuggestion.findMany({
         where: { vendorId },
         orderBy: [{ useCount: 'desc' }, { lastUsedAt: 'desc' }],
@@ -50,24 +63,60 @@ export class ProductTypesService {
         where: { documentId_vendorId: { documentId, vendorId } },
         include: { productType: { select: { id: true, title: true } } },
       }),
-      // خریدهای قبلی همین فروشنده — فقط در **اسناد قابل مشاهده همان کاربر**.
+      /*
+        تاریخچهٔ نوشته‌های همین فروشنده — فقط در **اسناد قابل مشاهده همان کاربر**.
+
+        فاکتوری که شرح ندارد در این فهرست نمی‌آید: ردیفی که عنوانش خالی است چیزی
+        برای انتخاب کردن ندارد و فقط فهرست را شلوغ می‌کند.
+      */
       this.prisma.invoice.findMany({
-        where: { vendorId, document: this.access.scope(user) },
+        where: {
+          vendorId,
+          description: { not: null },
+          documentId: { not: documentId },
+          document: this.access.scope(user),
+        },
         orderBy: { invoiceDate: 'desc' },
         take: 10,
         select: {
           id: true,
           invoiceNumber: true,
           invoiceDate: true,
+          description: true,
           totalAmount: true,
           chapterTitleSnapshot: true,
           document: { select: { id: true, title: true, fiscalYear: true } },
         },
       }),
+
+      /*
+        شرح فاکتورهای همین فروشنده در **همین سند**.
+
+        یک فروشنده می‌تواند در یک سند چند فاکتور داشته باشد با شرح‌های متفاوت؛
+        پیش‌فرض، شرح اولی است (به ترتیب قطعی گزارش) ولی کاربر باید بتواند بقیه را
+        هم ببیند و یکی را انتخاب کند.
+      */
+      this.prisma.invoice.findMany({
+        where: { documentId, vendorId, description: { not: null } },
+        orderBy: [{ invoiceDate: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          description: true,
+          invoiceDate: true,
+          totalAmount: true,
+          chapterTitleSnapshot: true,
+          invoiceType: { select: { titleFa: true } },
+        },
+      }),
     ]);
 
     return {
-      current: current ? { id: current.productType.id, title: current.productType.title } : null,
+      current: current
+        ? {
+            id: current.productType?.id ?? null,
+            title: current.productType?.title ?? (current.customTitle as string),
+          }
+        : null,
       suggestions: suggestions
         .filter((item) => item.productType.isActive)
         .map((item) => ({
@@ -76,10 +125,20 @@ export class ProductTypesService {
           useCount: item.useCount,
         })),
       allTypes,
+      /** شرح فاکتورهای همین سند — اولی، پیش‌فرض است. */
+      invoiceDescriptions: invoicesHere.map((invoice) => ({
+        invoiceId: invoice.id,
+        description: invoice.description as string,
+        invoiceTypeTitle: invoice.invoiceType.titleFa,
+        chapterTitle: invoice.chapterTitleSnapshot,
+        invoiceDate: invoice.invoiceDate,
+        totalAmount: invoice.totalAmount.toString(),
+      })),
       recentPurchases: recentPurchases.map((invoice) => ({
         id: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
         invoiceDate: invoice.invoiceDate,
+        description: invoice.description as string,
         totalAmount: invoice.totalAmount.toString(),
         chapterTitle: invoice.chapterTitleSnapshot,
         document: invoice.document,
@@ -153,11 +212,16 @@ export class ProductTypesService {
     };
   }
 
-  /** ثبت یا تغییر نوع کالای یک فروشنده در یک سند. */
+  /**
+   * ثبت یا تغییر نوع کالای یک فروشنده در یک سند.
+   *
+   * یا یکی از انواع تعریف‌شده، یا متنی که کاربر نوشته — دقیقاً یکی از این دو،
+   * همان قیدی که دیتابیس هم نگه می‌دارد.
+   */
   async set(
     documentId: string,
     vendorId: string,
-    productTypeId: string,
+    input: { productTypeId: string | null; customTitle: string | null },
     user: AuthenticatedUser,
   ) {
     await this.access.assertDocumentVisible(documentId, user);
@@ -172,34 +236,51 @@ export class ProductTypesService {
       throw AppError.notFound('این فروشنده در این سند فاکتوری ندارد');
     }
 
-    const productType = await this.prisma.productType.findFirst({
-      where: { id: productTypeId, isActive: true },
-      select: { id: true, title: true },
-    });
-    if (!productType) {
-      throw AppError.validation('نوع کالا یافت نشد یا غیرفعال است', [
-        { path: 'productTypeId', message: 'نوع کالای معتبر انتخاب کنید' },
-      ]);
+    let title: string;
+
+    if (input.productTypeId) {
+      const productType = await this.prisma.productType.findFirst({
+        where: { id: input.productTypeId, isActive: true },
+        select: { id: true, title: true },
+      });
+      if (!productType) {
+        throw AppError.validation('نوع کالا یافت نشد یا غیرفعال است', [
+          { path: 'productTypeId', message: 'نوع کالای معتبر انتخاب کنید' },
+        ]);
+      }
+      title = productType.title;
+    } else {
+      title = input.customTitle as string;
     }
 
     const previous = await this.prisma.documentVendorProductType.findUnique({
       where: { documentId_vendorId: { documentId, vendorId } },
-      select: { productTypeId: true },
+      select: { productTypeId: true, customTitle: true },
     });
 
+    const data = {
+      productTypeId: input.productTypeId,
+      customTitle: input.productTypeId ? null : input.customTitle,
+    };
+
     return this.prisma.$transaction(async (tx) => {
-      const saved = await tx.documentVendorProductType.upsert({
+      await tx.documentVendorProductType.upsert({
         where: { documentId_vendorId: { documentId, vendorId } },
-        create: { documentId, vendorId, productTypeId, setById: user.id },
-        update: { productTypeId, setById: user.id, setAt: new Date() },
-        include: { productType: { select: { id: true, title: true } } },
+        create: { documentId, vendorId, ...data, setById: user.id },
+        update: { ...data, setById: user.id, setAt: new Date() },
       });
 
-      // حافظه پیشنهاد: فقط وقتی انتخاب **عوض** شده، نه هر بار ذخیره دوباره همان مقدار.
-      if (previous?.productTypeId !== productTypeId) {
+      /*
+        حافظه پیشنهاد فقط برای انتخاب **از فهرست** است.
+
+        متن آزاد شمارنده‌ای ندارد — و نباید داشته باشد: فهرست پیشنهادها قرار است
+        انواع تعریف‌شده را بالا بیاورد، نه هر عبارتی که یک بار نوشته شده. تاریخچهٔ
+        متن‌ها جای دیگری است: شرح خودِ فاکتورها.
+      */
+      if (input.productTypeId && previous?.productTypeId !== input.productTypeId) {
         await tx.vendorProductTypeSuggestion.upsert({
-          where: { vendorId_productTypeId: { vendorId, productTypeId } },
-          create: { vendorId, productTypeId, useCount: 1 },
+          where: { vendorId_productTypeId: { vendorId, productTypeId: input.productTypeId } },
+          create: { vendorId, productTypeId: input.productTypeId, useCount: 1 },
           update: { useCount: { increment: 1 }, lastUsedAt: new Date() },
         });
       }
@@ -214,13 +295,13 @@ export class ProductTypesService {
           // نوعش را نگه دارد.
           entityId: documentId,
           documentId,
-          before: previous ? { vendorId, productTypeId: previous.productTypeId } : null,
-          after: { vendorId, productTypeId, title: productType.title },
+          before: previous ? { vendorId, ...previous } : null,
+          after: { vendorId, ...data, title },
         },
         tx,
       );
 
-      return { id: saved.productType.id, title: saved.productType.title };
+      return { id: input.productTypeId, title };
     });
   }
 }

@@ -159,6 +159,13 @@ export const createInvoiceSchema = z.object({
   vendorId: z.string().uuid().nullable().default(null),
   invoiceNumber: z.string().trim().max(100).nullable().default(null),
   invoiceDate: isoDate,
+  /**
+   * شرح فاکتور — یک خط که می‌گوید این فاکتور بابت چیست.
+   *
+   * جدا از `notes` است: آن یادداشت آزاد است، این یک **عنوان**، و همین است که در
+   * گزارش مالیات پیش‌فرضِ ستون «نوع کالا» می‌شود.
+   */
+  description: z.string().trim().max(500).nullable().default(null),
   /** توضیحات اختصاصی همان فاکتور (§۱۲ پرامپت). */
   notes: z.string().trim().max(2000).nullable().default(null),
   details: invoiceDetailsSchema,

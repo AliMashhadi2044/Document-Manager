@@ -173,6 +173,8 @@ export interface CreateInvoicePayload {
   readonly vendorId: string | null;
   readonly invoiceNumber: string | null;
   readonly invoiceDate: string;
+  /** شرح فاکتور — عنوانی یک‌خطی؛ پیش‌فرضِ «نوع کالا» در گزارش مالیات. */
+  readonly description: string | null;
   readonly notes: string | null;
   readonly details: InvoiceDetailsPayload;
   readonly payment: {
