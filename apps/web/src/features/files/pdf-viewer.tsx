@@ -30,6 +30,48 @@ import { toPersianDigits } from '../../shared/format/money';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
+/*
+  جدول‌های نویسه و قلم‌های استاندارد.
+
+  PDFی که قلمش را جاسازی نکرده — خروجی Word و بیشتر اسکنرها — بدون این‌ها یا
+  نویسه‌های اشتباه نشان می‌دهد یا اصلاً باز نمی‌شود. pdf.js این فایل‌ها را فقط
+  **هنگام نیاز** می‌گیرد، پس وزنشان روی بارگذاری سامانه نمی‌نشیند.
+
+  مسیرها نسبت به ریشهٔ سایت‌اند و فایل‌ها در `public/pdfjs/` نشسته‌اند؛ `/` پایانی
+  اجباری است، وگرنه pdf.js نشانی را اشتباه می‌سازد.
+*/
+const PDF_ASSETS = {
+  cMapUrl: '/pdfjs/cmaps/',
+  cMapPacked: true,
+  standardFontDataUrl: '/pdfjs/standard_fonts/',
+} as const;
+
+/**
+ * ترجمهٔ خطای pdf.js به جمله‌ای که کاربر بتواند با آن کاری بکند.
+ *
+ * پیش از این هر شکستی به یک پیام واحد می‌رسید («خواندن فایل ناموفق بود») و کاربر
+ * نمی‌فهمید فایلش رمز دارد، خراب است، یا مشکل از جای دیگری است.
+ */
+function describeFailure(error: unknown): string {
+  const name = (error as { name?: string } | null)?.name ?? '';
+  const message = (error as { message?: string } | null)?.message ?? '';
+
+  if (name === 'PasswordException') {
+    return 'این فایل با رمز عبور محافظت شده است و در سامانه باز نمی‌شود. فایل بدون رمز را بارگذاری کنید.';
+  }
+  if (name === 'InvalidPDFException') {
+    return 'ساختار این فایل PDF معتبر نیست؛ احتمالاً هنگام ساخت یا انتقال ناقص مانده است.';
+  }
+  if (name === 'MissingPDFException') {
+    return 'محتوای فایل خوانده نشد.';
+  }
+
+  return message === '' ? 'خطای نامشخص هنگام خواندن فایل.' : message;
+}
+
+/** اندازهٔ جایگزین برای صفحه‌ای که اندازه‌اش خوانده نشد — نقطه‌های A4. */
+const A4 = { width: 595, height: 842 } as const;
+
 export interface PdfViewerHandle {
   readonly pageCount: number;
   readonly currentPage: number;
@@ -47,7 +89,7 @@ export function PdfViewer({
 }): JSX.Element {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [sizes, setSizes] = useState<readonly { width: number; height: number }[]>([]);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,27 +102,55 @@ export function PdfViewer({
           pdf.js بافر را «مصادره» می‌کند (detached ArrayBuffer) و فراخواننده دیگر
           نمی‌تواند از همان بایت‌ها برای دانلود استفاده کند. پس یک نسخه می‌گیریم.
         */
-        const task = getDocument({ data: data.slice(0) });
+        const task = getDocument({ data: data.slice(0), ...PDF_ASSETS });
         loaded = await task.promise;
         if (cancelled) {
           void loaded.destroy();
           return;
         }
 
-        // اندازهٔ همهٔ صفحه‌ها، **بدون رندر**: جای هر صفحه از همان اول درست است.
-        const pageSizes = await Promise.all(
-          Array.from({ length: loaded.numPages }, async (_unused, index) => {
-            const page = await (loaded as PDFDocumentProxy).getPage(index + 1);
-            const viewport = page.getViewport({ scale: 1 });
-            return { width: viewport.width, height: viewport.height };
-          }),
-        );
+        /*
+          اندازهٔ صفحه‌ها، **بدون رندر**: جای هر صفحه از همان اول درست است و نوار
+          اسکرول پرش ندارد.
+
+          دو نکته که از یک شکست واقعی آمدند:
+
+           ۱. **دسته‌دسته، نه یک‌جا.** `Promise.all` روی یک فایل چندصد صفحه‌ای
+              همان تعداد درخواست را با هم به worker می‌ریخت.
+           ۲. **یک صفحهٔ خراب، کل فایل را نمی‌اندازد.** پیش از این اگر خواندن
+              اندازهٔ یک صفحه شکست می‌خورد، `Promise.all` رد می‌شد و کاربر برای
+              یک فایل سالمِ چندصد صفحه‌ای پیام «خواندن فایل ناموفق بود» می‌دید.
+              حالا آن صفحه اندازهٔ پیش‌فرض A4 می‌گیرد و بقیه نشان داده می‌شوند.
+        */
+        const pageSizes: { width: number; height: number }[] = [];
+        const BATCH = 20;
+
+        for (let start = 0; start < loaded.numPages; start += BATCH) {
+          if (cancelled) return;
+
+          const slice = await Promise.all(
+            Array.from({ length: Math.min(BATCH, loaded.numPages - start) }, async (_u, offset) => {
+              try {
+                const page = await (loaded as PDFDocumentProxy).getPage(start + offset + 1);
+                const viewport = page.getViewport({ scale: 1 });
+                return { width: viewport.width, height: viewport.height };
+              } catch (error) {
+                console.error('pdf.js size:', start + offset + 1, error);
+                return A4;
+              }
+            }),
+          );
+
+          pageSizes.push(...slice);
+        }
 
         if (cancelled) return;
         setDoc(loaded);
         setSizes(pageSizes);
-      } catch {
-        if (!cancelled) setFailed(true);
+      } catch (error) {
+        // پیام خام در کنسول می‌ماند تا بشود دنبالش رفت؛ کاربر ترجمه‌اش را می‌بیند.
+        console.error('pdf.js:', error);
+        if (!cancelled) setFailure(describeFailure(error));
       }
     })();
 
@@ -90,11 +160,11 @@ export function PdfViewer({
     };
   }, [data]);
 
-  if (failed) {
+  if (failure !== null) {
     return (
       <ErrorState
         title="خواندن فایل PDF ناموفق بود"
-        message="فایل را دانلود کنید؛ رکورد آن در بایگانی سالم است."
+        message={`${failure} فایل را دانلود کنید؛ رکورد آن در بایگانی سالم است.`}
       />
     );
   }
@@ -174,7 +244,13 @@ function PdfPage({
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const page = await doc.getPage(pageNumber);
+      let page;
+      try {
+        page = await doc.getPage(pageNumber);
+      } catch (error) {
+        console.error('pdf.js page:', pageNumber, error);
+        return;
+      }
       if (cancelled) return;
 
       /*
