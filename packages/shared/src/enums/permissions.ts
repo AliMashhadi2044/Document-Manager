@@ -11,6 +11,8 @@ export const PERMISSIONS = [
   'document:create',
   'document:update',
   'document:delete',
+  'document:restore',
+  'document:purge',
   'document:finalize',
   'document:correct',
   'document:reopen',
@@ -66,7 +68,9 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'document:read_draft': 'مشاهده اسناد پیش‌نویس',
   'document:create': 'ایجاد سند',
   'document:update': 'ویرایش سند',
-  'document:delete': 'حذف سند پیش‌نویس',
+  'document:delete': 'انتقال سند به سطل زباله',
+  'document:restore': 'بازگرداندن سند از سطل زباله',
+  'document:purge': 'حذف دائمی سند از سطل زباله',
   'document:finalize': 'ثبت نهایی سند',
   'document:correct': 'اصلاح کنترل‌شده سند',
   'document:reopen': 'بازگشایی سند',
@@ -147,6 +151,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'document:create',
     'document:update',
     'document:delete',
+    'document:restore',
     'document:finalize',
     'document:correct',
     'document:reopen',
@@ -205,7 +210,22 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'report:run',
     'report:export',
   ],
-  SYSTEM_ADMIN: ['user:read', 'user:write', 'role:write', 'audit:read', 'base_data:read'],
+  /*
+    حذف دائمی نزد مدیر سامانه است، نه کارپردازی.
+
+    کارپردازی سند را به سطل زباله می‌فرستد و از آنجا برمی‌گرداند — هر دو برگشت‌پذیر.
+    پاک کردن واقعی برگشت‌پذیر نیست، پس دست کسی است که کارش همین نگهداری سامانه است.
+  */
+  SYSTEM_ADMIN: [
+    'user:read',
+    'user:write',
+    'role:write',
+    'audit:read',
+    'base_data:read',
+    'document:read',
+    'document:read_draft',
+    'document:purge',
+  ],
 };
 
 export function isPermission(value: string): value is Permission {

@@ -36,6 +36,13 @@ export interface ReportFieldDefinition {
   readonly requiredPermissions?: readonly Permission[];
   /** عرض پیشنهادی ستون در Excel (نویسه). */
   readonly width?: number;
+  /**
+   * شرط شمارش، فقط برای مسیرهای `_count.*`.
+   *
+   * `_count` بیرون از `where` کوئری است، پس دامنهٔ سند به آن نمی‌رسد؛ بدون این،
+   * «تعداد فاکتور» فروشنده، فاکتورهای سندهای **در سطل زباله** را هم می‌شمرد.
+   */
+  readonly countWhere?: Record<string, unknown>;
 }
 
 export type DatasetKind = 'rows' | 'grouped';
@@ -294,6 +301,7 @@ const VENDORS: DatasetDefinition = {
       titleFa: 'تعداد فاکتور',
       type: 'integer',
       path: '_count.invoices',
+      countWhere: { document: { deletedAt: null } },
       filterable: false,
       sortable: true,
     },

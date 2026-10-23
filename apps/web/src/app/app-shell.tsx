@@ -11,6 +11,7 @@ import { VendorsPage } from '../features/vendors/vendors-page';
 import { BuyersPage } from '../features/buyers/buyers-page';
 import { SchoolsPage } from '../features/base-data/schools-page';
 import { VehiclesPage } from '../features/base-data/vehicles-page';
+import { TrashPage } from '../features/documents/trash-page';
 import { SignatoriesPage } from '../features/base-data/signatories-page';
 import { PettyCashPage } from '../features/base-data/petty-cash-page';
 import { DocumentsPage } from '../features/documents/documents-page';
@@ -35,6 +36,7 @@ type SectionKey =
   | 'chapters'
   | 'buyers'
   | 'schools'
+  | 'trash'
   | 'vehicles'
   | 'signatories'
   | 'petty-cash'
@@ -86,6 +88,13 @@ const GROUPS: readonly SectionGroup[] = [
         titleFa: 'اعلان‌ها',
         icon: 'bell',
         description: 'همهٔ اعلان‌های شما با جزئیات، نوع و سند مربوط',
+        permission: 'document:read',
+      },
+      {
+        key: 'trash',
+        titleFa: 'سطل زباله',
+        icon: 'trash',
+        description: 'اسناد حذف‌شده — دیدن کامل، بازگرداندن، یا حذف دائمی',
         permission: 'document:read',
       },
       {
@@ -434,6 +443,7 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
             ) : null}
             {section === 'buyers' ? <BuyersPage /> : null}
             {section === 'schools' ? <SchoolsPage /> : null}
+            {section === 'trash' ? <TrashPage /> : null}
             {section === 'vehicles' ? <VehiclesPage /> : null}
             {section === 'signatories' ? <SignatoriesPage /> : null}
             {section === 'petty-cash' ? <PettyCashPage /> : null}

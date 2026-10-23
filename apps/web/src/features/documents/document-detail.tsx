@@ -34,6 +34,7 @@ import {
 } from './documents.api';
 import { CreateInvoiceForm } from '../invoices/create-invoice-form';
 import { DocumentEditDialog } from './document-edit-dialog';
+import { DocumentDeleteDialog } from './document-delete-dialog';
 import { useDeleteInvoice } from '../invoices/invoices.api';
 import { AttachmentsPanel } from '../files/attachments-panel';
 import { FeedbackPanel } from '../feedback/feedback-panel';
@@ -64,6 +65,7 @@ export function DocumentDetailView({
   const removeInvoice = useDeleteInvoice();
   const [notice, setNotice] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (isPending) return <LoadingState label="در حال بارگذاری سند…" />;
   if (isError) {
@@ -79,6 +81,9 @@ export function DocumentDetailView({
   }
 
   const editable = data.status === 'DRAFT' || data.status === 'REOPENED';
+  // حذف در هر وضعیتی ممکن است (سند به سطل زباله می‌رود، نه به نابودی)؛ فقط هشدارش
+  // برای سند ثبت‌شده سخت‌تر است.
+  const canDelete = user?.permissions.includes('document:delete') ?? false;
   // «ارجاع به بایگانی» فقط روی سند ثبت‌شده معنا دارد و فقط کار کارپردازی است.
   const canSendToArchive =
     data.status === 'FINALIZED' && permissions.includes('document:send_to_archive');
@@ -300,6 +305,22 @@ export function DocumentDetailView({
               شرح و سال اشتباه را می‌بیند. پس از ثبت نهایی دکمه نیست — سند دیگر
               ویرایش نمی‌شود و بازگشایی راه خودش را دارد.
             */}
+            {/*
+              حذف در هر وضعیتی ممکن است — هشدارش است که فرق می‌کند. دکمه کنار
+              ویرایش می‌نشیند چون هر دو «کار روی خودِ سند»اند، نه روی فاکتورهایش.
+            */}
+            {canDelete ? (
+              <button
+                type="button"
+                aria-label="حذف سند"
+                title="انتقال سند به سطل زباله"
+                onClick={() => setDeleting(true)}
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-all duration-150 hover:bg-destructive/10 hover:text-destructive active:scale-90"
+              >
+                <Icon name="trash" size={15} />
+              </button>
+            ) : null}
+
             {editable ? (
               <button
                 type="button"
@@ -340,6 +361,18 @@ export function DocumentDetailView({
             <p className="mt-3 text-sm text-muted-foreground">{data.stadMetadata.notes}</p>
           ) : null}
         </section>
+      ) : null}
+
+      {deleting ? (
+        <DocumentDeleteDialog
+          document={data}
+          onClose={() => setDeleting(false)}
+          onDeleted={() => {
+            setDeleting(false);
+            // سند دیگر در دامنهٔ کاربر نیست؛ ماندن روی برگه‌اش یعنی یک ۴۰۴.
+            onBack();
+          }}
+        />
       ) : null}
 
       {editing ? (
@@ -386,6 +419,18 @@ export function DocumentDetailView({
             onRemove={
               editable
                 ? () => {
+                    /*
+                      یک پنجرهٔ تأیید ساده.
+
+                      برخلاف حذف سند، فاکتور واقعاً از سند برداشته می‌شود و راه
+                      برگشتی ندارد؛ پس دست‌کم باید یک «مطمئنی؟» میانش باشد. متن،
+                      خودِ فاکتور را نام می‌برد نه «این مورد» را.
+                    */
+                    const label = `${invoice.invoiceType.titleFa} — ${formatMoney(
+                      invoice.totalAmount,
+                    )}`;
+                    if (!window.confirm(`فاکتور «${label}» از این سند حذف شود؟`)) return;
+
                     setNotice(null);
                     removeInvoice.mutate(invoice.id, {
                       onSuccess: () => void refetch(),

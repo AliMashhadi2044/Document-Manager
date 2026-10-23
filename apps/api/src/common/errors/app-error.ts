@@ -37,8 +37,14 @@ export class AppError extends Error {
     return new AppError('VALIDATION_FAILED', message, HttpStatus.UNPROCESSABLE_ENTITY, details);
   }
 
-  static conflict(code: string, message: string): AppError {
-    return new AppError(code, message, HttpStatus.CONFLICT);
+  /**
+   * تضاد با وضعیت فعلی داده.
+   *
+   * `details` اختیاری است و جایی به کار می‌آید که تضاد **چند مورد** باشد و کاربر
+   * باید تک‌تکشان را ببیند — مثل بازگرداندن سندی که با چند سند دیگر تداخل دارد.
+   */
+  static conflict(code: string, message: string, details?: readonly ErrorDetail[]): AppError {
+    return new AppError(code, message, HttpStatus.CONFLICT, details);
   }
 
   static tooManyRequests(message: string): AppError {

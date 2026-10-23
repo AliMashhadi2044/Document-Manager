@@ -8,9 +8,11 @@ import { InvoiceKindService } from '../invoices/invoice-kind.service';
 import { UtilityDuplicateService } from '../invoices/utility-duplicate.service';
 import { FinancialService } from '../financial/financial.service';
 import { DocumentAccessService } from './document-access.service';
+import { DocumentTrashController } from './document-trash.controller';
+import { DocumentTrashService } from './document-trash.service';
 
 @Module({
-  controllers: [DocumentsController],
+  controllers: [DocumentsController, DocumentTrashController],
   providers: [
     DocumentsService,
     InvoicesService,
@@ -18,6 +20,7 @@ import { DocumentAccessService } from './document-access.service';
     UtilityDuplicateService,
     FinancialService,
     DocumentAccessService,
+    DocumentTrashService,
     AuditService,
   ],
   exports: [DocumentsService, InvoicesService, FinancialService, DocumentAccessService],

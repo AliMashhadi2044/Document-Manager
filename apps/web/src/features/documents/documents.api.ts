@@ -197,6 +197,114 @@ export function useUpdateDocument() {
 }
 
 /**
+ * ─────────────── سطل زباله ───────────────
+ *
+ * حذف هیچ‌وقت ردیف را پاک نمی‌کند؛ سند به سطل زباله می‌رود و از همه‌جا کنار می‌ماند:
+ * فهرست، داشبورد، گزارش‌ها، و قاعده‌های کنترلی مثل تکرار انشعاب. برگرداندن و پاک
+ * کردن واقعی، هر دو از خود سطل زباله انجام می‌شوند.
+ */
+export interface TrashRow {
+  readonly id: string;
+  readonly title: string;
+  readonly type: DocumentType;
+  readonly status: DocumentStatus;
+  readonly fiscalYear: number;
+  readonly jalaliYear: number;
+  readonly documentNumber: string | null;
+  readonly totalAmount: string;
+  readonly deletedAt: string;
+  readonly deleteReason: string | null;
+  readonly deletedBy: { readonly id: string; readonly fullName: string } | null;
+  readonly buyerSnapshot: { readonly name: string };
+  readonly _count: { readonly invoices: number };
+}
+
+export interface RestoreConflict {
+  readonly kind: 'UTILITY_DUPLICATE' | 'DOCUMENT_NUMBER';
+  readonly message: string;
+  readonly documentId: string;
+  readonly documentTitle: string;
+}
+
+const trashKeys = {
+  all: ['document-trash'] as const,
+  list: (page: number, search: string) => ['document-trash', 'list', page, search] as const,
+  conflicts: (id: string) => ['document-trash', id, 'conflicts'] as const,
+};
+
+export function useTrash(page: number, search: string) {
+  const query = new URLSearchParams({ page: String(page) });
+  if (search) query.set('search', search);
+
+  return useQuery({
+    queryKey: trashKeys.list(page, search),
+    queryFn: () => apiFetch<PageResult<TrashRow>>(`/document-trash?${query.toString()}`),
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** جزئیات کامل سند حذف‌شده — همان ساختاری که برگهٔ سند می‌خواند. */
+export function useTrashedDocument(id: string | null) {
+  return useQuery({
+    queryKey: ['document-trash', id, 'detail'],
+    queryFn: () => apiFetch<DocumentDetail & { deletedAt: string; deleteReason: string | null }>(
+      `/document-trash/${id as string}`,
+    ),
+    enabled: id !== null,
+  });
+}
+
+/** تداخل‌های بازگرداندن، پیش از عمل: دکمه با همین غیرفعال می‌شود. */
+export function useRestoreConflicts(id: string | null) {
+  return useQuery({
+    queryKey: trashKeys.conflicts(id ?? ''),
+    queryFn: () =>
+      apiFetch<{ conflicts: readonly RestoreConflict[] }>(
+        `/document-trash/${id as string}/restore-conflicts`,
+      ),
+    enabled: id !== null,
+  });
+}
+
+function useInvalidateTrash(): () => void {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: trashKeys.all });
+    // سندِ رفته یا برگشته، فهرست اسناد و داشبورد را هم عوض می‌کند.
+    void queryClient.invalidateQueries({ queryKey: ['documents'] });
+    void queryClient.invalidateQueries({ queryKey: ['analytics'] });
+  };
+}
+
+export function useTrashDocument() {
+  const invalidate = useInvalidateTrash();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiFetch<DocumentRow>(`/documents/${id}/trash`, { method: 'POST', json: { reason } }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useRestoreDocument() {
+  const invalidate = useInvalidateTrash();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<DocumentRow>(`/document-trash/${id}/restore`, { method: 'POST' }),
+    onSuccess: invalidate,
+  });
+}
+
+/** حذف دائمی — عبارت تأیید در بدنه می‌رود، نه فقط در یک پنجرهٔ تأیید سمت مرورگر. */
+export function usePurgeDocument() {
+  const invalidate = useInvalidateTrash();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/document-trash/${id}`, { method: 'DELETE', json: { confirm: 'DELETE' } }),
+    onSuccess: invalidate,
+  });
+}
+
+/**
  * ثبت نهایی.
  *
  * کلید idempotency **یک‌بار برای هر تلاش کاربر** ساخته می‌شود و در صورت retry شبکه

@@ -47,8 +47,10 @@ export class InvoicesService {
     input: CreateInvoiceInput,
     user: AuthenticatedUser,
   ): Promise<Invoice> {
-    const document = await this.prisma.financialDocument.findUnique({
-      where: { id: documentId },
+    const document = await this.prisma.financialDocument.findFirst({
+      // سندِ در سطل زباله فاکتور نمی‌گیرد؛ «یافت نشد» هم همان چیزی است که کاربر
+      // باید بشنود، چون آن سند دیگر در فهرستش نیست.
+      where: { id: documentId, deletedAt: null },
       include: { buyerSnapshot: true },
     });
     if (!document) throw AppError.notFound('سند یافت نشد');

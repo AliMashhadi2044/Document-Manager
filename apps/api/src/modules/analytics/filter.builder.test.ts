@@ -245,11 +245,19 @@ describe('دامنه دسترسی سند در گزارش‌ها', () => {
       archivist,
     );
 
-    // کاربر پیش‌نویس خواسته، ولی دامنه نقشش فقط سه وضعیت را می‌دهد؛ هر دو شرط با
-    // AND ترکیب می‌شوند و نتیجه‌اش «هیچ» است — نه «پیش‌نویس‌ها».
+    /*
+      کاربر پیش‌نویس خواسته، ولی دامنه نقشش فقط سه وضعیت را می‌دهد؛ هر دو شرط با
+      AND ترکیب می‌شوند و نتیجه‌اش «هیچ» است — نه «پیش‌نویس‌ها».
+
+      `deletedAt: null` هم همیشه در لایهٔ بیرونی هست: سندِ در سطل زباله از هیچ
+      گزارشی بیرون نمی‌آید، و چون شرط اینجاست، فیلتر کاربر نمی‌تواند بازش کند.
+    */
     expect(where).toEqual({
       AND: [
-        { status: { in: ['PENDING_ARCHIVE', 'ARCHIVED', 'NEEDS_REVISION'] } },
+        {
+          deletedAt: null,
+          status: { in: ['PENDING_ARCHIVE', 'ARCHIVED', 'NEEDS_REVISION'] },
+        },
         { status: 'DRAFT' },
       ],
     });
@@ -258,7 +266,10 @@ describe('دامنه دسترسی سند در گزارش‌ها', () => {
   it('روی مجموعه‌داده‌های وابسته، دامنه زیر مسیر سند می‌نشیند', () => {
     const where = service.whereFor(INVOICES, { filter: group([]) }, archivist);
     expect(where).toEqual({
-      document: { status: { in: ['PENDING_ARCHIVE', 'ARCHIVED', 'NEEDS_REVISION'] } },
+      document: {
+        deletedAt: null,
+        status: { in: ['PENDING_ARCHIVE', 'ARCHIVED', 'NEEDS_REVISION'] },
+      },
     });
   });
 
@@ -299,7 +310,15 @@ describe('پروجکشن و تخت‌کردن نتیجه', () => {
       new DocumentAccessService(null as never),
     ).resolveColumns(vendors, ['name', 'invoiceCount'], ALL);
 
-    expect(buildSelect(columns)).toEqual({ name: true, _count: { select: { invoices: true } } });
+    /*
+      شمارش هم شرط خودش را دارد: `_count` بیرون از `where` کوئری است و دامنهٔ سند
+      به آن نمی‌رسد، پس بدون این شرط «تعداد فاکتور» فروشنده، فاکتورهای سندهای در
+      سطل زباله را هم می‌شمرد.
+    */
+    expect(buildSelect(columns)).toEqual({
+      name: true,
+      _count: { select: { invoices: { where: { document: { deletedAt: null } } } } },
+    });
   });
 
   it('مبلغ به رشته و تاریخ به ISO تبدیل می‌شود', () => {

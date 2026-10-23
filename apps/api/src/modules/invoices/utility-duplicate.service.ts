@@ -71,6 +71,9 @@ export class UtilityDuplicateService {
           document: {
             fiscalYear: input.fiscalYear,
             status: { notIn: [...VOID_STATUSES] },
+            // سندِ در سطل زباله پرداخت نیست: نه باید جلوی ثبت تازه را بگیرد و نه
+            // در متن هشدار بیاید.
+            deletedAt: null,
           },
         },
       },

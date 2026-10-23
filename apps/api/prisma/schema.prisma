@@ -30,6 +30,7 @@ model User {
   roles            UserRole[]
   sessions         Session[]
   createdDocuments FinancialDocument[] @relation("DocumentCreatedBy")
+  deletedDocuments FinancialDocument[] @relation("DocumentDeletedBy")
   createdInvoices  Invoice[]           @relation("InvoiceCreatedBy")
   securityEvents   SecurityEvent[]
   auditLogs        AuditLog[]
@@ -900,9 +901,22 @@ model FinancialDocument {
   finalizedById String?   @map("finalized_by_id") @db.Uuid
   archivedAt    DateTime? @map("archived_at") @db.Timestamptz(3)
 
+  /// ─────────── سطل زباله ───────────
+  ///
+  /// حذف در این سامانه **هیچ‌وقت** ردیف را پاک نمی‌کند؛ فقط `deleted_at` را پر
+  /// می‌کند. سندِ در سطل زباله باید همه‌جا نادیده گرفته شود: فهرست، داشبورد،
+  /// گزارش‌ها، و قاعده‌های کنترلی مثل تکرار انشعاب. مرجعِ این «همه‌جا»،
+  /// `DocumentAccessService.scope()` است که این شرط را به هر کوئری می‌برد.
+  ///
+  /// پاک کردن واقعی فقط از خود سطل زباله و با عمل صریح کاربر انجام می‌شود.
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedById  String?   @map("deleted_by_id") @db.Uuid
+  deleteReason String?   @map("delete_reason") @db.Text
+
   buyerEntity   BuyerEntity   @relation(fields: [buyerEntityId], references: [id], onDelete: Restrict)
   buyerSnapshot BuyerSnapshot @relation(fields: [buyerSnapshotId], references: [id], onDelete: Restrict)
   createdBy     User          @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  deletedBy     User?         @relation("DocumentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   stadMetadata DocumentStadMetadata?
   invoices     Invoice[]
@@ -920,6 +934,8 @@ model FinancialDocument {
   @@unique([id, type])
   @@index([fiscalYear, status, type, createdAt])
   @@index([status, createdAt])
+  /// فهرست سطل زباله و — مهم‌تر — کنار گذاشتن حذف‌شده‌ها در هر کوئری دیگر.
+  @@index([deletedAt])
   @@map("financial_documents")
 }
 

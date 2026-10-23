@@ -25,8 +25,32 @@ export class DocumentAccessService {
    * شرط کوئری دامنه دسترسی.
    *
    * ناظر پیش‌نویس را نمی‌بیند (تصمیم Q8)؛ بایگانی فقط اسناد ارجاع‌شده را می‌بیند.
+   *
+   * **و سندِ در سطل زباله را هیچ‌کس نمی‌بیند.** این شرط عمداً در همین تابع نشسته و
+   * نه در تک‌تک کوئری‌ها: هر مسیری که سند را می‌خواند — فهرست، گزارش‌گیری، داشبورد،
+   * بایگانی، بازخورد — از همین‌جا شرطش را می‌گیرد، پس اولین مسیری که فردا اضافه
+   * شود هم خودبه‌خود درست است. حذف‌شده نه در گزارش می‌آید، نه در داشبورد شمرده
+   * می‌شود، نه روی قاعده‌های کنترلی مثل تکرار انشعاب اثر می‌گذارد.
+   *
+   * به همین دلیل خروجی **هیچ‌وقت خالی نیست**، حتی برای کاربری که همه‌چیز را
+   * می‌بیند؛ فراخوان‌هایی که «شرط خالی یعنی بدون محدودیت» فرض می‌کردند، دیگر این
+   * شرط را دور نمی‌زنند.
    */
   scope(user: AuthenticatedUser): Prisma.FinancialDocumentWhereInput {
+    return { deletedAt: null, ...this.roleScope(user) };
+  }
+
+  /**
+   * دامنهٔ نقش **بدون** شرط حذف — فقط برای سطل زباله.
+   *
+   * سطل زباله هم دامنهٔ نقش را رعایت می‌کند: کسی که پیش‌نویس دیگران را نمی‌دید، در
+   * سطل زباله هم نمی‌بیند.
+   */
+  deletedScope(user: AuthenticatedUser): Prisma.FinancialDocumentWhereInput {
+    return { deletedAt: { not: null }, ...this.roleScope(user) };
+  }
+
+  private roleScope(user: AuthenticatedUser): Prisma.FinancialDocumentWhereInput {
     if (user.permissions.includes('document:read_draft')) return {};
 
     if (user.permissions.includes('archive:write')) {

@@ -8,6 +8,7 @@ import {
   type AuthenticatedUser,
 } from '../../common/auth/auth.decorators';
 import { ZodBody } from '../../common/validation/zod.pipe';
+import { DocumentTrashService } from './document-trash.service';
 import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { listQuerySchema } from '../../common/query/list-query';
 import { DocumentsService } from './documents.service';
@@ -77,6 +78,7 @@ export class DocumentsController {
     private readonly documents: DocumentsService,
     private readonly invoices: InvoicesService,
     private readonly utilityDuplicates: UtilityDuplicateService,
+    private readonly trashService: DocumentTrashService,
   ) {}
 
   @RequirePermission('document:read')
@@ -128,6 +130,25 @@ export class DocumentsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.documents.update(id, body, user);
+  }
+
+  /**
+   * انتقال به سطل زباله.
+   *
+   * در هیچ مرحله‌ای ردیفی پاک نمی‌شود؛ این مسیر فقط `deleted_at` را پر می‌کند و سند
+   * از همه‌جا — فهرست، داشبورد، گزارش‌ها و قاعده‌های کنترلی — کنار می‌رود. برگرداندن و
+   * پاک کردن واقعی، هر دو از سطل زباله انجام می‌شوند.
+   */
+  @RequirePermission('document:delete')
+  @Post(':id/trash')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'انتقال سند به سطل زباله (حذف نرم)' })
+  async trash(
+    @Param('id') id: string,
+    @Body(new ZodBody(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.trashService.softDelete(id, body.reason, user);
   }
 
   @RequirePermission('document:finalize')

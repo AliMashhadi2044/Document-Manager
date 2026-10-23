@@ -473,10 +473,14 @@ export function buildSelect(columns: readonly ReportFieldDefinition[]): Record<s
     const segments = column.path.split('.');
 
     if (segments[0] === '_count') {
-      const current = (select._count as { select?: Record<string, true> } | undefined) ?? {
+      const current = (select._count as { select?: Record<string, unknown> } | undefined) ?? {
         select: {},
       };
-      (current.select as Record<string, true>)[segments[1] as string] = true;
+      // شرط شمارش، وقتی تعریف فیلد دارد: `_count` بیرون از `where` کوئری است و
+      // دامنهٔ سند به آن نمی‌رسد.
+      (current.select as Record<string, unknown>)[segments[1] as string] = column.countWhere
+        ? { where: column.countWhere }
+        : true;
       select._count = current;
       continue;
     }
