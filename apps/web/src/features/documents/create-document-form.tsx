@@ -10,6 +10,7 @@ import { BuyerDialog } from '../buyers/buyer-dialog';
 import { LookupQuickDialog } from '../base-data/lookup-quick-dialog';
 import { Card, CardHeader } from '../../shared/ui/card';
 import { YearInput } from '../../shared/ui/year-input';
+import { JalaliDatePicker } from '../../shared/ui/date-picker';
 import { useOrganization } from '../organization/organization.api';
 import { useActiveBuyers } from '../buyers/buyers.api';
 import { useCreateDocument } from './documents.api';
@@ -45,7 +46,9 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
   */
   const [quick, setQuick] = useState<'buyer' | 'stad-request-types' | null>(null);
   const [needNumber, setNeedNumber] = useState('');
+  /** گردش: برای **هر دو نوع سند**، پس بیرون از بلوک ستاد زندگی می‌کند. */
   const [workflowNumber, setWorkflowNumber] = useState('');
+  const [workflowDate, setWorkflowDate] = useState<string | null>(null);
   const [requestNumber, setRequestNumber] = useState('');
   const [requestTypeId, setRequestTypeId] = useState('');
   const [stadNotes, setStadNotes] = useState('');
@@ -105,11 +108,12 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
               fiscalYear: Number(fiscalYear),
               jalaliYear: Number(jalaliYear),
               buyerEntityId,
+              workflowNumber: workflowNumber.trim() || null,
+              workflowDate,
               stad:
                 type === 'STAD'
                   ? {
-                      needNumber: needNumber.trim(),
-                      workflowNumber: workflowNumber.trim(),
+                      needNumber: needNumber.trim() || null,
                       requestNumber: requestNumber.trim(),
                       requestTypeId: requestTypeId || null,
                       notes: stadNotes.trim() || null,
@@ -200,22 +204,36 @@ export function CreateDocumentForm({ onClose }: { onClose: () => void }): JSX.El
           hint="مستقل از سال مالی است."
         />
 
+        {/*
+          گردش — برای **هر دو نوع سند**.
+
+          پیش از این شمارهٔ گردش داخل بلوک ستاد بود و سند عادی جایی برای ثبتش
+          نداشت، در حالی که گردش کاغذی به ستاد ربطی ندارد. هر دو اختیاری‌اند:
+          گردش ممکن است هنوز شماره نگرفته باشد.
+        */}
+        <Input
+          label="شماره گردش"
+          value={workflowNumber}
+          maxLength={100}
+          onChange={(event) => setWorkflowNumber(event.target.value)}
+          hint="اختیاری"
+        />
+        <JalaliDatePicker
+          label="تاریخ گردش"
+          value={workflowDate}
+          onChange={setWorkflowDate}
+          hint="اختیاری"
+        />
+
         {/* فیلدهای شرطی سند ستاد — در همان مرحله ایجاد (§۹). */}
         {type === 'STAD' ? (
           <>
             <Input
               label="شماره نیاز"
-              required
               maxLength={50}
               value={needNumber}
               onChange={(event) => setNeedNumber(event.target.value)}
-              hint="حداکثر ۵۰ نویسه"
-            />
-            <Input
-              label="شماره گردش"
-              required
-              value={workflowNumber}
-              onChange={(event) => setWorkflowNumber(event.target.value)}
+              hint="اختیاری · حداکثر ۵۰ نویسه"
             />
             <Input
               label="شماره درخواست"

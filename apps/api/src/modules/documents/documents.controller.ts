@@ -16,10 +16,33 @@ import { InvoicesService } from '../invoices/invoices.service';
 import { createInvoiceSchema } from '../invoices/invoice.schema';
 import { UtilityDuplicateService } from '../invoices/utility-duplicate.service';
 
+/**
+ * متنِ اختیاری که رشتهٔ خالی را `null` می‌کند.
+ *
+ * فرم برای فیلد خالی رشتهٔ خالی می‌فرستد، نه `null`؛ بدون این تبدیل، «خالی» در
+ * پایگاه داده به‌صورت `''` می‌نشست و با «ثبت‌نشده» فرق می‌کرد — دو حالت برای یک
+ * واقعیت.
+ */
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .default(null)
+    .transform((value) => (value === null || value === '' ? null : value));
+
+/** تاریخ میلادیِ `YYYY-MM-DD`؛ تبدیل از شمسی سمت کلاینت انجام شده است. */
+const optionalIsoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'قالب تاریخ باید YYYY-MM-DD باشد')
+  .nullable()
+  .default(null);
+
 const stadSchema = z.object({
-  // سقف ۵۰ نویسه طبق §۹ پرامپت.
-  needNumber: z.string().trim().min(1, 'شماره نیاز الزامی است').max(50),
-  workflowNumber: z.string().trim().min(1, 'شماره گردش الزامی است').max(100),
+  // سقف ۵۰ نویسه طبق §۹ پرامپت. **اختیاری**: سند ستاد ممکن است پیش از گرفتن
+  // شمارهٔ نیاز ثبت شود و الزامی بودنش، کار را همان اول متوقف می‌کرد.
+  needNumber: optionalText(50),
   requestNumber: z.string().trim().min(1, 'شماره درخواست الزامی است').max(100),
   requestTypeId: z.string().uuid().nullable().default(null),
   notes: z.string().trim().max(2000).nullable().default(null),
@@ -32,6 +55,14 @@ const createDocumentSchema = z
     fiscalYear: z.coerce.number().int().min(1300).max(1500),
     jalaliYear: z.coerce.number().int().min(1300).max(1500),
     buyerEntityId: z.string().uuid('مجموعه خریدار را انتخاب کنید'),
+    /*
+      شماره و تاریخ گردش — بیرون از `stad` و برای **هر دو نوع سند**.
+
+      گردش کاغذی به ستاد ربطی ندارد؛ جای قبلی‌اش (داخل اطلاعات ستاد) یعنی سند
+      عادی اصلاً نمی‌توانست ثبتش کند.
+    */
+    workflowNumber: optionalText(100),
+    workflowDate: optionalIsoDate,
     stad: stadSchema.nullable().default(null),
   })
   .superRefine((value, ctx) => {

@@ -357,6 +357,21 @@ export function DocumentDetailView({
             }`}
           />
           <Field label="تعداد فاکتور" value={toPersianDigits(String(data.invoices.length))} />
+          {/*
+            گردش، در مشخصات **خود سند** می‌نشیند و نه در بلوک ستاد: برای هر دو نوع
+            سند وجود دارد. نبودنش «ثبت نشده» است و نه خط تیره، چون تفاوتش با «صفر»
+            یا «ندارد» معنادار است.
+          */}
+          <Field
+            label="شماره گردش"
+            value={
+              data.workflowNumber === null ? 'ثبت نشده' : toPersianDigits(data.workflowNumber)
+            }
+          />
+          <Field
+            label="تاریخ گردش"
+            value={data.workflowDate === null ? 'ثبت نشده' : formatIsoAsJalali(data.workflowDate)}
+          />
         </dl>
       </section>
 
@@ -364,8 +379,14 @@ export function DocumentDetailView({
         <section className="rounded-lg border border-border bg-card p-6">
           <h3 className="text-sm font-semibold">اطلاعات سامانه ستاد</h3>
           <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="شماره نیاز" value={toPersianDigits(data.stadMetadata.needNumber)} />
-            <Field label="شماره گردش" value={data.stadMetadata.workflowNumber} />
+            <Field
+              label="شماره نیاز"
+              value={
+                data.stadMetadata.needNumber === null
+                  ? 'ثبت نشده'
+                  : toPersianDigits(data.stadMetadata.needNumber)
+              }
+            />
             <Field label="شماره درخواست" value={data.stadMetadata.requestNumber} />
             <Field label="نوع درخواست" value={data.stadMetadata.requestType?.title ?? '—'} />
           </dl>

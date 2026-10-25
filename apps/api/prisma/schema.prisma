@@ -893,6 +893,15 @@ model FinancialDocument {
   documentNumber String?   @map("document_number") @db.VarChar(50)
   documentDate   DateTime? @map("document_date") @db.Date
 
+  /// شماره و تاریخ گردش — **هر دو نوع سند**، نه فقط ستاد.
+  ///
+  /// پیش از این شمارهٔ گردش داخل اطلاعات ستاد بود و سند عادی اصلاً جایی برای
+  /// ثبتش نداشت، در حالی که گردش کاغذی برای هر دو وجود دارد. پس به خود سند
+  /// منتقل شد و تاریخش هم کنارش نشست. هر دو اختیاری‌اند: گردش ممکن است هنوز
+  /// شماره نگرفته باشد.
+  workflowNumber String?   @map("workflow_number") @db.VarChar(100)
+  workflowDate   DateTime? @map("workflow_date") @db.Date
+
   /// snapshot سیاست گرد کردن؛ پس از ثبت نهایی قفل است (ADR-0012، ریسک R14).
   roundingPolicy Json @map("rounding_policy")
 
@@ -977,10 +986,10 @@ model FinancialDocument {
 model DocumentStadMetadata {
   documentId String @id @map("document_id") @db.Uuid
 
-  /// سقف ۵۰ نویسه طبق §۹ پرامپت.
-  needNumber     String  @map("need_number") @db.VarChar(50)
-  workflowNumber String  @map("workflow_number") @db.VarChar(100)
-  requestNumber  String  @map("request_number") @db.VarChar(100)
+  /// سقف ۵۰ نویسه طبق §۹ پرامپت. **اختیاری**: سند ستاد ممکن است پیش از
+  /// گرفتن شمارهٔ نیاز ثبت شود و بستنِ ایجاد سند به آن، کار را متوقف می‌کرد.
+  needNumber    String? @map("need_number") @db.VarChar(50)
+  requestNumber String  @map("request_number") @db.VarChar(100)
   requestTypeId  String? @map("request_type_id") @db.Uuid
   notes          String? @db.Text
 

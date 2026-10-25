@@ -26,18 +26,33 @@ import { NotificationsService } from '../notifications/notifications.service';
 
 const DOCUMENT_SORTABLE = ['createdAt', 'fiscalYear', 'documentDate', 'totalAmount'] as const;
 
+/**
+ * `YYYY-MM-DD` ⇒ `Date` در نیمه‌شبِ UTC.
+ *
+ * ستون از نوع `date` است و ساعت ندارد؛ بدون تثبیت `T00:00:00.000Z`، منطقهٔ زمانی
+ * سرور می‌توانست تاریخ را یک روز جابه‌جا کند — همان اشتباهی که در تاریخ سند یک بار
+ * جلویش گرفته شد.
+ */
+function toDateOrNull(value: string | null | undefined): Date | null {
+  return value === null || value === undefined ? null : new Date(`${value}T00:00:00.000Z`);
+}
+
+/** اطلاعات ستاد؛ شمارهٔ گردش دیگر اینجا نیست — روی خود سند است. */
+export interface StadInput {
+  readonly needNumber: string | null;
+  readonly requestNumber: string;
+  readonly requestTypeId: string | null;
+  readonly notes: string | null;
+}
+
 export interface UpdateDocumentInput {
   readonly title?: string | undefined;
   readonly fiscalYear?: number | undefined;
   readonly jalaliYear?: number | undefined;
   readonly buyerEntityId?: string | undefined;
-  readonly stad?: {
-    readonly needNumber: string;
-    readonly workflowNumber: string;
-    readonly requestNumber: string;
-    readonly requestTypeId: string | null;
-    readonly notes: string | null;
-  } | null | undefined;
+  readonly workflowNumber?: string | null | undefined;
+  readonly workflowDate?: string | null | undefined;
+  readonly stad?: StadInput | null | undefined;
 }
 
 export interface CreateDocumentInput {
@@ -46,13 +61,10 @@ export interface CreateDocumentInput {
   readonly fiscalYear: number;
   readonly jalaliYear: number;
   readonly buyerEntityId: string;
-  readonly stad: {
-    readonly needNumber: string;
-    readonly workflowNumber: string;
-    readonly requestNumber: string;
-    readonly requestTypeId: string | null;
-    readonly notes: string | null;
-  } | null;
+  /** شماره و تاریخ گردش — هر دو نوع سند، هر دو اختیاری. */
+  readonly workflowNumber: string | null;
+  readonly workflowDate: string | null;
+  readonly stad: StadInput | null;
 }
 
 @Injectable()
@@ -182,12 +194,13 @@ export class DocumentsService {
           buyerSnapshotId: buyerSnapshot.id,
           roundingPolicy: policy as unknown as Prisma.InputJsonValue,
           createdById: user.id,
+          workflowNumber: input.workflowNumber,
+          workflowDate: toDateOrNull(input.workflowDate),
           ...(input.stad
             ? {
                 stadMetadata: {
                   create: {
                     needNumber: input.stad.needNumber,
-                    workflowNumber: input.stad.workflowNumber,
                     requestNumber: input.stad.requestNumber,
                     requestTypeId: input.stad.requestTypeId,
                     notes: input.stad.notes,
@@ -317,6 +330,10 @@ export class DocumentsService {
           ...(input.fiscalYear !== undefined ? { fiscalYear: input.fiscalYear } : {}),
           ...(input.jalaliYear !== undefined ? { jalaliYear: input.jalaliYear } : {}),
           ...(buyer ? { buyerEntityId: buyer.id, buyerSnapshotId: buyerSnapshotId as string } : {}),
+          ...(input.workflowNumber !== undefined ? { workflowNumber: input.workflowNumber } : {}),
+          ...(input.workflowDate !== undefined
+            ? { workflowDate: toDateOrNull(input.workflowDate) }
+            : {}),
           ...(input.stad
             ? {
                 stadMetadata: {

@@ -95,6 +95,14 @@ export interface InvoiceRow {
   } | null;
 }
 
+/** ورودی اطلاعات ستاد؛ شمارهٔ گردش اینجا نیست — روی خود سند است. */
+export interface StadFields {
+  needNumber: string | null;
+  requestNumber: string;
+  requestTypeId: string | null;
+  notes: string | null;
+}
+
 export interface DocumentDetail extends DocumentRow {
   readonly totalGross: string;
   readonly totalDiscount: string;
@@ -103,9 +111,11 @@ export interface DocumentDetail extends DocumentRow {
   readonly buyerSnapshot: { readonly name: string; readonly economicCode: string | null };
   /** رکورد زندهٔ خریدار — فرم ویرایش از همین پر می‌شود، نه از snapshot. */
   readonly buyerEntityId: string;
+  /** شماره و تاریخ گردش — هر دو نوع سند، هر دو اختیاری. */
+  readonly workflowNumber: string | null;
+  readonly workflowDate: string | null;
   readonly stadMetadata: {
-    readonly needNumber: string;
-    readonly workflowNumber: string;
+    readonly needNumber: string | null;
     readonly requestNumber: string;
     readonly requestTypeId: string | null;
     readonly notes: string | null;
@@ -175,13 +185,9 @@ export function useCreateDocument() {
       fiscalYear: number;
       jalaliYear: number;
       buyerEntityId: string;
-      stad: {
-        needNumber: string;
-        workflowNumber: string;
-        requestNumber: string;
-        requestTypeId: string | null;
-        notes: string | null;
-      } | null;
+      workflowNumber: string | null;
+      workflowDate: string | null;
+      stad: StadFields | null;
     }) => apiFetch<DocumentRow>('/documents', { method: 'POST', json: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
   });
@@ -205,13 +211,9 @@ export function useUpdateDocument() {
       fiscalYear?: number;
       jalaliYear?: number;
       buyerEntityId?: string;
-      stad?: {
-        needNumber: string;
-        workflowNumber: string;
-        requestNumber: string;
-        requestTypeId: string | null;
-        notes: string | null;
-      };
+      workflowNumber?: string | null;
+      workflowDate?: string | null;
+      stad?: StadFields;
     }) => apiFetch<DocumentRow>(`/documents/${id}`, { method: 'PATCH', json: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
   });

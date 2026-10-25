@@ -180,6 +180,9 @@ const DOCUMENTS: DatasetDefinition = {
     { key: 'jalaliYear', titleFa: 'سال شمسی', type: 'integer', path: 'jalaliYear' },
     { key: 'documentNumber', titleFa: 'شماره سند', type: 'text', path: 'documentNumber' },
     { key: 'documentDate', titleFa: 'تاریخ سند', type: 'jalaliDate', path: 'documentDate' },
+    // گردش، هر دو نوع سند را دارد — نه فقط ستاد.
+    { key: 'workflowNumber', titleFa: 'شماره گردش', type: 'text', path: 'workflowNumber' },
+    { key: 'workflowDate', titleFa: 'تاریخ گردش', type: 'jalaliDate', path: 'workflowDate' },
     { key: 'buyerName', titleFa: 'خریدار', type: 'text', path: 'buyerSnapshot.name', width: 30 },
     ...documentMoneyFields(),
     {

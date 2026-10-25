@@ -8,6 +8,7 @@ import { Input } from '../../shared/ui/input';
 import { Modal } from '../../shared/ui/modal';
 import { Select } from '../../shared/ui/select';
 import { YearInput } from '../../shared/ui/year-input';
+import { JalaliDatePicker } from '../../shared/ui/date-picker';
 import { formatServerMessage } from '../../shared/format/money';
 import { BuyerDialog } from '../buyers/buyer-dialog';
 import { LookupQuickDialog } from '../base-data/lookup-quick-dialog';
@@ -52,7 +53,11 @@ export function DocumentEditDialog({
   const [jalaliYear, setJalaliYear] = useState(String(document.jalaliYear));
   const [buyerEntityId, setBuyerEntityId] = useState(document.buyerEntityId);
   const [needNumber, setNeedNumber] = useState(document.stadMetadata?.needNumber ?? '');
-  const [workflowNumber, setWorkflowNumber] = useState(document.stadMetadata?.workflowNumber ?? '');
+  /** گردش روی خودِ سند است، نه اطلاعات ستاد — پس برای سند عادی هم پر می‌شود. */
+  const [workflowNumber, setWorkflowNumber] = useState(document.workflowNumber ?? '');
+  const [workflowDate, setWorkflowDate] = useState<string | null>(
+    document.workflowDate?.slice(0, 10) ?? null,
+  );
   const [requestNumber, setRequestNumber] = useState(document.stadMetadata?.requestNumber ?? '');
   const [requestTypeId, setRequestTypeId] = useState(document.stadMetadata?.requestTypeId ?? '');
   const [stadNotes, setStadNotes] = useState(document.stadMetadata?.notes ?? '');
@@ -78,11 +83,12 @@ export function DocumentEditDialog({
         fiscalYear: Number(fiscalYear),
         jalaliYear: Number(jalaliYear),
         buyerEntityId,
+        workflowNumber: workflowNumber.trim() || null,
+        workflowDate,
         ...(isStad
           ? {
               stad: {
-                needNumber: needNumber.trim(),
-                workflowNumber: workflowNumber.trim(),
+                needNumber: needNumber.trim() || null,
                 requestNumber: requestNumber.trim(),
                 requestTypeId: requestTypeId || null,
                 notes: stadNotes.trim() || null,
@@ -151,6 +157,21 @@ export function DocumentEditDialog({
             hint="مستقل از سال مالی است."
           />
 
+          {/* گردش — هر دو نوع سند؛ به ستاد ربطی ندارد. */}
+          <Input
+            label="شماره گردش"
+            maxLength={100}
+            value={workflowNumber}
+            onChange={(event) => setWorkflowNumber(event.target.value)}
+            hint="اختیاری"
+          />
+          <JalaliDatePicker
+            label="تاریخ گردش"
+            value={workflowDate}
+            onChange={setWorkflowDate}
+            hint="اختیاری"
+          />
+
           {isStad ? (
             <>
               <div className="md:col-span-2 border-t border-border pt-4">
@@ -159,16 +180,10 @@ export function DocumentEditDialog({
 
               <Input
                 label="شماره نیاز"
-                required
                 maxLength={50}
                 value={needNumber}
                 onChange={(event) => setNeedNumber(event.target.value)}
-              />
-              <Input
-                label="شماره گردش"
-                required
-                value={workflowNumber}
-                onChange={(event) => setWorkflowNumber(event.target.value)}
+                hint="اختیاری"
               />
               <Input
                 label="شماره درخواست"
