@@ -8,6 +8,7 @@ import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
 import { formatIsoAsJalali, formatMoney, formatServerMessage, toPersianDigits } from '../../shared/format/money';
 import { useArchiveDetail, useCompleteArchive, useSaveArchiveInfo } from './archive.api';
+import { PaymentStatusPanel } from './payment-status-panel';
 import { AttachmentsPanel } from '../files/attachments-panel';
 import { FeedbackPanel } from '../feedback/feedback-panel';
 import type { CurrentUser } from '../auth/auth.api';
@@ -155,6 +156,23 @@ export function ArchiveWorkspace({
                     : 'ثبت اطلاعات ناموفق بود',
               }),
           });
+        }}
+      />
+
+      {/*
+        وضعیت پرداخت، **پس از** شماره و تاریخ سند و پیش از فایل‌ها.
+
+        ترتیب اتفاقی نیست: بایگان اول سند را شناسنامه‌دار می‌کند، بعد می‌گوید پولش
+        چه شد. و برخلاف بقیهٔ این صفحه، این بخش پس از نهایی شدن بایگانی هم باز
+        می‌ماند — نیازمندی اصلاً برای همین وجود دارد.
+      */}
+      <PaymentStatusPanel
+        documentId={documentId}
+        detail={data}
+        canWrite={canWrite}
+        onSaved={() => {
+          setNotice({ kind: 'success', text: 'وضعیت پرداخت ثبت شد.' });
+          void detail.refetch();
         }}
       />
 

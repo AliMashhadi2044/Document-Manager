@@ -8,6 +8,7 @@ import {
 } from '../../common/auth/auth.decorators';
 import { ZodBody } from '../../common/validation/zod.pipe';
 import { listQuerySchema } from '../../common/query/list-query';
+import { NOTIFICATION_CATEGORIES, type NotificationCategory } from '@dm/shared';
 import { NotificationsService } from './notifications.service';
 
 /**
@@ -29,9 +30,17 @@ export class NotificationsController {
     @Query(new ZodBody(listQuerySchema)) query: ReturnType<typeof listQuerySchema.parse>,
     @CurrentUser() user: AuthenticatedUser,
     @Query('unread') unread?: string,
+    @Query('category') category?: string,
   ) {
     // هر چیزی جز 'true' یعنی همه اعلان‌ها؛ ورودی ناشناخته خطا نمی‌دهد.
-    return this.notifications.list(query, user, unread === 'true');
+    return this.notifications.list(
+      query,
+      user,
+      unread === 'true',
+      NOTIFICATION_CATEGORIES.includes(category as NotificationCategory)
+        ? (category as NotificationCategory)
+        : undefined,
+    );
   }
 
   @RequirePermission('document:read')

@@ -1,5 +1,9 @@
 import { useState } from 'react';
-import { DOCUMENT_STATUS_LABELS, type DocumentStatus } from '@dm/shared';
+import {
+  DOCUMENT_STATUS_LABELS,
+  PAYMENT_SETTLEMENT_LABELS,
+  type DocumentStatus,
+} from '@dm/shared';
 
 import { Input } from '../../shared/ui/input';
 import { Select } from '../../shared/ui/select';
@@ -9,6 +13,7 @@ import { ApiError } from '../../shared/api/client';
 import { useArchiveInbox, type ArchiveInboxFilters, type ArchiveInboxRow } from './archive.api';
 import { Badge, type BadgeTone } from '../../shared/ui/badge';
 import { ArchiveWorkspace } from './archive-workspace';
+import { SettlementBadge } from './payment-status-panel';
 import type { CurrentUser } from '../auth/auth.api';
 
 /** فقط وضعیت‌هایی که در کارتابل بایگانی ممکن‌اند؛ بقیه خنثی نمایش داده می‌شوند. */
@@ -33,6 +38,7 @@ export function ArchivePage({ user }: { user: CurrentUser }): JSX.Element {
     status: '',
     fiscalYear: '',
     hasOpenFeedback: '',
+    paymentStatus: '',
   });
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -137,6 +143,20 @@ export function ArchivePage({ user }: { user: CurrentUser }): JSX.Element {
         </Badge>
       ),
     },
+    /*
+      وضعیت پرداخت، در خود کارتابل.
+
+      نیازمندی چیزی است که باید **دیده** شود، نه چیزی که با باز کردن تک‌تک اسناد
+      پیدا شود؛ و رنگش از فاصلهٔ امروز تا مهلت ده‌روزه می‌آید، پس هر بار که
+      کارتابل باز می‌شود تازه است.
+    */
+    {
+      key: 'payment',
+      header: 'پرداخت',
+      align: 'center',
+      width: '13rem',
+      cell: (row) => <SettlementBadge detail={row} />,
+    },
   ];
 
   return (
@@ -184,6 +204,21 @@ export function ArchivePage({ user }: { user: CurrentUser }): JSX.Element {
           options={[
             { value: 'true', label: 'دارد' },
             { value: 'false', label: 'ندارد' },
+          ]}
+        />
+        <Select
+          label="وضعیت پرداخت"
+          placeholder="همه"
+          value={filters.paymentStatus}
+          onChange={(nextValue) =>
+            update({ paymentStatus: nextValue as ArchiveInboxFilters['paymentStatus'] })
+          }
+          options={[
+            { value: 'OUTSTANDING', label: PAYMENT_SETTLEMENT_LABELS.OUTSTANDING },
+            { value: 'FULLY_PAID', label: PAYMENT_SETTLEMENT_LABELS.FULLY_PAID },
+            // «تعیین‌نشده» وضعیت نیست، نبودِ وضعیت است — و در یک سامانهٔ مالی با
+            // «پرداخت کامل» یکی گرفته نمی‌شود.
+            { value: 'UNSET', label: 'تعیین‌نشده' },
           ]}
         />
       </div>

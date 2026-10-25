@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { cn } from './cn';
 import { Icon, type IconName } from './icon';
+import { InfoHint } from './info-hint';
 
 /**
  * کارت — واحد پایه چیدمان صفحه‌ها.
@@ -40,12 +41,23 @@ export function CardHeader({
   description,
   icon,
   action,
+  help,
+  helpLabel,
   className,
 }: {
   title: ReactNode;
   description?: ReactNode;
   icon?: IconName;
   action?: ReactNode;
+  /**
+   * توضیح «این کارت دقیقاً چه چیزی را نشان می‌دهد» — دامنه، وضعیت، مبنا.
+   *
+   * جدا از `description` است و عمداً: آن یک جمله برای خواندن سریع است، این
+   * توضیح کاملی که فقط وقتی لازم می‌شود باز شود.
+   */
+  help?: ReactNode;
+  /** نامی که به صفحه‌خوان گفته می‌شود؛ پیش‌فرض، عنوان کارت است. */
+  helpLabel?: string;
   className?: string;
 }): JSX.Element {
   return (
@@ -57,7 +69,22 @@ export function CardHeader({
           </span>
         ) : null}
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold">{title}</h3>
+          {/*
+            نشان راهنما **کنار** عنوان می‌نشیند و نه داخلش: یک دکمه داخل `h3`،
+            هم متن عنوان را برای صفحه‌خوان شلوغ می‌کند و هم هر کدی که عنوان را
+            می‌خواند (از جمله آزمون‌ها) «؟» را جزو عنوان می‌بیند.
+          */}
+          <div className="flex items-center gap-1.5">
+            <h3 className="truncate text-sm font-semibold">{title}</h3>
+            {help ? (
+              <InfoHint
+                align="start"
+                label={helpLabel ?? (typeof title === 'string' ? title : 'این کارت')}
+              >
+                {help}
+              </InfoHint>
+            ) : null}
+          </div>
           {description ? (
             <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
           ) : null}

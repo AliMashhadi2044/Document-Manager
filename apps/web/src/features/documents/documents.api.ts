@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DocumentStatus, DocumentType, TaxMode } from '@dm/shared';
+import type {
+  DocumentStatus,
+  DocumentType,
+  PaymentSettlementStatus,
+  TaxMode,
+} from '@dm/shared';
 
 import { apiFetch } from '../../shared/api/client';
 import type { PageResult } from '../base-data/base-data.api';
@@ -107,6 +112,17 @@ export interface DocumentDetail extends DocumentRow {
     readonly requestType: { readonly title: string } | null;
   } | null;
   readonly invoices: readonly InvoiceRow[];
+  /**
+   * وضعیت پرداخت — کار نقش بایگانی.
+   *
+   * اینجا فقط **دیده** می‌شود؛ ثبتش از کارتابل بایگانی است و سرور هم همان را
+   * می‌خواهد (`archive:write`).
+   */
+  readonly paymentStatus: PaymentSettlementStatus | null;
+  readonly paidAmount: string | null;
+  readonly outstandingAmount: string | null;
+  readonly paymentStatusAt: string | null;
+  readonly paymentDate: string | null;
 }
 
 export interface RevisionRow {

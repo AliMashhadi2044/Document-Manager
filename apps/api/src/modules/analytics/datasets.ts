@@ -2,6 +2,8 @@ import {
   OPERATORS_BY_TYPE,
   PAYMENT_METHOD_KINDS,
   PAYMENT_METHOD_KIND_LABELS,
+  PAYMENT_SETTLEMENT_LABELS,
+  PAYMENT_SETTLEMENT_STATUSES,
   type FilterOperator,
   type Permission,
   type ReportFieldType,
@@ -117,6 +119,11 @@ const PAYMENT_KIND_VALUES = PAYMENT_METHOD_KINDS.map((kind) => ({
   label: PAYMENT_METHOD_KIND_LABELS[kind],
 }));
 
+const PAYMENT_SETTLEMENT_VALUES = PAYMENT_SETTLEMENT_STATUSES.map((status) => ({
+  value: status,
+  label: PAYMENT_SETTLEMENT_LABELS[status],
+}));
+
 const FEEDBACK_STATUS_VALUES = [
   { value: 'OPEN', label: 'باز' },
   { value: 'ANSWERED', label: 'پاسخ داده‌شده' },
@@ -185,6 +192,29 @@ const DOCUMENTS: DatasetDefinition = {
     { key: 'createdAt', titleFa: 'تاریخ ایجاد', type: 'jalaliDate', path: 'createdAt' },
     { key: 'finalizedAt', titleFa: 'تاریخ ثبت نهایی', type: 'jalaliDate', path: 'finalizedAt' },
     { key: 'archivedAt', titleFa: 'تاریخ بایگانی', type: 'jalaliDate', path: 'archivedAt' },
+
+    /*
+      وضعیت پرداخت.
+
+      مقدار خالیِ این ستون معنا دارد و «صفر» نیست: یعنی بایگان هنوز تعیین نکرده.
+      در فیلتر، عملگر «خالی است» همین حالت را می‌گیرد.
+    */
+    {
+      key: 'paymentStatus',
+      titleFa: 'وضعیت پرداخت',
+      type: 'enum',
+      path: 'paymentStatus',
+      enumValues: PAYMENT_SETTLEMENT_VALUES,
+    },
+    { key: 'paidAmount', titleFa: 'مبلغ پرداخت‌شده', type: 'money', path: 'paidAmount' },
+    { key: 'outstandingAmount', titleFa: 'مبلغ نیازمندی', type: 'money', path: 'outstandingAmount' },
+    { key: 'paymentDate', titleFa: 'تاریخ پرداخت', type: 'jalaliDate', path: 'paymentDate' },
+    {
+      key: 'paymentStatusAt',
+      titleFa: 'تاریخ ثبت وضعیت پرداخت',
+      type: 'jalaliDate',
+      path: 'paymentStatusAt',
+    },
   ],
 };
 

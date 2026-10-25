@@ -155,7 +155,16 @@ test.describe('فیلتر سال داشبورد', () => {
 
     // فیلتر سال، برچسبش را عوض می‌کند و داشبورد هم همان مبنا را گزارش می‌دهد.
     await expect(page.getByRole('combobox', { name: 'سال شمسی', exact: true })).toBeVisible();
-    await expect(page.getByText('روند ماهانه فاکتورها').locator('..')).toContainText('سال شمسی');
+    /*
+      لنگرگاه، خودِ سربرگ کارت است و نه «والدِ متن عنوان».
+
+      عنوان حالا نشان راهنما هم کنارش دارد، پس والدِ بی‌واسطه‌اش فقط عنوان و «؟»
+      است. سربرگ — که توضیح کارت در آن می‌نشیند — یک پله بالاتر است.
+    */
+    const trendHeader = page
+      .locator('h3', { hasText: 'روند ماهانه فاکتورها' })
+      .locator('xpath=ancestor::div[contains(@class,"min-w-0")][1]');
+    await expect(trendHeader).toContainText('سال شمسی');
   });
 
   /**

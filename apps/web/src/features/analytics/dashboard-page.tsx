@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   DOCUMENT_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
+  OUTSTANDING_FOLLOW_UP_DAYS,
+  PAYMENT_SETTLEMENT_LABELS,
+  outstandingAge,
   type DocumentStatus,
   type DocumentType,
 } from '@dm/shared';
@@ -20,7 +23,14 @@ import { ApiError } from '../../shared/api/client';
 import { cn } from '../../shared/ui/cn';
 import { formatMoney, formatServerMessage, toPersianDigits } from '../../shared/format/money';
 import { AnimatedValue, Updating, UpdatingBar } from '../../shared/ui/animated-value';
-import { useDashboard, useDashboardYears, type YearBasis } from './analytics.api';
+import { InfoHint } from '../../shared/ui/info-hint';
+import { Segmented } from '../../shared/ui/segmented';
+import {
+  useDashboard,
+  useDashboardYears,
+  type SettlementView,
+  type YearBasis,
+} from './analytics.api';
 
 /**
  * برچسب‌ها از `@dm/shared` می‌آیند، نه از فهرستی در همین فایل.
@@ -68,9 +78,10 @@ export function DashboardPage({
   const [basis, setBasis] = useState<YearBasis>('fiscal');
   const [year, setYear] = useState<number | null>(null);
   const [touched, setTouched] = useState(false);
+  const [settlement, setSettlement] = useState<SettlementView>('all');
 
   const years = useDashboardYears();
-  const dashboard = useDashboard(basis, year);
+  const dashboard = useDashboard(basis, year, settlement);
 
   const yearList = useMemo(
     () => (basis === 'jalali' ? (years.data?.jalali ?? []) : (years.data?.fiscal ?? [])),
@@ -118,6 +129,41 @@ export function DashboardPage({
 
   const data = dashboard.data as NonNullable<typeof dashboard.data>;
   const canCreateDocument = user.permissions.includes('document:create');
+
+  /*
+    متن دامنه — یک جا، و در **هر** راهنما تکرار می‌شود.
+
+    انگیزه‌اش یک سوءتفاهم واقعی است: کاربر عددی را می‌دید و نمی‌دانست مال کدام
+    سال است، با کدام مبنا، و آیا فیلتر وضعیت پرداخت رویش خورده یا نه. نوشتن این
+    سه در هر راهنما، همان سه سؤال را از پیش جواب می‌دهد.
+  */
+  const basisLabel = data.basis === 'jalali' ? 'سال شمسی' : 'سال مالی';
+  const yearLabel =
+    data.year === null
+      ? 'همهٔ سال‌ها'
+      : `${basisLabel} ${toPersianDigits(String(data.year))}`;
+  const settlementLabel =
+    settlement === 'all'
+      ? 'همهٔ وضعیت‌های پرداخت'
+      : settlement === 'UNSET'
+        ? 'فقط اسنادی که وضعیت پرداختشان تعیین نشده'
+        : `فقط اسناد با وضعیت «${PAYMENT_SETTLEMENT_LABELS[settlement]}»`;
+
+  /** «این عدد روی چه مجموعه‌ای حساب شده» — پایانِ هر راهنما. */
+  const scopeNote = (
+    <>
+      <span className="mt-1.5 block border-t border-border pt-1.5 text-muted-foreground">
+        دامنه: {yearLabel} · {settlementLabel} · فقط اسنادی که شما اجازهٔ دیدنشان را دارید.
+      </span>
+    </>
+  );
+
+  const settlementSummary = data.settlementSummary;
+  const followUps = data.outstandingFollowUps ?? [];
+  const settledCount =
+    settlementSummary.fullyPaid.count +
+    settlementSummary.outstanding.count +
+    settlementSummary.unset.count;
 
   /**
    * دایرهٔ وضعیت، بر اساس **تعداد سند** است، نه مبلغ.
@@ -243,6 +289,48 @@ export function DashboardPage({
         </div>
       </div>
 
+      {/*
+        فیلتر وضعیت پرداخت — روی **همهٔ** اعداد داشبورد.
+
+        نیمه‌فیلتر کردن (مثلاً فقط کاشی‌های پرداخت) بدتر از بی‌فیلتر بودن است:
+        کاربر نمی‌داند کدام عدد فیلتر شده و کدام نه. تنها استثنا کارت «وضعیت
+        پرداخت» است که باید همهٔ حالت‌ها را نشان دهد، و خودش می‌گویدش.
+      */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Segmented
+          label="وضعیت پرداخت"
+          value={settlement}
+          onChange={(next) => setSettlement(next as SettlementView)}
+          options={[
+            { value: 'all', label: 'همه وضعیت‌ها', icon: 'layers' },
+            {
+              value: 'OUTSTANDING',
+              label: PAYMENT_SETTLEMENT_LABELS.OUTSTANDING,
+              icon: 'alert',
+              badge: toPersianDigits(String(settlementSummary.outstanding.count)),
+            },
+            {
+              value: 'FULLY_PAID',
+              label: PAYMENT_SETTLEMENT_LABELS.FULLY_PAID,
+              icon: 'check',
+              badge: toPersianDigits(String(settlementSummary.fullyPaid.count)),
+            },
+            {
+              value: 'UNSET',
+              label: 'تعیین‌نشده',
+              icon: 'clock',
+              badge: toPersianDigits(String(settlementSummary.unset.count)),
+            },
+          ]}
+        />
+        <InfoHint align="start" label="فیلتر وضعیت پرداخت">
+          وضعیت پرداخت را <strong>بایگانی</strong> پس از ارجاع سند ثبت می‌کند. انتخاب هر گزینه،
+          همهٔ اعداد این صفحه را به همان زیرمجموعه محدود می‌کند — جمع‌ها، روند ماهانه
+          و رتبه‌بندی‌ها. «تعیین‌نشده» یعنی بایگان هنوز چیزی ثبت نکرده، و با «پرداخت
+          کامل» یکی نیست.
+        </InfoHint>
+      </div>
+
       {/* ───────────── شمارنده‌های کلیدی ───────────── */}
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
@@ -254,6 +342,14 @@ export function DashboardPage({
           tone="primary"
           spark={monthCounts}
           sparkTitle="روند تعداد فاکتورهای ماهانه"
+          help={
+            <>
+              تعداد <strong>همهٔ</strong> اسناد در دامنهٔ زیر، در هر وضعیت گردش کار — از پیش‌نویس تا
+              بایگانی‌شده. عدد کوچک زیرش، تعداد فاکتورهای همان اسناد است. نمودار کوچک،
+              تعداد فاکتور هر ماه شمسی است.
+              {scopeNote}
+            </>
+          }
         />
         <StatTile
           updating={updating}
@@ -264,6 +360,14 @@ export function DashboardPage({
           tone="info"
           spark={monthTotals}
           sparkTitle="روند مبلغ ماهانه"
+          help={
+            <>
+              جمع مبلغ نهایی اسناد (پس از تخفیف و با مالیات و عوارض) — همان ستون «جمع
+              کل» سند. این <strong>مبلغ سند</strong> است و نه مبلغ پرداخت‌شده؛ آن را کارت «وضعیت
+              پرداخت» می‌گوید.
+              {scopeNote}
+            </>
+          }
         />
         <StatTile
           updating={updating}
@@ -272,6 +376,13 @@ export function DashboardPage({
           value={toPersianDigits(String(data.pendingArchiveCount))}
           caption="سند منتظر اقدام بایگان"
           tone={data.pendingArchiveCount > 0 ? 'warning' : 'neutral'}
+          help={
+            <>
+              اسنادی که وضعیتشان «در انتظار بایگانی» است: کارپردازی ارجاعشان داده و
+              بایگانی هنوز نهایی نکرده. اسناد «نیازمند اصلاح» در این عدد نیستند.
+              {scopeNote}
+            </>
+          }
         />
         <StatTile
           updating={updating}
@@ -280,8 +391,160 @@ export function DashboardPage({
           value={toPersianDigits(String(data.openFeedbackCount))}
           caption="نیازمند پاسخ یا رسیدگی"
           tone={data.openFeedbackCount > 0 ? 'danger' : 'success'}
+          help={
+            <>
+              تعداد <strong>بازخوردها</strong> (نه اسناد) که وضعیتشان «باز» یا «پاسخ داده‌شده» است و
+              هنوز رسیدگی نشده‌اند. یک سند می‌تواند چند بازخورد باز داشته باشد.
+              {scopeNote}
+            </>
+          }
         />
       </section>
+
+      {/* ───────────── وضعیت پرداخت ───────────── */}
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <StatTile
+          updating={updating}
+          icon="check"
+          title={PAYMENT_SETTLEMENT_LABELS.FULLY_PAID}
+          value={toPersianDigits(String(settlementSummary.fullyPaid.count))}
+          caption={`${formatMoney(settlementSummary.fullyPaid.total, { withUnit: false })} ریال`}
+          tone="success"
+          help={
+            <>
+              اسنادی که بایگانی وضعیتشان را «پرداخت کامل» ثبت کرده است. مبلغ زیر آن،
+              جمع <strong>مبلغ سند</strong> این اسناد است. تاریخ پرداخت هر سند، همان لحظه‌ای است که
+              بایگان این وضعیت را ثبت کرده.
+              <span className="mt-1.5 block border-t border-border pt-1.5 text-muted-foreground">
+                دامنه: {yearLabel} · این سه کاشی <strong>همیشه</strong> همهٔ وضعیت‌ها را می‌شمارند و
+                فیلتر بالای صفحه رویشان اثر ندارد.
+              </span>
+            </>
+          }
+        />
+        <StatTile
+          updating={updating}
+          icon="alert"
+          title={PAYMENT_SETTLEMENT_LABELS.OUTSTANDING}
+          value={toPersianDigits(String(settlementSummary.outstanding.count))}
+          caption={`${formatMoney(settlementSummary.outstanding.remaining, {
+            withUnit: false,
+          })} ریال باقی‌مانده`}
+          tone={settlementSummary.outstanding.count > 0 ? 'danger' : 'neutral'}
+          help={
+            <>
+              اسنادی که بخشی از مبلغشان پرداخت شده و بخشی مانده. عدد زیر آن، جمع
+              <strong>مبلغ باقی‌مانده</strong> است — نه مبلغ سند. از جمع مبلغ این اسناد (
+              {formatMoney(settlementSummary.outstanding.total)})،{' '}
+              {formatMoney(settlementSummary.outstanding.paid)} پرداخت شده است.
+              <span className="mt-1.5 block border-t border-border pt-1.5 text-muted-foreground">
+                دامنه: {yearLabel} · بدون اثر فیلتر وضعیت پرداخت.
+              </span>
+            </>
+          }
+        />
+        <StatTile
+          updating={updating}
+          icon="clock"
+          title="وضعیت پرداخت تعیین‌نشده"
+          value={toPersianDigits(String(settlementSummary.unset.count))}
+          caption={`${formatMoney(settlementSummary.unset.total, { withUnit: false })} ریال`}
+          tone={settlementSummary.unset.count > 0 ? 'warning' : 'neutral'}
+          help={
+            <>
+              اسنادی که بایگانی هنوز وضعیت پرداختشان را ثبت نکرده است. این با «پرداخت
+              کامل» یکی <strong>نیست</strong> و عمداً جدا شمرده می‌شود؛ وگرنه سندی که کسی سراغش
+              نرفته، پرداخت‌شده به حساب می‌آمد.
+              <span className="mt-1.5 block border-t border-border pt-1.5 text-muted-foreground">
+                دامنه: {yearLabel} · روی {toPersianDigits(String(settledCount))} سند.
+              </span>
+            </>
+          }
+        />
+      </section>
+
+      {/*
+        کارتابل پیگیری.
+
+        فهرست از **قدیمی‌ترین** نیازمندی شروع می‌شود و نه بزرگ‌ترین مبلغ: چیزی که
+        دیر می‌شود، زمان است. فوریت هر ردیف همین حالا حساب می‌شود، پس با هر بار باز
+        کردن صفحه تازه است و به هیچ کار شبانه‌ای وابسته نیست.
+      */}
+      {followUps.length > 0 ? (
+        <Card>
+          <CardHeader
+            icon="alert"
+            title="نیازمندی‌های در انتظار پیگیری"
+            description={`قدیمی‌ترین‌ها اول؛ مهلت پیگیری ${toPersianDigits(
+              String(OUTSTANDING_FOLLOW_UP_DAYS),
+            )} روز است.`}
+            help={
+              <>
+                اسنادی که بایگانی وضعیتشان را «نیازمندی» ثبت کرده و هنوز بسته نشده‌اند.
+                رنگ هر ردیف از فاصلهٔ امروز تا مهلت{' '}
+                {toPersianDigits(String(OUTSTANDING_FOLLOW_UP_DAYS))} روزه می‌آید: آبی
+                تازه، زرد نزدیک مهلت، و قرمز فوری یا معوق. مبلغ نشان‌داده‌شده، مبلغ
+                <strong> باقی‌مانده</strong> است نه مبلغ سند.
+                <span className="mt-1.5 block border-t border-border pt-1.5 text-muted-foreground">
+                  دامنه: {yearLabel} · حداکثر هشت سند · بدون اثر فیلتر وضعیت پرداخت.
+                </span>
+              </>
+            }
+            action={
+              <Badge tone="danger">
+                {formatMoney(settlementSummary.outstanding.remaining, { withUnit: false })} ریال
+              </Badge>
+            }
+          />
+          <CardBody className="pt-3">
+            <ul className="divide-y divide-border">
+              {followUps.map((row) => {
+                const age = row.since === null ? null : outstandingAge(new Date(row.since));
+                const tone: BadgeTone =
+                  age === null
+                    ? 'info'
+                    : age.level === 'overdue' || age.level === 'urgent'
+                      ? 'danger'
+                      : age.level === 'due-soon'
+                        ? 'warning'
+                        : 'info';
+
+                return (
+                  <li
+                    key={row.id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium" title={row.title}>
+                        {row.title}
+                      </p>
+                      <p className="money mt-0.5 text-[11px] text-muted-foreground">
+                        {row.documentNumber
+                          ? `شماره ${toPersianDigits(row.documentNumber)} · `
+                          : ''}
+                        از {formatMoney(row.total, { withUnit: false })} ریال،{' '}
+                        {formatMoney(row.paid, { withUnit: false })} پرداخت شده
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="money text-sm font-bold text-destructive">
+                        {formatMoney(row.remaining, { withUnit: false })}
+                      </span>
+                      <Badge tone={tone} dot>
+                        {age === null
+                          ? 'نیازمندی'
+                          : age.daysLeft <= 0
+                            ? `${toPersianDigits(String(age.days))} روز گذشته`
+                            : `${toPersianDigits(String(age.daysLeft))} روز تا مهلت`}
+                      </Badge>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </CardBody>
+        </Card>
+      ) : null}
 
       {/* ───────────── مسیر سند ───────────── */}
       <Updating active={updating} className="space-y-4">
@@ -290,6 +553,14 @@ export function DashboardPage({
           icon="layers"
           title="مسیر سند"
           description="ترتیب مرحله‌ها از پیش‌نویس تا بایگانی؛ مرحله‌ای که بیشترین سند را دارد، برجسته است."
+          help={
+            <>
+              تعداد اسناد در هر مرحلهٔ گردش کار. این <strong>وضعیت گردش کار</strong> است،
+              نه وضعیت پرداخت: سندی می‌تواند بایگانی‌شده باشد و هنوز نیازمندی داشته
+              باشد.
+              {scopeNote}
+            </>
+          }
         />
         <CardBody className="pt-3">
           <DocumentPipeline byStatus={data.byStatus} />
@@ -302,6 +573,14 @@ export function DashboardPage({
           icon="trend-up"
           title="تفکیک مبالغ"
           description="از مبلغ کالا تا مبلغ نهایی؛ همان ترتیبی که در محاسبه فاکتور طی می‌شود."
+          help={
+            <>
+              مسیر محاسبه: مبلغ کالا − تخفیف = خالص، و خالص + مالیات و عوارض = جمع کل.
+              هر عدد، جمعِ همان ستون روی اسناد دامنه است. دو عقربه، سهم مالیات از جمع
+              کل و سهم تخفیف از مبلغ کالا را نشان می‌دهند.
+              {scopeNote}
+            </>
+          }
         />
         <CardBody className="grid gap-5 pt-3 lg:grid-cols-[1fr_auto]">
           {/* مبالغ این سامانه می‌توانند از ۲^۵۳ هم بزرگ‌تر باشند؛ پنج ستون در عرض
@@ -337,6 +616,15 @@ export function DashboardPage({
       <Card>
         <CardHeader
           icon="chart"
+          help={
+            <>
+              مبلغ نهایی فاکتورها به تفکیک <strong>ماه شمسی</strong>، بر مبنای
+              <strong> تاریخ صورتحساب</strong> هر فاکتور و نه تاریخ ثبت سند. در مبنای سال
+              مالی، محور از مهر شروع می‌شود و شش ماه آخرش در سال شمسی بعدی است. ماهِ
+              بدون فاکتور با مقدار صفر می‌آید، پس جای خالی در نمودار نمی‌ماند.
+              {scopeNote}
+            </>
+          }
           title="روند ماهانه فاکتورها"
           description={
             data.year === null
@@ -375,6 +663,14 @@ export function DashboardPage({
             icon="layers"
             title="اسناد بر اساس وضعیت"
             description="سهم هر وضعیت از تعداد اسناد؛ مبلغ هر وضعیت کنار برچسبش می‌آید."
+            help={
+              <>
+                سهم‌ها از <strong>تعداد سند</strong> حساب می‌شوند و نه از مبلغ: پیش‌نویس
+                هنوز فاکتوری ندارد، پس مبلغش صفر است و با مبنای مبلغ، ده‌ها سند سهم ۰٪
+                می‌گرفتند. مبلغ هر وضعیت در راهنمای همان بخش می‌آید.
+                {scopeNote}
+              </>
+            }
           />
           <CardBody className="pt-4">
             <DonutChart
@@ -398,7 +694,18 @@ export function DashboardPage({
         </Card>
 
         <Card>
-          <CardHeader icon="documents" title="اسناد بر اساس نوع" description="عادی در برابر ستاد" />
+          <CardHeader
+            icon="documents"
+            title="اسناد بر اساس نوع"
+            description="عادی در برابر ستاد"
+            help={
+              <>
+                سهم هر نوع سند از <strong>تعداد</strong> اسناد. سند ستاد فقط یک فاکتور
+                می‌پذیرد، پس تعداد بیشتر لزوماً مبلغ بیشتر نیست.
+                {scopeNote}
+              </>
+            }
+          />
           <CardBody className="pt-4">
             <DonutChart
               data={data.byType.map((row) => ({
@@ -435,6 +742,14 @@ export function DashboardPage({
             icon="store"
             title="ده فروشنده با بیشترین مبلغ"
             description="مبلغ نهایی فاکتورها، به ترتیب نزولی"
+            help={
+              <>
+                جمع مبلغ نهایی <strong>فاکتورها</strong> به تفکیک فروشنده، ده تای اول.
+                فاکتورهای بدون فروشنده در یک ردیف «بدون فروشنده» جمع می‌شوند. عدد کنار
+                هر میله، تعداد فاکتور همان فروشنده است.
+                {scopeNote}
+              </>
+            }
           />
           <CardBody className="pt-4">
             <RankedBars
@@ -454,6 +769,14 @@ export function DashboardPage({
             icon="database"
             title="ده فصل بودجه با بیشترین مبلغ"
             description="بر اساس عنوان فصل در لحظه ثبت فاکتور (snapshot)"
+            help={
+              <>
+                گروه‌بندی روی <strong>عنوان فصل در لحظهٔ ثبت فاکتور</strong> است و نه
+                عنوان امروز: تغییر نام یک فصل، گزارش‌های گذشته را عوض نمی‌کند — ولی اگر
+                فصلی تغییر نام داده باشد، ممکن است دو ردیف با دو نام ببینید.
+                {scopeNote}
+              </>
+            }
           />
           <CardBody className="pt-4">
             <RankedBars
@@ -490,6 +813,7 @@ function StatTile({
   tone,
   spark,
   sparkTitle,
+  help,
   updating = false,
 }: {
   icon: IconName;
@@ -497,6 +821,13 @@ function StatTile({
   value: string;
   caption: string;
   tone: keyof typeof TILE_TONES;
+  /**
+   * «این عدد دقیقاً چیست» — تعریف، دامنه و اینکه چه چیزی در آن **نیست**.
+   *
+   * عنوان کوتاهِ کاشی ناچار مبهم است («جمع کل» چه چیزی؟ مبلغ سند یا پرداخت‌شده؟)؛
+   * این علامت همان ابهام را برمی‌دارد بی‌آنکه کاشی شلوغ شود.
+   */
+  help?: ReactNode;
   /** روند ماهانه برای خط کوچک زیر کاشی؛ نبودنش کاشی را خراب نمی‌کند. */
   spark?: readonly (string | number)[];
   sparkTitle?: string;
@@ -516,7 +847,12 @@ function StatTile({
           <Icon name={icon} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-muted-foreground">{title}</p>
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="truncate">{title}</span>
+            {help ? (
+              <InfoHint label={title}>{help}</InfoHint>
+            ) : null}
+          </p>
           <p className="money mt-0.5 truncate text-xl font-bold">
             <AnimatedValue value={value} title={value} />
           </p>

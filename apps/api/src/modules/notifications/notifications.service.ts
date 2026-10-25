@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { NotificationKind, Prisma } from '@prisma/client';
-import type { Permission } from '@dm/shared';
+import {
+  NOTIFICATION_CATEGORIES,
+  kindsOfCategory,
+  type NotificationCategory,
+  type Permission,
+} from '@dm/shared';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
@@ -40,13 +45,22 @@ export class NotificationsService {
     query: ListQuery,
     user: AuthenticatedUser,
     unreadOnly = false,
+    category?: NotificationCategory,
   ): Promise<PageResult<unknown>> {
     const where: Prisma.NotificationWhereInput = {
       userId: user.id,
       ...(unreadOnly ? { readAt: null } : {}),
+      /*
+        فیلتر دسته **سمت سرور** است و نه در رابط.
+
+        اگر کلاینت صفحهٔ بیست‌تایی را می‌گرفت و خودش دسته را جدا می‌کرد، یک صفحه
+        می‌توانست خالی دربیاید در حالی که دسته ده اعلان دارد — و شمارنده با
+        محتوا نمی‌خواند.
+      */
+      ...(category === undefined ? {} : { kind: { in: kindsOfCategory(category) } }),
     };
 
-    const [items, total, unread] = await Promise.all([
+    const [items, total, unread, byCategory] = await Promise.all([
       this.prisma.notification.findMany({
         where,
         orderBy: [{ readAt: { sort: 'asc', nulls: 'first' } }, { createdAt: 'desc' }],
@@ -56,10 +70,36 @@ export class NotificationsService {
       this.prisma.notification.count({ where }),
       // شمارندهٔ خوانده‌نشده‌ها همیشه روی **همه** اعلان‌هاست، نه روی فیلتر جاری.
       this.prisma.notification.count({ where: { userId: user.id, readAt: null } }),
+
+      /*
+        خوانده‌نشده‌های هر دسته، برای نشان کنار کلید دسته‌ها.
+
+        روی **همهٔ** اعلان‌های کاربر حساب می‌شود و نه روی دستهٔ انتخاب‌شده، وگرنه
+        کاربری که در «پیگیری پرداخت» است، هرگز نمی‌دید که در «بازخوردها» چیزی
+        منتظرش است.
+      */
+      this.prisma.notification.groupBy({
+        by: ['kind'],
+        where: { userId: user.id, readAt: null },
+        _count: { _all: true },
+      }),
     ]);
 
-    return { ...toPageResult(items, total, query), unread } as PageResult<unknown> & {
+    const unreadByCategory = Object.fromEntries(
+      NOTIFICATION_CATEGORIES.map((name) => {
+        const kinds = new Set<string>(kindsOfCategory(name));
+        return [
+          name,
+          byCategory
+            .filter((row) => kinds.has(row.kind))
+            .reduce((sum, row) => sum + row._count._all, 0),
+        ];
+      }),
+    ) as Record<NotificationCategory, number>;
+
+    return { ...toPageResult(items, total, query), unread, unreadByCategory } as PageResult<unknown> & {
       unread: number;
+      unreadByCategory: Record<NotificationCategory, number>;
     };
   }
 

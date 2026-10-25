@@ -18,6 +18,28 @@ const archiveInfoSchema = z.object({
   notes: z.string().trim().max(2000).nullable().default(null),
 });
 
+/**
+ * وضعیت پرداخت.
+ *
+ * مبالغ **رشتهٔ رقمی** هستند، نه `number` — همان قرارداد مرز API (ADR-0003).
+ * در «پرداخت کامل» هیچ مبلغی گرفته نمی‌شود: سرور از مبلغ خود سند مشتقشان می‌کند.
+ */
+const paymentStatusSchema = z.object({
+  status: z.enum(['FULLY_PAID', 'OUTSTANDING']),
+  paidAmount: z
+    .string()
+    .regex(/^\d+$/, 'مبلغ باید عدد صحیح ریالی باشد')
+    .max(30)
+    .nullable()
+    .default(null),
+  outstandingAmount: z
+    .string()
+    .regex(/^\d+$/, 'مبلغ باید عدد صحیح ریالی باشد')
+    .max(30)
+    .nullable()
+    .default(null),
+});
+
 const inboxQuerySchema = listQuerySchema.extend({
   status: z.enum(['PENDING_ARCHIVE', 'ARCHIVED', 'NEEDS_REVISION']).optional(),
   fiscalYear: z.coerce.number().int().min(1300).max(1500).optional(),
@@ -25,6 +47,7 @@ const inboxQuerySchema = listQuerySchema.extend({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => (value === undefined ? undefined : value === 'true')),
+  paymentStatus: z.enum(['FULLY_PAID', 'OUTSTANDING', 'UNSET']).optional(),
 });
 
 @ApiTags('archive')
@@ -61,6 +84,17 @@ export class ArchiveController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.archive.saveInfo(documentId, body, user);
+  }
+
+  @RequirePermission('archive:write')
+  @Put('documents/:documentId/payment')
+  @ApiOperation({ summary: 'ثبت وضعیت پرداخت سند: پرداخت کامل یا نیازمندی' })
+  async paymentStatus(
+    @Param('documentId') documentId: string,
+    @Body(new ZodBody(paymentStatusSchema)) body: z.infer<typeof paymentStatusSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.archive.paymentStatus(documentId, body, user);
   }
 
   @RequirePermission('archive:write')

@@ -10,6 +10,8 @@ export * from './iban/banks.js';
 export * from './enums/enums.js';
 export * from './enums/permissions.js';
 export * from './workflow/document-workflow.js';
+export * from './documents/payment-settlement.js';
+export * from './notifications/categories.js';
 export * from './invoices/invoice-kind.js';
 export * from './invoices/fuel.js';
 export * from './invoices/split-payment.js';

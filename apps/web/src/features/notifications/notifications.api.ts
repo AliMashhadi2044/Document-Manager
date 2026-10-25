@@ -3,13 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../shared/api/client';
 import type { PageResult } from '../base-data/base-data.api';
 
-export type NotificationKind =
-  | 'DOCUMENT_SENT_TO_ARCHIVE'
-  | 'DOCUMENT_ARCHIVED'
-  | 'DOCUMENT_NEEDS_REVISION'
-  | 'FEEDBACK_CREATED'
-  | 'FEEDBACK_REPLIED'
-  | 'FEEDBACK_RESOLVED';
+// نوع اعلان از `@dm/shared` می‌آید؛ فهرست دستی اینجا، همان جایی بود که با افزودن
+// نوع تازه از enum سرور جا می‌ماند.
+export type { NotificationKind } from '@dm/shared';
+import type { NotificationCategory, NotificationKind } from '@dm/shared';
 
 export interface NotificationRow {
   readonly id: string;
@@ -25,22 +22,35 @@ export interface NotificationRow {
 
 export const notificationKeys = {
   list: ['notifications', 'list'] as const,
-  paged: (page: number, unreadOnly: boolean) =>
-    ['notifications', 'list', page, unreadOnly] as const,
+  paged: (page: number, unreadOnly: boolean, category: NotificationCategory | null) =>
+    ['notifications', 'list', page, unreadOnly, category] as const,
   unread: ['notifications', 'unread'] as const,
 };
 
-/** فهرست کامل با صفحه‌بندی — برای صفحهٔ اعلان‌ها. */
-export function useNotificationList(page: number, unreadOnly: boolean) {
+/** پاسخ فهرست، با شمارندهٔ خوانده‌نشده‌ها — کل و به تفکیک دسته. */
+export type NotificationListResult = PageResult<NotificationRow> & {
+  readonly unread: number;
+  readonly unreadByCategory: Record<NotificationCategory, number>;
+};
+
+/**
+ * فهرست کامل با صفحه‌بندی — برای صفحهٔ اعلان‌ها.
+ *
+ * فیلتر دسته **سمت سرور** اعمال می‌شود و نه اینجا: جدا کردن دسته روی یک صفحهٔ
+ * بیست‌تایی می‌توانست صفحه‌ای خالی بدهد در حالی که دسته ده اعلان دارد.
+ */
+export function useNotificationList(
+  page: number,
+  unreadOnly: boolean,
+  category: NotificationCategory | null = null,
+) {
   const query = new URLSearchParams({ page: String(page), pageSize: '20' });
   if (unreadOnly) query.set('unread', 'true');
+  if (category !== null) query.set('category', category);
 
   return useQuery({
-    queryKey: notificationKeys.paged(page, unreadOnly),
-    queryFn: () =>
-      apiFetch<PageResult<NotificationRow> & { unread: number }>(
-        `/notifications?${query.toString()}`,
-      ),
+    queryKey: notificationKeys.paged(page, unreadOnly, category),
+    queryFn: () => apiFetch<NotificationListResult>(`/notifications?${query.toString()}`),
     placeholderData: (previous) => previous,
   });
 }

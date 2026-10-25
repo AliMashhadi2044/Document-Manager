@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { JALALI_MONTH_NAMES, jalaliToIsoDate } from '@dm/shared';
+import {
+  JALALI_MONTH_NAMES,
+  PAYMENT_SETTLEMENT_UNSET,
+  jalaliToIsoDate,
+  type PaymentSettlementStatus,
+} from '@dm/shared';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
@@ -7,6 +12,17 @@ import { DocumentAccessService } from '../documents/document-access.service';
 
 /** مبنای سال در فیلتر داشبورد. */
 export type YearBasis = 'fiscal' | 'jalali';
+
+/**
+ * نمای وضعیت پرداخت در داشبورد.
+ *
+ * `all` یعنی بدون فیلتر، و `UNSET` یعنی اسنادی که بایگان هنوز وضعیتشان را تعیین
+ * نکرده — که با «پرداخت کامل» یکی نیست و در یک سامانهٔ مالی نباید با آن قاطی شود.
+ */
+export type SettlementView = 'all' | PaymentSettlementStatus | typeof PAYMENT_SETTLEMENT_UNSET;
+
+/** چند سند نیازمندی در فهرست پیگیری داشبورد بیاید. */
+const FOLLOW_UP_LIMIT = 8;
 
 /**
  * ماه شروع سال مالی.
@@ -47,12 +63,35 @@ export class DashboardService {
    * می‌شود) و هم `jalali_year` (سال شمسیِ ثبت). سندی که اسفند ثبت شده ولی به سال مالی
    * بعد تعلق دارد، در دو نما در دو جای متفاوت دیده می‌شود — و هر دو درست‌اند.
    */
-  async summary(user: AuthenticatedUser, year?: number, basis: YearBasis = 'fiscal') {
+  async summary(
+    user: AuthenticatedUser,
+    year?: number,
+    basis: YearBasis = 'fiscal',
+    settlement: SettlementView = 'all',
+  ) {
     const scope = this.access.scope(user);
-    const where =
+    const yearWhere =
       year === undefined
         ? scope
         : { ...scope, ...(basis === 'jalali' ? { jalaliYear: year } : { fiscalYear: year }) };
+
+    /*
+      فیلتر وضعیت پرداخت روی **همهٔ** اعداد داشبورد اعمال می‌شود، نه فقط کاشی‌های
+      پرداخت: وقتی کاربر «نیازمندی» را انتخاب می‌کند، جمع کل و روند ماهانه و
+      رتبه‌بندی فروشنده هم باید همان زیرمجموعه را بگویند. داشبوردی که نیمی از
+      اعدادش فیلتر شده باشد و نیمی نه، بدتر از داشبورد بی‌فیلتر است.
+
+      استثنا: کارت «وضعیت پرداخت» خودش باید همهٔ حالت‌ها را نشان دهد، وگرنه با
+      انتخاب یک وضعیت، بقیه از نمودار ناپدید می‌شوند و نسبت‌ها بی‌معنا. آن یکی از
+      `yearWhere` می‌خواند.
+    */
+    const where =
+      settlement === 'all'
+        ? yearWhere
+        : {
+            ...yearWhere,
+            paymentStatus: settlement === PAYMENT_SETTLEMENT_UNSET ? null : settlement,
+          };
 
     const [
       documentCount,
@@ -64,6 +103,9 @@ export class DashboardService {
       pendingArchive,
       topVendors,
       byChapter,
+      bySettlement,
+      settlementTotals,
+      followUps,
     ] = await Promise.all([
       this.prisma.financialDocument.count({ where }),
 
@@ -118,6 +160,51 @@ export class DashboardService {
         orderBy: { _sum: { totalAmount: 'desc' } },
         take: 10,
       }),
+
+      /*
+        وضعیت پرداخت — روی `yearWhere` و نه `where`.
+
+        این کارت تصویر کاملِ همان سال است؛ اگر فیلتر وضعیت را هم می‌خورد، انتخاب
+        «نیازمندی» بقیهٔ وضعیت‌ها را از نمودار پاک می‌کرد و دایره همیشه ۱۰۰٪
+        می‌شد — عددی درست که چیز غلطی می‌گوید.
+
+        `groupBy` روی ستونی که `NULL` می‌پذیرد، گروه `null` را هم برمی‌گرداند؛
+        همان «تعیین‌نشده» است و جدا شمرده می‌شود.
+      */
+      this.prisma.financialDocument.groupBy({
+        by: ['paymentStatus'],
+        where: yearWhere,
+        _count: { _all: true },
+        _sum: { totalAmount: true, paidAmount: true, outstandingAmount: true },
+      }),
+
+      this.prisma.financialDocument.aggregate({
+        where: { ...yearWhere, paymentStatus: 'OUTSTANDING' },
+        _sum: { paidAmount: true, outstandingAmount: true },
+        _count: { _all: true },
+      }),
+
+      /*
+        کارتابل پیگیری: قدیمی‌ترین نیازمندی‌ها اول.
+
+        فوریت (آبی تا قرمز) در رابط از `paymentStatusAt` حساب می‌شود و اینجا ذخیره
+        نمی‌شود: رنگ، تابعی از «حالا» است و ذخیره‌اش یعنی یک کار شبانه که هر بار
+        نچرخد، سامانه دروغ بگوید.
+      */
+      this.prisma.financialDocument.findMany({
+        where: { ...yearWhere, paymentStatus: 'OUTSTANDING' },
+        orderBy: { paymentStatusAt: 'asc' },
+        take: FOLLOW_UP_LIMIT,
+        select: {
+          id: true,
+          title: true,
+          documentNumber: true,
+          totalAmount: true,
+          paidAmount: true,
+          outstandingAmount: true,
+          paymentStatusAt: true,
+        },
+      }),
     ]);
 
     const vendorIds = topVendors
@@ -132,8 +219,16 @@ export class DashboardService {
           });
     const nameById = new Map(vendorNames.map((vendor) => [vendor.id, vendor.name]));
 
+    const settlementRow = (status: PaymentSettlementStatus | null) =>
+      bySettlement.find((row) => row.paymentStatus === status);
+
+    const fullyPaid = settlementRow('FULLY_PAID');
+    const outstanding = settlementRow('OUTSTANDING');
+    const unset = settlementRow(null);
+
     return {
       basis,
+      settlement,
       year: year ?? null,
       fiscalYear: basis === 'fiscal' ? (year ?? null) : null,
       jalaliYear: basis === 'jalali' ? (year ?? null) : null,
@@ -171,6 +266,40 @@ export class DashboardService {
         total: (row._sum.totalAmount ?? 0n).toString(),
         tax: (row._sum.taxAmount ?? 0n).toString(),
       })),
+      /*
+        وضعیت پرداخت.
+
+        هر سه حالت **همیشه** می‌آیند، حتی با مقدار صفر: کاشی‌ای که با نبودِ داده
+        ناپدید شود، به کاربر می‌گوید «چنین چیزی نداریم» در حالی که حرف درست
+        «هیچ‌کدام نیست» است.
+      */
+      settlementSummary: {
+        fullyPaid: {
+          count: fullyPaid?._count._all ?? 0,
+          total: (fullyPaid?._sum.totalAmount ?? 0n).toString(),
+        },
+        outstanding: {
+          count: outstanding?._count._all ?? 0,
+          total: (outstanding?._sum.totalAmount ?? 0n).toString(),
+          paid: (settlementTotals._sum.paidAmount ?? 0n).toString(),
+          remaining: (settlementTotals._sum.outstandingAmount ?? 0n).toString(),
+        },
+        unset: {
+          count: unset?._count._all ?? 0,
+          total: (unset?._sum.totalAmount ?? 0n).toString(),
+        },
+      },
+
+      outstandingFollowUps: followUps.map((row) => ({
+        id: row.id,
+        title: row.title,
+        documentNumber: row.documentNumber,
+        total: row.totalAmount.toString(),
+        paid: (row.paidAmount ?? 0n).toString(),
+        remaining: (row.outstandingAmount ?? 0n).toString(),
+        since: row.paymentStatusAt?.toISOString() ?? null,
+      })),
+
       byMonth: await this.monthlySeries(where, year ?? (await this.latestYear(user, basis)), basis),
     };
   }

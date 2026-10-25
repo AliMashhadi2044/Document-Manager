@@ -1,10 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DocumentStatus } from '@dm/shared';
+import type { DocumentStatus, PaymentSettlementStatus } from '@dm/shared';
 
 import { apiFetch } from '../../shared/api/client';
 import type { PageResult } from '../base-data/base-data.api';
 
-export interface ArchiveInboxRow {
+/** وضعیت پرداخت همان‌طور که سرور برمی‌گرداند؛ `null` یعنی هنوز تعیین نشده. */
+export interface SettlementFields {
+  readonly paymentStatus: PaymentSettlementStatus | null;
+  readonly paidAmount: string | null;
+  readonly outstandingAmount: string | null;
+  /** لحظهٔ ثبت وضعیت فعلی — مبنای مهلت ده‌روزهٔ نیازمندی. */
+  readonly paymentStatusAt: string | null;
+  readonly paymentDate: string | null;
+}
+
+export interface ArchiveInboxRow extends SettlementFields {
   readonly id: string;
   readonly title: string;
   readonly status: DocumentStatus;
@@ -22,7 +32,7 @@ export interface ArchiveInboxRow {
   readonly _count: { readonly invoices: number; readonly attachments: number };
 }
 
-export interface ArchiveDetail {
+export interface ArchiveDetail extends SettlementFields {
   readonly id: string;
   readonly title: string;
   readonly status: DocumentStatus;
@@ -37,6 +47,7 @@ export interface ArchiveDetail {
     readonly archivedAt: string | null;
     readonly archivedBy: { readonly id: string; readonly fullName: string } | null;
   } | null;
+  readonly paymentStatusBy: { readonly id: string; readonly fullName: string } | null;
 }
 
 export interface ArchiveInboxFilters {
@@ -45,6 +56,8 @@ export interface ArchiveInboxFilters {
   readonly status: 'PENDING_ARCHIVE' | 'ARCHIVED' | 'NEEDS_REVISION' | '';
   readonly fiscalYear: string;
   readonly hasOpenFeedback: '' | 'true' | 'false';
+  /** `UNSET` یعنی تعیین‌نشده — که با «پرداخت کامل» یکی نیست. */
+  readonly paymentStatus: '' | PaymentSettlementStatus | 'UNSET';
 }
 
 export const archiveKeys = {
@@ -58,6 +71,7 @@ export function useArchiveInbox(filters: ArchiveInboxFilters) {
   if (filters.status) query.set('status', filters.status);
   if (filters.fiscalYear) query.set('fiscalYear', filters.fiscalYear);
   if (filters.hasOpenFeedback) query.set('hasOpenFeedback', filters.hasOpenFeedback);
+  if (filters.paymentStatus) query.set('paymentStatus', filters.paymentStatus);
 
   return useQuery({
     queryKey: archiveKeys.inbox(filters),
@@ -85,6 +99,35 @@ export function useSaveArchiveInfo(documentId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['archive'] });
       void queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
+}
+
+/**
+ * ثبت وضعیت پرداخت.
+ *
+ * مبالغ فقط در «نیازمندی» فرستاده می‌شوند؛ در «پرداخت کامل» سرور از مبلغ خود سند
+ * مشتقشان می‌کند و فرستادنشان از اینجا فقط راهی می‌شد برای ثبت تناقض.
+ *
+ * داشبورد و فهرست اسناد هم بی‌اعتبار می‌شوند: وضعیت پرداخت در هر دو دیده می‌شود.
+ */
+export function useSavePaymentStatus(documentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      status: PaymentSettlementStatus;
+      paidAmount: string | null;
+      outstandingAmount: string | null;
+    }) =>
+      apiFetch<ArchiveDetail>(`/archive/documents/${documentId}/payment`, {
+        method: 'PUT',
+        json: input,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['archive'] });
+      void queryClient.invalidateQueries({ queryKey: ['documents'] });
+      void queryClient.invalidateQueries({ queryKey: ['analytics'] });
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
 }

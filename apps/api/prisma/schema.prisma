@@ -49,6 +49,7 @@ model User {
   feedbackReplies      ReviewFeedbackReply[]         @relation("FeedbackReplyBy")
   feedbackStatusEvents ReviewFeedbackStatusHistory[] @relation("FeedbackStatusActor")
   notifications        Notification[]                @relation("NotificationRecipient")
+  paymentStatusSet     FinancialDocument[]           @relation("DocumentPaymentStatusBy")
 
   @@index([isActive])
   @@map("users")
@@ -253,6 +254,17 @@ enum InvoiceKind {
   FUEL
 
   @@map("invoice_kind")
+}
+
+/// وضعیت پرداخت سند — بایگان تعیینش می‌کند، پس از بایگانی هم قابل تغییر است.
+///
+/// نبودِ مقدار (`NULL`) یعنی هنوز تعیین نشده، و این با «پرداخت کامل» یکی نیست:
+/// داشبورد و گزارش‌ها هر سه حالت را جدا می‌شمارند.
+enum PaymentSettlementStatus {
+  FULLY_PAID // پرداخت کامل
+  OUTSTANDING // نیازمندی — بخشی از مبلغ مانده است
+
+  @@map("payment_settlement_status")
 }
 
 enum PaymentMethodKind {
@@ -902,6 +914,25 @@ model FinancialDocument {
   finalizedById String?   @map("finalized_by_id") @db.Uuid
   archivedAt    DateTime? @map("archived_at") @db.Timestamptz(3)
 
+  /// ─────────── وضعیت پرداخت (نقش بایگانی) ───────────
+  ///
+  /// `NULL` یعنی بایگان هنوز تعیین نکرده است.
+  ///
+  /// `paidAmount + outstandingAmount = totalAmount` همیشه برقرار است و قید دیتابیس
+  /// نگهش می‌دارد — همان قاعده‌ای که `checkSettlement` در `@dm/shared` هم اعمال
+  /// می‌کند. در «پرداخت کامل»، این دو مشتق‌اند و از کاربر پرسیده نمی‌شوند.
+  paymentStatus     PaymentSettlementStatus? @map("payment_status")
+  paidAmount        BigInt?                  @map("paid_amount") @db.BigInt
+  outstandingAmount BigInt?                  @map("outstanding_amount") @db.BigInt
+
+  /// لحظهٔ ثبت **وضعیت فعلی**؛ در نیازمندی، ساعتِ مهلت ده‌روزه از همین‌جا می‌خوانَد.
+  paymentStatusAt   DateTime? @map("payment_status_at") @db.Timestamptz(3)
+  paymentStatusById String?   @map("payment_status_by_id") @db.Uuid
+
+  /// تاریخ پرداخت = لحظه‌ای که بایگان وضعیت را «پرداخت کامل» کرد. تاریخ دستی
+  /// جداگانه‌ای وجود ندارد: دو روایت از یک رویداد، دیر یا زود واگرا می‌شوند.
+  paymentDate DateTime? @map("payment_date") @db.Timestamptz(3)
+
   /// ─────────── سطل زباله ───────────
   ///
   /// حذف در این سامانه **هیچ‌وقت** ردیف را پاک نمی‌کند؛ فقط `deleted_at` را پر
@@ -918,6 +949,7 @@ model FinancialDocument {
   buyerSnapshot BuyerSnapshot @relation(fields: [buyerSnapshotId], references: [id], onDelete: Restrict)
   createdBy     User          @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   deletedBy     User?         @relation("DocumentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  paymentStatusBy User?       @relation("DocumentPaymentStatusBy", fields: [paymentStatusById], references: [id], onDelete: SetNull)
 
   stadMetadata DocumentStadMetadata?
   invoices     Invoice[]
@@ -937,6 +969,8 @@ model FinancialDocument {
   @@index([status, createdAt])
   /// فهرست سطل زباله و — مهم‌تر — کنار گذاشتن حذف‌شده‌ها در هر کوئری دیگر.
   @@index([deletedAt])
+  /// کارتابل نیازمندی‌ها: قدیمی‌ترین‌ها اول، و شمارش‌های داشبورد.
+  @@index([paymentStatus, paymentStatusAt])
   @@map("financial_documents")
 }
 
@@ -1322,6 +1356,8 @@ enum NotificationKind {
   FEEDBACK_CREATED
   FEEDBACK_REPLIED
   FEEDBACK_RESOLVED
+  DOCUMENT_PAYMENT_OUTSTANDING // نیازمندی ثبت شد — کارپردازی باید پیگیری کند
+  DOCUMENT_PAYMENT_SETTLED // نیازمندی بسته شد
 }
 
 /// اطلاعات فرایند بایگانی یک سند — یک ردیف به‌ازای هر سند، از لحظه ارجاع.

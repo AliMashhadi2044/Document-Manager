@@ -210,6 +210,17 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       'AnalyticsController.queueExport',
       'AnalyticsController.saveView',
       'ArchiveController.complete',
+      /*
+        وضعیت پرداخت: تنها عددِ مالی‌ای که بایگانی می‌نویسد.
+
+        مرز اینجا عوض شد و عمداً: سندی که بایگانی می‌شود، کار مالی‌اش لزوماً تمام
+        نشده و کسی جز بایگان این را نمی‌داند. ولی آنچه می‌نویسد **مبلغ سند نیست**
+        — مبلغ سند و فاکتورهایش دست‌نخورده می‌مانند و سرور هم اجازهٔ تغییرشان را
+        نمی‌دهد (`document:update` و `invoice:*` را ندارد، و همین تست پایین‌تر
+        صریحاً می‌سنجدش). این مسیر فقط می‌گوید از آن مبلغ چقدر پرداخت شده، و قید
+        دیتابیس نمی‌گذارد جمعِ پرداخت‌شده و نیازمندی با مبلغ سند فرق کند.
+      */
+      'ArchiveController.paymentStatus',
       'ArchiveController.saveInfo',
       'AttachmentsController.remove',
       'AttachmentsController.upload',

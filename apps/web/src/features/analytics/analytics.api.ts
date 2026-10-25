@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { FilterGroup, FilterOperator, ReportFieldType, ReportSort } from '@dm/shared';
+import type {
+  FilterGroup,
+  FilterOperator,
+  PaymentSettlementStatus,
+  ReportFieldType,
+  ReportSort,
+} from '@dm/shared';
 
 import { API_BASE, ApiError, apiFetch } from '../../shared/api/client';
 
@@ -81,8 +87,16 @@ export interface ExportJobDto {
 /** مبنای سال در فیلتر داشبورد. */
 export type YearBasis = 'fiscal' | 'jalali';
 
+/**
+ * نمای وضعیت پرداخت در داشبورد.
+ *
+ * `UNSET` یعنی بایگان هنوز تعیین نکرده — و این با «پرداخت کامل» یکی نیست.
+ */
+export type SettlementView = 'all' | PaymentSettlementStatus | 'UNSET';
+
 export interface DashboardDto {
   readonly basis: YearBasis;
+  readonly settlement: SettlementView;
   readonly year: number | null;
   readonly fiscalYear: number | null;
   readonly jalaliYear: number | null;
@@ -112,6 +126,34 @@ export interface DashboardDto {
     readonly total: string;
     readonly tax: string;
   }[];
+  /**
+   * وضعیت پرداخت — همیشه روی **همهٔ** اسناد همان سال، بدون فیلتر وضعیت پرداخت.
+   *
+   * اگر این هم فیلتر می‌شد، انتخاب «نیازمندی» بقیهٔ وضعیت‌ها را از نمودار پاک
+   * می‌کرد و دایره همیشه ۱۰۰٪ می‌شد: عددی درست که چیز غلطی می‌گوید.
+   */
+  readonly settlementSummary: {
+    readonly fullyPaid: { readonly count: number; readonly total: string };
+    readonly outstanding: {
+      readonly count: number;
+      readonly total: string;
+      /** جمع مبلغ پرداخت‌شدهٔ همین اسناد. */
+      readonly paid: string;
+      /** جمع مبلغ باقی‌مانده — همان چیزی که باید پیگیری شود. */
+      readonly remaining: string;
+    };
+    readonly unset: { readonly count: number; readonly total: string };
+  };
+  /** قدیمی‌ترین نیازمندی‌ها؛ فوریتشان در رابط از `since` حساب می‌شود. */
+  readonly outstandingFollowUps: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly documentNumber: string | null;
+    readonly total: string;
+    readonly paid: string;
+    readonly remaining: string;
+    readonly since: string | null;
+  }[];
   /** روند ماه‌های **شمسی** یک سال مالی؛ ماه بدون فاکتور هم با مقدار صفر می‌آید. */
   readonly byMonth: readonly {
     readonly month: number;
@@ -130,8 +172,8 @@ export const analyticsKeys = {
     ['analytics', 'query', dataset, request] as const,
   views: (dataset: string) => ['analytics', 'views', dataset] as const,
   exports: ['analytics', 'exports'] as const,
-  dashboard: (basis: YearBasis, year: number | null) =>
-    ['analytics', 'dashboard', basis, year] as const,
+  dashboard: (basis: YearBasis, year: number | null, settlement: SettlementView) =>
+    ['analytics', 'dashboard', basis, year, settlement] as const,
   years: ['analytics', 'years'] as const,
 };
 
@@ -261,12 +303,17 @@ export function useDeleteView(dataset: string) {
  * تازه برسد. بدون آن، کل صفحه به اسکلت برمی‌گردد و کاربری که فقط یک فیلتر را
  * عوض کرده، همه زمینه را از دست می‌دهد.
  */
-export function useDashboard(basis: YearBasis, year: number | null) {
+export function useDashboard(
+  basis: YearBasis,
+  year: number | null,
+  settlement: SettlementView = 'all',
+) {
   return useQuery({
-    queryKey: analyticsKeys.dashboard(basis, year),
+    queryKey: analyticsKeys.dashboard(basis, year, settlement),
     queryFn: () => {
       const query = new URLSearchParams({ basis });
       if (year !== null) query.set('year', String(year));
+      if (settlement !== 'all') query.set('settlement', settlement);
       return apiFetch<DashboardDto>(`/analytics/dashboard?${query.toString()}`);
     },
     placeholderData: (previous) => previous,

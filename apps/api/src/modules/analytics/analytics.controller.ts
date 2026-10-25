@@ -24,9 +24,12 @@ import {
 import { ZodBody } from '../../common/validation/zod.pipe';
 import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { AnalyticsService } from './analytics.service';
-import { DashboardService } from './dashboard.service';
+import { DashboardService, type SettlementView } from './dashboard.service';
 import { ExportService } from './export.service';
 import { ViewsService } from './views.service';
+
+/** نماهای مجاز وضعیت پرداخت؛ ورودی ناشناخته به «همه» می‌افتد، نه خطا. */
+const SETTLEMENT_VIEWS: readonly SettlementView[] = ['all', 'FULLY_PAID', 'OUTSTANDING', 'UNSET'];
 
 const saveViewSchema = z.object({
   id: z.string().uuid().optional(),
@@ -211,11 +214,19 @@ export class AnalyticsController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('year') year?: string,
     @Query('basis') basis?: string,
+    @Query('settlement') settlement?: string,
   ) {
     const parsed = year === undefined || year === '' ? undefined : Number(year);
     const safeYear = parsed !== undefined && Number.isInteger(parsed) ? parsed : undefined;
     // هر چیزی جز 'jalali' به مبنای پیش‌فرض می‌افتد؛ ورودی ناشناخته خطا نمی‌دهد.
-    return this.dashboard.summary(user, safeYear, basis === 'jalali' ? 'jalali' : 'fiscal');
+    return this.dashboard.summary(
+      user,
+      safeYear,
+      basis === 'jalali' ? 'jalali' : 'fiscal',
+      SETTLEMENT_VIEWS.includes(settlement as SettlementView)
+        ? (settlement as SettlementView)
+        : 'all',
+    );
   }
 
   @RequirePermission('report:run')

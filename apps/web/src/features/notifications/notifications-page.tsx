@@ -2,12 +2,20 @@ import { useState } from 'react';
 
 import { Button } from '../../shared/ui/button';
 import { Badge } from '../../shared/ui/badge';
-import { Icon } from '../../shared/ui/icon';
+import { Icon, type IconName } from '../../shared/ui/icon';
 import { Card } from '../../shared/ui/card';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/ui/states';
 import { cn } from '../../shared/ui/cn';
 import { formatIsoAsJalali, toPersianDigits } from '../../shared/format/money';
-import { KIND_ICONS, KIND_LABELS, KIND_TONES } from './notification-kinds';
+import {
+  CATEGORY_ICONS,
+  CATEGORY_LABELS,
+  KIND_ICONS,
+  KIND_LABELS,
+  KIND_TONES,
+  NOTIFICATION_CATEGORIES,
+  type NotificationCategory,
+} from './notification-kinds';
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -21,6 +29,11 @@ import {
  * نشانِ سربرگ برای «همین حالا چه خبر شد» است و عمداً کوتاه می‌ماند؛ این صفحه برای
  * مرور کامل است: صفحه‌بندی سمت سرور، فیلتر خوانده‌نشده‌ها و جزئیات هر اعلان
  * (نوع، زمان، متن و سندِ مربوط) در یک نگاه.
+ *
+ * **دسته‌ها** از همین‌جا شروع شدند: کارپردازی که روزی ده اعلان «ارجاع به بایگانی»
+ * می‌گیرد، نباید برای پیدا کردن یک نیازمندی پرداخت فهرست را بالا و پایین کند.
+ * شمارندهٔ کنار هر دسته روی **همهٔ** اعلان‌های کاربر است و نه دستهٔ باز، وگرنه
+ * کسی که در «پیگیری پرداخت» ایستاده هرگز نمی‌دید در «بازخوردها» چیزی منتظرش است.
  */
 export function NotificationsPage({
   onOpenDocument,
@@ -29,8 +42,9 @@ export function NotificationsPage({
 }): JSX.Element {
   const [page, setPage] = useState(1);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [category, setCategory] = useState<NotificationCategory | null>(null);
 
-  const list = useNotificationList(page, unreadOnly);
+  const list = useNotificationList(page, unreadOnly, category);
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
 
@@ -75,6 +89,32 @@ export function NotificationsPage({
         ) : null}
       </div>
 
+      {/* ───────────── دسته‌ها ───────────── */}
+      <div className="flex flex-wrap gap-2 border-b border-border pb-3">
+        <CategoryTab
+          active={category === null}
+          label="همه دسته‌ها"
+          count={list.data?.unread ?? 0}
+          onClick={() => {
+            setCategory(null);
+            setPage(1);
+          }}
+        />
+        {NOTIFICATION_CATEGORIES.map((name) => (
+          <CategoryTab
+            key={name}
+            active={category === name}
+            icon={CATEGORY_ICONS[name]}
+            label={CATEGORY_LABELS[name]}
+            count={list.data?.unreadByCategory?.[name] ?? 0}
+            onClick={() => {
+              setCategory(name);
+              setPage(1);
+            }}
+          />
+        ))}
+      </div>
+
       {list.isPending ? <LoadingState label="در حال خواندن اعلان‌ها…" /> : null}
 
       {list.isError ? (
@@ -83,8 +123,14 @@ export function NotificationsPage({
 
       {list.data && list.data.items.length === 0 ? (
         <EmptyState
-          title={unreadOnly ? 'اعلان خوانده‌نشده‌ای ندارید' : 'اعلانی ندارید'}
-          description="اعلان‌ها هنگام ارجاع سند، بایگانی و بازخورد ساخته می‌شوند."
+          title={
+            category === null
+              ? unreadOnly
+                ? 'اعلان خوانده‌نشده‌ای ندارید'
+                : 'اعلانی ندارید'
+              : `در «${CATEGORY_LABELS[category]}» اعلانی ندارید`
+          }
+          description="اعلان‌ها هنگام ارجاع سند، بایگانی، بازخورد و ثبت نیازمندی پرداخت ساخته می‌شوند."
         />
       ) : null}
 
@@ -128,6 +174,43 @@ export function NotificationsPage({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** کلید یک دسته، با شمارندهٔ خوانده‌نشده‌هایش. */
+function CategoryTab({
+  active,
+  label,
+  count,
+  icon,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  count: number;
+  icon?: IconName;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors',
+        active
+          ? 'border-primary bg-primary/10 font-semibold text-primary'
+          : 'border-border text-muted-foreground hover:bg-muted',
+      )}
+    >
+      {icon ? <Icon name={icon} size={14} /> : null}
+      {label}
+      {count > 0 ? (
+        <span className="money rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
+          {toPersianDigits(String(count))}
+        </span>
+      ) : null}
+    </button>
   );
 }
 

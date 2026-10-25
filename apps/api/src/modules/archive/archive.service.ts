@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type FinancialDocument } from '@prisma/client';
+import {
+  PAYMENT_SETTLEMENT_LABELS,
+  checkSettlement,
+  type PaymentSettlementStatus,
+} from '@dm/shared';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -15,6 +20,18 @@ import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
 import { DocumentAccessService } from '../documents/document-access.service';
 import { DocumentsService } from '../documents/documents.service';
 import { NotificationsService } from '../notifications/notifications.service';
+
+/**
+ * وضعیت پرداخت، همان‌طور که بایگان ثبتش می‌کند.
+ *
+ * مبالغ فقط در «نیازمندی» می‌آیند؛ در «پرداخت کامل» مشتق‌اند و پرسیدنشان فقط راهی
+ * می‌شد برای ثبت تناقض.
+ */
+export interface PaymentStatusInput {
+  readonly status: PaymentSettlementStatus;
+  readonly paidAmount: string | null;
+  readonly outstandingAmount: string | null;
+}
 
 export interface ArchiveInfoInput {
   readonly documentNumber: string;
@@ -49,6 +66,8 @@ export class ArchiveService {
       status?: 'PENDING_ARCHIVE' | 'ARCHIVED' | 'NEEDS_REVISION' | undefined;
       fiscalYear?: number | undefined;
       hasOpenFeedback?: boolean | undefined;
+      /** `UNSET` یعنی هنوز تعیین‌نشده — که با «پرداخت کامل» یکی نیست. */
+      paymentStatus?: PaymentSettlementStatus | 'UNSET' | undefined;
     },
     user: AuthenticatedUser,
   ): Promise<PageResult<unknown>> {
@@ -61,6 +80,11 @@ export class ArchiveService {
         : query.hasOpenFeedback
           ? { openFeedbackCount: { gt: 0 } }
           : { openFeedbackCount: 0 }),
+      ...(query.paymentStatus === undefined
+        ? {}
+        : query.paymentStatus === 'UNSET'
+          ? { paymentStatus: null }
+          : { paymentStatus: query.paymentStatus }),
       ...(query.search
         ? {
             OR: [
@@ -220,6 +244,184 @@ export class ArchiveService {
     return updated;
   }
 
+  /**
+   * ثبت وضعیت پرداخت سند.
+   *
+   * سه تصمیم که ارزش نوشتن دارند:
+   *
+   *  ۱. **پس از بایگانی هم قابل تغییر است.** نیازمندی اصلاً برای همین وجود دارد:
+   *     سند بایگانی شده و پول هنوز نرفته. قفل کردنش روی `ARCHIVED` یعنی بستن تنها
+   *     جایی که می‌شد پیگیری را به پایان رساند.
+   *
+   *  ۲. **تاریخ پرداخت ورودی نیست.** همان لحظه‌ای است که وضعیت «پرداخت کامل» ثبت
+   *     می‌شود؛ یک فیلد تاریخِ دستی، یعنی دو روایت از یک رویداد.
+   *
+   *  ۳. **اعلان فقط روی تغییر وضعیت.** ذخیرهٔ دوبارهٔ همان نیازمندی (مثلاً اصلاح
+   *     مبلغ) نباید کارتابل کارپرداز را پر کند.
+   */
+  async paymentStatus(
+    documentId: string,
+    input: PaymentStatusInput,
+    user: AuthenticatedUser,
+  ): Promise<FinancialDocument> {
+    const document = await this.access.assertDocumentVisible(documentId, user);
+
+    if (
+      document.status !== 'PENDING_ARCHIVE' &&
+      document.status !== 'NEEDS_REVISION' &&
+      document.status !== 'ARCHIVED'
+    ) {
+      throw AppError.conflict(
+        'DOCUMENT_NOT_IN_ARCHIVE',
+        'وضعیت پرداخت پس از ارجاع سند به بایگانی ثبت می‌شود',
+      );
+    }
+
+    const fullyPaid = input.status === 'FULLY_PAID';
+    const paidAmount = fullyPaid
+      ? document.totalAmount
+      : input.paidAmount === null
+        ? null
+        : BigInt(input.paidAmount);
+    const outstandingAmount = fullyPaid
+      ? 0n
+      : input.outstandingAmount === null
+        ? null
+        : BigInt(input.outstandingAmount);
+
+    const problem = checkSettlement(
+      input.status,
+      paidAmount,
+      outstandingAmount,
+      document.totalAmount,
+    );
+    if (problem !== null) throw this.settlementError(problem, document.totalAmount);
+
+    const now = new Date();
+    const changed = document.paymentStatus !== input.status;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.financialDocument.update({
+        where: { id: documentId },
+        data: {
+          paymentStatus: input.status,
+          paidAmount,
+          outstandingAmount,
+          // ساعت پیگیری فقط با **تغییر وضعیت** از نو شروع می‌شود؛ اصلاح مبلغِ همان
+          // نیازمندی، مهلت ده‌روزه را عقب نمی‌اندازد.
+          ...(changed ? { paymentStatusAt: now } : {}),
+          paymentStatusById: user.id,
+          paymentDate: fullyPaid ? (document.paymentDate ?? now) : null,
+        },
+      });
+
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'DOCUMENT_PAYMENT_STATUS',
+          entityType: 'financialDocument',
+          entityId: documentId,
+          documentId,
+          before: {
+            paymentStatus: document.paymentStatus,
+            paidAmount: document.paidAmount?.toString() ?? null,
+            outstandingAmount: document.outstandingAmount?.toString() ?? null,
+          },
+          after: {
+            paymentStatus: next.paymentStatus,
+            paidAmount: next.paidAmount?.toString() ?? null,
+            outstandingAmount: next.outstandingAmount?.toString() ?? null,
+          },
+        },
+        tx,
+      );
+
+      return next;
+    });
+
+    if (changed) await this.announceSettlement(document, updated, user);
+
+    return updated;
+  }
+
+  /**
+   * اعلان تغییر وضعیت پرداخت به کارپردازی.
+   *
+   * گیرنده با **مجوز** انتخاب می‌شود و نه با نام نقش: کاری که اینجا باید انجام
+   * شود ساختن و اصلاح سند است، پس هرکس `document:create` دارد همان کسی است که
+   * می‌تواند پیگیری کند. سازندهٔ سند هم جداگانه خبر می‌شود، حتی اگر امروز دیگر آن
+   * مجوز را نداشته باشد.
+   */
+  private async announceSettlement(
+    before: FinancialDocument,
+    after: FinancialDocument,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    const outstanding = after.paymentStatus === 'OUTSTANDING';
+
+    const input = outstanding
+      ? {
+          kind: 'DOCUMENT_PAYMENT_OUTSTANDING' as const,
+          title: `نیازمندی پرداخت: «${after.title}»`,
+          body:
+            `مبلغ باقی‌مانده ${(after.outstandingAmount ?? 0n).toString()} ریال از ` +
+            `${after.totalAmount.toString()} ریال. لطفاً پیگیری کنید.`,
+          documentId: after.id,
+        }
+      : {
+          kind: 'DOCUMENT_PAYMENT_SETTLED' as const,
+          title: `پرداخت سند «${after.title}» کامل شد`,
+          body:
+            before.paymentStatus === 'OUTSTANDING'
+              ? 'نیازمندی این سند بسته شد.'
+              : `وضعیت پرداخت: ${PAYMENT_SETTLEMENT_LABELS.FULLY_PAID}`,
+          documentId: after.id,
+        };
+
+    await this.notifications.notifyPermissionHolders('document:create', input, {
+      exceptUserId: user.id,
+    });
+    await this.notifications.notifyUsers([after.createdById], input, { exceptUserId: user.id });
+  }
+
+  /** ترجمهٔ قاعدهٔ مشترک به پیام فارسی و مسیر فیلد. */
+  private settlementError(
+    problem: NonNullable<ReturnType<typeof checkSettlement>>,
+    totalAmount: bigint,
+  ): AppError {
+    if (problem.code === 'MISSING') {
+      return AppError.validation('مبلغ پرداخت‌شده و مبلغ نیازمندی باید وارد شوند', [
+        { path: 'paidAmount', message: 'مبلغ پرداخت‌شده وارد نشده است' },
+        { path: 'outstandingAmount', message: 'مبلغ نیازمندی وارد نشده است' },
+      ]);
+    }
+
+    if (problem.code === 'NEGATIVE') {
+      return AppError.validation('مبلغ نمی‌تواند منفی باشد', [
+        { path: 'paidAmount', message: 'مبلغ باید صفر یا بیشتر باشد' },
+      ]);
+    }
+
+    if (problem.code === 'NOT_OUTSTANDING') {
+      return AppError.validation('نیازمندیِ صفر یعنی پرداخت کامل', [
+        {
+          path: 'outstandingAmount',
+          message: 'اگر چیزی باقی نمانده، وضعیت «پرداخت کامل» را انتخاب کنید',
+        },
+      ]);
+    }
+
+    return AppError.validation(
+      `جمع مبلغ پرداخت‌شده و نیازمندی باید برابر مبلغ کل سند (${totalAmount.toString()} ریال) باشد`,
+      [
+        {
+          path: 'outstandingAmount',
+          message: `اکنون ${problem.sum.toString()} ریال است`,
+        },
+      ],
+    );
+  }
+
   /** جزئیات بایگانی یک سند برای صفحه کارتابل. */
   async detail(documentId: string, user: AuthenticatedUser) {
     await this.access.assertDocumentVisible(documentId, user);
@@ -235,6 +437,12 @@ export class ArchiveService {
         documentDate: true,
         openFeedbackCount: true,
         totalAmount: true,
+        paymentStatus: true,
+        paidAmount: true,
+        outstandingAmount: true,
+        paymentStatusAt: true,
+        paymentDate: true,
+        paymentStatusBy: { select: { id: true, fullName: true } },
         archiveMetadata: {
           include: { archivedBy: { select: { id: true, fullName: true } } },
         },

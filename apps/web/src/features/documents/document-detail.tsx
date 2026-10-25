@@ -12,6 +12,7 @@ import {
 import { Button } from '../../shared/ui/button';
 import { Icon } from '../../shared/ui/icon';
 import { PlateBadge } from '../../shared/ui/plate-input';
+import { SettlementBadge } from '../archive/payment-status-panel';
 import { Input } from '../../shared/ui/input';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
@@ -298,6 +299,15 @@ export function DocumentDetailView({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/*
+              وضعیت پرداخت، کنار وضعیت گردش کار.
+
+              این دو یکی نیستند و همین‌جا دیدنشان کنار هم مهم است: سندی می‌تواند
+              بایگانی‌شده باشد و هنوز نیازمندی داشته باشد. ثبتش کار بایگانی است و
+              اینجا فقط دیده می‌شود.
+            */}
+            {data.paymentStatus !== null ? <SettlementBadge detail={data} /> : null}
+
             <span className="rounded bg-muted px-2 py-1 text-xs">
               {DOCUMENT_STATUS_LABELS[data.status]}
             </span>
