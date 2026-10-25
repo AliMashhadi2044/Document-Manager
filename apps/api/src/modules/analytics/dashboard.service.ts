@@ -104,6 +104,7 @@ export class DashboardService {
       topVendors,
       byChapter,
       bySettlement,
+      settlementInScope,
       settlementTotals,
       followUps,
     ] = await Promise.all([
@@ -178,6 +179,20 @@ export class DashboardService {
         _sum: { totalAmount: true, paidAmount: true, outstandingAmount: true },
       }),
 
+      /*
+        همان گروه‌بندی، ولی روی **دامنهٔ فیلترشده**.
+
+        «مسیر سند» از این می‌خواند و نه از بالایی: آن ردیف یک داستان است — چند سند
+        در هر مرحله — و اگر چهار کارت اولش فیلتر را می‌خورد و دو کارت پرداختش نه،
+        جمع‌هایش با هم نمی‌خواند و خواننده حق داشت گیج شود.
+      */
+      this.prisma.financialDocument.groupBy({
+        by: ['paymentStatus'],
+        where,
+        _count: { _all: true },
+        _sum: { totalAmount: true, outstandingAmount: true },
+      }),
+
       this.prisma.financialDocument.aggregate({
         where: { ...yearWhere, paymentStatus: 'OUTSTANDING' },
         _sum: { paidAmount: true, outstandingAmount: true },
@@ -221,6 +236,8 @@ export class DashboardService {
 
     const settlementRow = (status: PaymentSettlementStatus | null) =>
       bySettlement.find((row) => row.paymentStatus === status);
+    const scopedRow = (status: PaymentSettlementStatus | null) =>
+      settlementInScope.find((row) => row.paymentStatus === status);
 
     const fullyPaid = settlementRow('FULLY_PAID');
     const outstanding = settlementRow('OUTSTANDING');
@@ -287,6 +304,27 @@ export class DashboardService {
         unset: {
           count: unset?._count._all ?? 0,
           total: (unset?._sum.totalAmount ?? 0n).toString(),
+        },
+      },
+
+      /*
+        وضعیت پرداخت در **همان دامنه‌ای** که بقیهٔ اعداد صفحه حساب شده‌اند.
+
+        «مسیر سند» از این می‌خواند. مبلغِ نیازمندی اینجا **باقی‌مانده** است و نه
+        مبلغ سند: آنچه در این مرحله اهمیت دارد، پولی است که هنوز نرفته.
+      */
+      settlementInScope: {
+        fullyPaid: {
+          count: scopedRow('FULLY_PAID')?._count._all ?? 0,
+          total: (scopedRow('FULLY_PAID')?._sum.totalAmount ?? 0n).toString(),
+        },
+        outstanding: {
+          count: scopedRow('OUTSTANDING')?._count._all ?? 0,
+          total: (scopedRow('OUTSTANDING')?._sum.outstandingAmount ?? 0n).toString(),
+        },
+        unset: {
+          count: scopedRow(null)?._count._all ?? 0,
+          total: (scopedRow(null)?._sum.totalAmount ?? 0n).toString(),
         },
       },
 

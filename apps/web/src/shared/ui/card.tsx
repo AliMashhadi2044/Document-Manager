@@ -77,10 +77,7 @@ export function CardHeader({
           <div className="flex items-center gap-1.5">
             <h3 className="truncate text-sm font-semibold">{title}</h3>
             {help ? (
-              <InfoHint
-                align="start"
-                label={helpLabel ?? (typeof title === 'string' ? title : 'این کارت')}
-              >
+              <InfoHint label={helpLabel ?? (typeof title === 'string' ? title : 'این کارت')}>
                 {help}
               </InfoHint>
             ) : null}

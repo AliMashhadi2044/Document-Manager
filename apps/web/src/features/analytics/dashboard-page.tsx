@@ -323,7 +323,7 @@ export function DashboardPage({
             },
           ]}
         />
-        <InfoHint align="start" label="فیلتر وضعیت پرداخت">
+        <InfoHint label="فیلتر وضعیت پرداخت">
           وضعیت پرداخت را <strong>بایگانی</strong> پس از ارجاع سند ثبت می‌کند. انتخاب هر گزینه،
           همهٔ اعداد این صفحه را به همان زیرمجموعه محدود می‌کند — جمع‌ها، روند ماهانه
           و رتبه‌بندی‌ها. «تعیین‌نشده» یعنی بایگان هنوز چیزی ثبت نکرده، و با «پرداخت
@@ -433,7 +433,7 @@ export function DashboardPage({
           tone={settlementSummary.outstanding.count > 0 ? 'danger' : 'neutral'}
           help={
             <>
-              اسنادی که بخشی از مبلغشان پرداخت شده و بخشی مانده. عدد زیر آن، جمع
+              اسنادی که بخشی از مبلغشان پرداخت شده و بخشی مانده. عدد زیر آن، جمعِ{' '}
               <strong>مبلغ باقی‌مانده</strong> است — نه مبلغ سند. از جمع مبلغ این اسناد (
               {formatMoney(settlementSummary.outstanding.total)})،{' '}
               {formatMoney(settlementSummary.outstanding.paid)} پرداخت شده است.
@@ -552,18 +552,28 @@ export function DashboardPage({
         <CardHeader
           icon="layers"
           title="مسیر سند"
-          description="ترتیب مرحله‌ها از پیش‌نویس تا بایگانی؛ مرحله‌ای که بیشترین سند را دارد، برجسته است."
+          description="از پیش‌نویس تا تسویهٔ پرداخت؛ مرحله‌ای که بیشترین سند را دارد، برجسته است."
           help={
             <>
-              تعداد اسناد در هر مرحلهٔ گردش کار. این <strong>وضعیت گردش کار</strong> است،
-              نه وضعیت پرداخت: سندی می‌تواند بایگانی‌شده باشد و هنوز نیازمندی داشته
-              باشد.
+              چهار کارت اول <strong>وضعیت گردش کار</strong>اند و پشت سر هم می‌آیند: هر سند
+              در هر لحظه دقیقاً در یکی از آن‌هاست.
+              <span className="mt-1.5 block">
+                دو کارت آخر <strong>وضعیت پرداخت</strong>اند و بُعد دیگری از همان اسناد، نه
+                مرحلهٔ پنجم و ششم. بایگان وضعیت پرداخت را از لحظهٔ ارجاع سند می‌تواند ثبت
+                کند، پس یک سند می‌تواند هم در «در انتظار بایگانی» باشد و هم در
+                «نیازمندی». <strong>جمع شش کارت، تعداد اسناد نیست.</strong>
+              </span>
+              <span className="mt-1.5 block text-muted-foreground">
+                مبلغِ زیر «نیازمندی»، <strong>باقی‌مانده</strong> است و نه مبلغ سند.
+                سندی که وضعیت پرداختش ثبت نشده در هیچ‌کدام از دو کارت آخر نمی‌آید؛
+                شمارشش در کاشی «وضعیت پرداخت تعیین‌نشده» بالای صفحه است.
+              </span>
               {scopeNote}
             </>
           }
         />
         <CardBody className="pt-3">
-          <DocumentPipeline byStatus={data.byStatus} />
+          <DocumentPipeline byStatus={data.byStatus} settlement={data.settlementInScope} />
         </CardBody>
       </Card>
 

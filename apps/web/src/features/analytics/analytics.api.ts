@@ -144,6 +144,18 @@ export interface DashboardDto {
     };
     readonly unset: { readonly count: number; readonly total: string };
   };
+  /**
+   * وضعیت پرداخت در **همان دامنه‌ای** که بقیهٔ اعداد صفحه حساب شده‌اند.
+   *
+   * «مسیر سند» از این می‌خواند و نه از `settlementSummary`: آن ردیف یک داستان
+   * است و اگر چهار کارت اولش فیلتر را می‌خورد و دو کارت پرداختش نه، جمع‌هایش با
+   * هم نمی‌خواند. مبلغِ نیازمندی اینجا **باقی‌مانده** است، نه مبلغ سند.
+   */
+  readonly settlementInScope: {
+    readonly fullyPaid: { readonly count: number; readonly total: string };
+    readonly outstanding: { readonly count: number; readonly total: string };
+    readonly unset: { readonly count: number; readonly total: string };
+  };
   /** قدیمی‌ترین نیازمندی‌ها؛ فوریتشان در رابط از `since` حساب می‌شود. */
   readonly outstandingFollowUps: readonly {
     readonly id: string;

@@ -172,11 +172,55 @@ test.describe('وضعیت پرداخت سند', () => {
       })
       .toBeGreaterThan(0n);
 
+    // ───── مسیر سند: دو کارت پرداخت هم در ردیف هستند ─────
+    const pipeline = page
+      .locator('ol')
+      .filter({ has: page.getByText('پیش‌نویس', { exact: true }) })
+      .first();
+    await expect(pipeline.getByText('پرداخت کامل', { exact: true })).toBeVisible();
+    await expect(pipeline.getByText('نیازمندی', { exact: true })).toBeVisible();
+
     // ───── راهنما: کاشی باید بگوید چه چیزی را می‌شمارد ─────
     const help = page.getByRole('button', { name: 'راهنمای جمع کل' });
     await expect(help, 'کاشی «جمع کل» علامت راهنما ندارد').toBeVisible();
     await help.click();
-    await expect(page.getByRole('tooltip')).toContainText('دامنه:');
+
+    const tooltip = page.getByRole('tooltip');
+    await expect(tooltip).toContainText('دامنه:');
+
+    /*
+      راهنما نباید در کارت بریده شود.
+
+      کاشی‌های داشبورد `overflow-hidden` دارند — لازمش دارند تا نمودار کوچک تا
+      لبه برود — و حباب همان‌جا بریده می‌شد.
+
+      سنجش با **آزمون برخورد** است و نه با اندازهٔ کادر: عنصرِ بریده‌شده همچنان
+      کادرِ کاملش را گزارش می‌کند، پس مقایسهٔ مختصات این باگ را نمی‌گرفت (و
+      نگرفت). اینجا نقطه‌ای **پایین‌تر از کفِ کارت** انتخاب می‌شود و پرسیده
+      می‌شود مرورگر آنجا چه چیزی را می‌بیند: بخشی که بریده شده، نه رنگ می‌شود و
+      نه برخورد می‌دهد.
+    */
+    const card = help.locator('xpath=ancestor::section[1]');
+    const tooltipBox = await tooltip.boundingBox();
+    const cardBox = await card.boundingBox();
+    expect(tooltipBox, 'حباب راهنما اندازه ندارد').not.toBeNull();
+    expect(cardBox).not.toBeNull();
+
+    const bubble = tooltipBox as { x: number; y: number; width: number; height: number };
+    const tile = cardBox as { y: number; height: number };
+    expect(bubble.width, 'حباب راهنما باریک‌تر از حد خواناست').toBeGreaterThan(200);
+
+    const probe = { x: bubble.x + bubble.width / 2, y: tile.y + tile.height + 8 };
+    expect(
+      bubble.y + bubble.height,
+      'حباب راهنما اصلاً از کارت بیرون نمی‌زند؛ این آزمون چیزی را نمی‌سنجد',
+    ).toBeGreaterThan(probe.y);
+
+    const visibleOutside = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.closest('[role="tooltip"]') !== null,
+      probe,
+    );
+    expect(visibleOutside, 'حباب راهنما بیرون از کارت بریده می‌شود (overflow)').toBe(true);
 
     await logout(page);
 
