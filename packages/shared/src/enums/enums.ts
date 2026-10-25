@@ -50,14 +50,30 @@ export const PERSON_TYPE_LABELS: Record<PersonType, string> = {
   LEGAL: 'حقوقی',
 };
 
-export const PAYMENT_METHOD_KINDS = ['BENEFICIARY_ACCOUNT', 'PETTY_CASH', 'BILL'] as const;
+export const PAYMENT_METHOD_KINDS = [
+  'BENEFICIARY_ACCOUNT',
+  'PETTY_CASH',
+  'BILL',
+  'SPLIT',
+] as const;
 export type PaymentMethodKind = (typeof PAYMENT_METHOD_KINDS)[number];
 
 export const PAYMENT_METHOD_KIND_LABELS: Record<PaymentMethodKind, string> = {
   BENEFICIARY_ACCOUNT: 'حساب ذی‌نفع',
   PETTY_CASH: 'کارپرداز / تنخواه',
   BILL: 'قبض',
+  SPLIT: 'ترکیبی: کارپرداز و ذی‌نفع',
 };
+
+/**
+ * خانواده‌هایی که پرداخت در آن‌ها **بین دو مقصد تقسیم** می‌شود.
+ *
+ * جدا نگه داشته شده تا هر جای دیگری که باید دو مبلغ را با هم ببیند، از همین‌جا
+ * بپرسد و نه با مقایسهٔ رشته‌ای با `'SPLIT'`.
+ */
+export function isSplitPayment(kind: PaymentMethodKind | string): boolean {
+  return kind === 'SPLIT';
+}
 
 export const BUDGET_CATEGORY_KEYS = ['CURRENT', 'CAPITAL'] as const;
 export type BudgetCategoryKey = (typeof BUDGET_CATEGORY_KEYS)[number];

@@ -50,6 +50,21 @@ export async function seedPaymentMethods(prisma: PrismaClient): Promise<void> {
       requiresBillIdentifier: true,
       sortOrder: 3,
     },
+    /*
+      پرداخت ترکیبی.
+
+      یک فاکتور همیشه یک مقصد ندارد: بخشی از آن نقداً دست کارپرداز رفته و بخش
+      دیگر باید به حساب ذی‌نفع واریز شود. تا پیش از این کاربر مجبور بود یا یک
+      مقصد را انتخاب کند و واقعیت را در توضیحات بنویسد، یا فاکتور را دو تکه کند.
+    */
+    {
+      key: 'SPLIT',
+      kind: 'SPLIT' as const,
+      titleFa: 'ترکیبی: کارپرداز و ذی‌نفع',
+      requiresPaymentIdentifier: false,
+      requiresBillIdentifier: false,
+      sortOrder: 4,
+    },
   ];
 
   for (const method of methods) {

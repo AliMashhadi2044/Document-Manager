@@ -1,5 +1,7 @@
 import {
   OPERATORS_BY_TYPE,
+  PAYMENT_METHOD_KINDS,
+  PAYMENT_METHOD_KIND_LABELS,
   type FilterOperator,
   type Permission,
   type ReportFieldType,
@@ -103,12 +105,17 @@ const PERSON_TYPE_VALUES = [
   { value: 'NATURAL', label: 'حقیقی' },
 ] as const;
 
-const PAYMENT_KIND_VALUES = [
-  { value: 'BANK_TRANSFER', label: 'حواله بانکی' },
-  { value: 'PETTY_CASH', label: 'کارپرداز / تنخواه' },
-  { value: 'BILL', label: 'قبض' },
-  { value: 'OTHER', label: 'سایر' },
-] as const;
+/*
+  برچسب روش پرداخت از `@dm/shared` می‌آید، نه از فهرستی که اینجا نوشته شود.
+
+  نسخهٔ دستیِ قبلی از enum واقعی جا مانده بود — `BANK_TRANSFER` و `OTHER` را داشت
+  که وجود ندارند، و `BENEFICIARY_ACCOUNT` را نداشت که وجود دارد. نتیجه این بود که
+  ستون «روش پرداخت» در خروجی، کلید انگلیسی دیتابیس را چاپ می‌کرد.
+*/
+const PAYMENT_KIND_VALUES = PAYMENT_METHOD_KINDS.map((kind) => ({
+  value: kind,
+  label: PAYMENT_METHOD_KIND_LABELS[kind],
+}));
 
 const FEEDBACK_STATUS_VALUES = [
   { value: 'OPEN', label: 'باز' },
@@ -373,6 +380,14 @@ const PAYMENTS: DatasetDefinition = {
       path: 'pettyCashBankTitleSnapshot',
     },
     { key: 'pettyCashIban', titleFa: 'شبای تنخواه', type: 'text', path: 'pettyCashIbanSnapshot' },
+    // سهم هر مقصد در پرداخت ترکیبی؛ در بقیهٔ روش‌ها خالی است.
+    {
+      key: 'beneficiaryAmount',
+      titleFa: 'سهم ذی‌نفع',
+      type: 'money',
+      path: 'beneficiaryAmount',
+    },
+    { key: 'pettyCashAmount', titleFa: 'سهم کارپرداز', type: 'money', path: 'pettyCashAmount' },
     { key: 'invoiceNumber', titleFa: 'شماره صورتحساب', type: 'text', path: 'invoice.invoiceNumber' },
     { key: 'invoiceDate', titleFa: 'تاریخ صورتحساب', type: 'jalaliDate', path: 'invoice.invoiceDate' },
     { key: 'totalAmount', titleFa: 'مبلغ فاکتور', type: 'money', path: 'invoice.totalAmount' },

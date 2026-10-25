@@ -183,6 +183,9 @@ export interface CreateInvoicePayload {
     readonly paymentIdentifier: string | null;
     readonly billIdentifier: string | null;
     readonly pettyCashHolderId: string | null;
+    /** سهم هر مقصد در پرداخت ترکیبی؛ در بقیهٔ روش‌ها `null`. */
+    readonly beneficiaryAmount: string | null;
+    readonly pettyCashAmount: string | null;
     readonly notes: string | null;
   } | null;
   /** تأیید صریح ثبت با وجود هشدار پرداخت تکراری (فقط انشعابات). */
@@ -213,6 +216,8 @@ export interface InvoiceDraft {
     readonly pettyCashHolderId: string | null;
     readonly paymentIdentifier: string | null;
     readonly billIdentifier: string | null;
+    readonly beneficiaryAmount: string | null;
+    readonly pettyCashAmount: string | null;
     readonly notes: string | null;
   } | null;
 }

@@ -259,6 +259,7 @@ enum PaymentMethodKind {
   BENEFICIARY_ACCOUNT // حساب ذی‌نفع
   PETTY_CASH // کارپرداز یا تنخواه
   BILL // قبض
+  SPLIT // بخشی به کارپرداز، بخشی به ذی‌نفع
 
   @@map("payment_method_kind")
 }
@@ -1133,6 +1134,15 @@ model InvoicePayment {
   pettyCashAccountHolderSnapshot String? @map("petty_cash_account_holder_snapshot") @db.VarChar(200)
   pettyCashBankTitleSnapshot     String? @map("petty_cash_bank_title_snapshot") @db.VarChar(100)
   pettyCashIbanSnapshot          String? @map("petty_cash_iban_snapshot") @db.VarChar(34)
+
+  /// پرداخت ترکیبی: سهم هر مقصد از **همین** فاکتور.
+  ///
+  /// فقط در روش `SPLIT` پر می‌شوند و جمعشان با قید دیتابیس برابر `invoices.total_amount`
+  /// نگه داشته می‌شود. مبلغ اینجا **تکرار** مبلغ فاکتور نیست، تقسیم آن است: جمع دو
+  /// سهم همان یک مبلغ است و نه یک عدد مستقل که بتواند واگرا شود.
+  beneficiaryAmount              BigInt? @map("beneficiary_amount")
+  pettyCashAmount                BigInt? @map("petty_cash_amount")
+
   notes                          String? @db.Text
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

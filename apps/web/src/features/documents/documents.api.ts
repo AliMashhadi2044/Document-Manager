@@ -69,6 +69,9 @@ export interface InvoiceRow {
     readonly pettyCashAccountHolderSnapshot: string | null;
     readonly pettyCashBankTitleSnapshot: string | null;
     readonly pettyCashIbanSnapshot: string | null;
+    /** سهم هر مقصد در پرداخت ترکیبی؛ در بقیهٔ روش‌ها `null`. */
+    readonly beneficiaryAmount: string | null;
+    readonly pettyCashAmount: string | null;
     readonly paymentMethod: { readonly titleFa: string };
   } | null;
   readonly items: readonly InvoiceItemRow[];

@@ -75,6 +75,15 @@ export const invoicePaymentSchema = z.object({
   paymentIdentifier: z.string().trim().max(100).nullable().default(null),
   billIdentifier: z.string().trim().max(100).nullable().default(null),
   pettyCashHolderId: z.string().uuid().nullable().default(null),
+  /**
+   * سهم هر مقصد در پرداخت ترکیبی.
+   *
+   * اینجا فقط **شکل** بررسی می‌شود. اینکه این دو با روش پرداخت سازگارند و جمعشان
+   * برابر مبلغ فاکتور است، جایی بررسی می‌شود که مبلغ فاکتور محاسبه شده باشد —
+   * سرویس فاکتور، و در نهایت قید دیتابیس.
+   */
+  beneficiaryAmount: moneyString.nullable().default(null),
+  pettyCashAmount: moneyString.nullable().default(null),
   notes: z.string().trim().max(1000).nullable().default(null),
 });
 

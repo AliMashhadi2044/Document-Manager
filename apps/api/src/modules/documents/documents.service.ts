@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type FinancialDocument } from '@prisma/client';
 import {
+  checkSplitPayment,
   findTransition,
   isEditableStatus,
   type DocumentStatus,
@@ -607,6 +608,44 @@ export class DocumentsService {
             path: `${path}.payment.iban`,
             message: 'برای حساب ذی‌نفع، انتخاب شبا الزامی است',
           });
+        }
+
+        /*
+          پرداخت ترکیبی، در لحظهٔ ثبت نهایی دوباره سنجیده می‌شود.
+
+          ثبت فاکتور این را از قبل بررسی کرده، ولی مبلغ فاکتور می‌تواند بعد از آن
+          عوض شده باشد (ویرایش ردیف‌ها). ثبت نهایی آخرین جایی است که می‌شود جلوی
+          سندی را گرفت که جمع سهم‌هایش با مبلغش نمی‌خواند.
+        */
+        if (invoice.payment.methodKind === 'SPLIT') {
+          const problem = checkSplitPayment(
+            invoice.payment.beneficiaryAmount,
+            invoice.payment.pettyCashAmount,
+            invoice.totalAmount,
+          );
+
+          if (problem !== null) {
+            problems.push({
+              path: `${path}.payment.split`,
+              message:
+                problem.code === 'MISMATCH'
+                  ? 'جمع سهم کارپرداز و ذی‌نفع با مبلغ کل فاکتور برابر نیست'
+                  : 'در پرداخت ترکیبی، سهم کارپرداز و ذی‌نفع باید مشخص و بزرگ‌تر از صفر باشد',
+            });
+          }
+
+          if (!invoice.payment.ibanSnapshot) {
+            problems.push({
+              path: `${path}.payment.iban`,
+              message: 'برای سهم ذی‌نفع، انتخاب شبا الزامی است',
+            });
+          }
+          if (!invoice.payment.pettyCashHolderNameSnapshot) {
+            problems.push({
+              path: `${path}.payment.pettyCashHolder`,
+              message: 'برای سهم کارپرداز، انتخاب کارپرداز الزامی است',
+            });
+          }
         }
       }
 

@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type Invoice } from '@prisma/client';
-import { isEditableStatus, validateIban, type DocumentStatus } from '@dm/shared';
+import {
+  checkSplitPayment,
+  isEditableStatus,
+  validateIban,
+  type DocumentStatus,
+} from '@dm/shared';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -29,6 +34,9 @@ export interface CreateInvoiceInput {
     readonly paymentIdentifier: string | null;
     readonly billIdentifier: string | null;
     readonly pettyCashHolderId: string | null;
+    /** سهم هر مقصد در پرداخت ترکیبی؛ در بقیهٔ روش‌ها `null`. */
+    readonly beneficiaryAmount: string | null;
+    readonly pettyCashAmount: string | null;
     readonly notes: string | null;
   } | null;
   /** تأیید صریح ثبت با وجود هشدار تکرار (فقط انشعابات). */
@@ -173,7 +181,11 @@ export class InvoicesService {
       ]);
     }
 
-    const paymentData = await this.resolvePayment(input, vendor?.id ?? null);
+    const paymentData = await this.resolvePayment(
+      input,
+      vendor?.id ?? null,
+      computed.totalAmount,
+    );
 
     return { document, link, prepared, computed, vendor, paymentData, duplicateNotice };
   }
@@ -337,6 +349,9 @@ export class InvoicesService {
             pettyCashHolderId: invoice.payment.pettyCashHolderId,
             paymentIdentifier: invoice.payment.paymentIdentifier,
             billIdentifier: invoice.payment.billIdentifier,
+            // مبلغ‌ها رشته‌اند، مثل هر مبلغ دیگری در مرز API (ADR-0003).
+            beneficiaryAmount: invoice.payment.beneficiaryAmount?.toString() ?? null,
+            pettyCashAmount: invoice.payment.pettyCashAmount?.toString() ?? null,
             notes: invoice.payment.notes,
           }
         : null,
@@ -618,10 +633,19 @@ export class InvoicesService {
     });
   }
 
-  /** ساخت داده پرداخت با snapshot شبا. */
+  /**
+   * ساخت داده پرداخت با snapshotهایش.
+   *
+   * هر مقصد پرداخت **یک** resolver دارد و روش‌ها از همان‌ها ترکیب می‌شوند. پرداخت
+   * ترکیبی که اضافه شد، همین ساختار را لازم کرد: اگر هر روش بررسی‌های خودش را
+   * درجا می‌نوشت، روش ترکیبی یا باید آن‌ها را تکرار می‌کرد یا — که بدتر است —
+   * نسخهٔ سست‌ترشان را.
+   */
   private async resolvePayment(
     input: CreateInvoiceInput,
     vendorId: string | null,
+    /** مبلغ کل همین فاکتور؛ مرجع تقسیم در پرداخت ترکیبی. */
+    totalAmount: bigint,
   ): Promise<Prisma.InvoicePaymentCreateWithoutInvoiceInput | null> {
     if (!input.payment) return null;
 
@@ -641,40 +665,9 @@ export class InvoicesService {
     };
 
     if (method.kind === 'BENEFICIARY_ACCOUNT') {
-      if (!input.payment.vendorBankAccountId) {
-        throw AppError.validation('برای حساب ذی‌نفع، انتخاب شبا الزامی است', [
-          { path: 'payment.vendorBankAccountId', message: 'شبا انتخاب نشده است' },
-        ]);
-      }
-
-      const account = await this.prisma.vendorBankAccount.findUnique({
-        where: { id: input.payment.vendorBankAccountId },
-        include: { bank: true },
-      });
-
-      if (!account || !account.isActive) {
-        throw AppError.validation('شبای انتخاب‌شده معتبر یا فعال نیست', [
-          { path: 'payment.vendorBankAccountId', message: 'شبا معتبر نیست' },
-        ]);
-      }
-      // شبا باید متعلق به همان فروشنده فاکتور باشد.
-      if (vendorId === null || account.vendorId !== vendorId) {
-        throw AppError.validation('شبای انتخاب‌شده متعلق به فروشنده این فاکتور نیست', [
-          { path: 'payment.vendorBankAccountId', message: 'شبا متعلق به این فروشنده نیست' },
-        ]);
-      }
-      if (!validateIban(account.ibanNormalized).valid) {
-        throw AppError.validation('شبای ذخیره‌شده معتبر نیست', [
-          { path: 'payment.vendorBankAccountId', message: 'شبا معتبر نیست' },
-        ]);
-      }
-
       return {
         ...base,
-        vendorBankAccount: { connect: { id: account.id } },
-        ibanSnapshot: account.ibanNormalized,
-        bankTitleSnapshot: account.bank?.titleFa ?? null,
-        accountTitleSnapshot: account.accountTitle,
+        ...(await this.resolveBeneficiary(input.payment.vendorBankAccountId, vendorId)),
         paymentIdentifier: input.payment.paymentIdentifier,
       };
     }
@@ -688,6 +681,31 @@ export class InvoicesService {
     }
 
     /*
+      پرداخت ترکیبی — بخشی به کارپرداز، بخشی به ذی‌نفع.
+
+      برخلاف تنخواهِ ساده، هر دو مقصد اینجا **الزامی**اند: پرداختی که فقط یک طرف
+      دارد ترکیبی نیست و باید با روش تک‌مقصدیِ خودش ثبت شود، وگرنه گزارش‌ها دو
+      شکلِ متفاوت از یک واقعیت پیدا می‌کنند.
+    */
+    if (method.kind === 'SPLIT') {
+      const parts = this.resolveSplitAmounts(input.payment, totalAmount);
+
+      if (!input.payment.pettyCashHolderId) {
+        throw AppError.validation('در پرداخت ترکیبی، انتخاب کارپرداز الزامی است', [
+          { path: 'payment.pettyCashHolderId', message: 'کارپرداز انتخاب نشده است' },
+        ]);
+      }
+
+      return {
+        ...base,
+        ...(await this.resolveBeneficiary(input.payment.vendorBankAccountId, vendorId)),
+        ...(await this.resolvePettyCash(input.payment.pettyCashHolderId)),
+        paymentIdentifier: input.payment.paymentIdentifier,
+        ...parts,
+      };
+    }
+
+    /*
       تنخواه.
 
       تنخواه‌دار **اختیاری** است (فاکتورهای قدیمی بدون او ثبت شده‌اند)، ولی اگر
@@ -697,8 +715,121 @@ export class InvoicesService {
     */
     if (!input.payment.pettyCashHolderId) return base;
 
+    return { ...base, ...(await this.resolvePettyCash(input.payment.pettyCashHolderId)) };
+  }
+
+  /**
+   * سهم دو مقصد در پرداخت ترکیبی.
+   *
+   * قاعده‌اش یک خط است و همان یک خط مهم است: **جمع دو سهم باید دقیقاً مبلغ کل
+   * فاکتور باشد.** نه کمتر (بخشی از پول ناپیدا می‌ماند) و نه بیشتر (سند بیش از
+   * مبلغش پرداخت نشان می‌دهد). مرجع مبلغ هم موتور مالی است، نه عددی که کلاینت
+   * فرستاده — پس اگر فرم و سرور در گرد کردن اختلاف پیدا کنند، سرور حرف آخر را
+   * می‌زند و خطا می‌دهد، نه اینکه خاموشانه عدد خودش را بنویسد.
+   */
+  private resolveSplitAmounts(
+    payment: NonNullable<CreateInvoiceInput['payment']>,
+    totalAmount: bigint,
+  ): { beneficiaryAmount: bigint; pettyCashAmount: bigint } {
+    const beneficiaryAmount =
+      payment.beneficiaryAmount === null ? null : BigInt(payment.beneficiaryAmount);
+    const pettyCashAmount =
+      payment.pettyCashAmount === null ? null : BigInt(payment.pettyCashAmount);
+
+    const problem = checkSplitPayment(beneficiaryAmount, pettyCashAmount, totalAmount);
+    if (problem === null) {
+      return {
+        beneficiaryAmount: beneficiaryAmount as bigint,
+        pettyCashAmount: pettyCashAmount as bigint,
+      };
+    }
+
+    if (problem.code === 'MISSING') {
+      throw AppError.validation('در پرداخت ترکیبی، سهم هر دو مقصد باید مشخص باشد', [
+        { path: 'payment.beneficiaryAmount', message: 'سهم ذی‌نفع وارد نشده است' },
+        { path: 'payment.pettyCashAmount', message: 'سهم کارپرداز وارد نشده است' },
+      ]);
+    }
+
+    if (problem.code === 'NON_POSITIVE') {
+      throw AppError.validation('سهم هر مقصد باید بزرگ‌تر از صفر باشد', [
+        {
+          path:
+            problem.side === 'beneficiary'
+              ? 'payment.beneficiaryAmount'
+              : 'payment.pettyCashAmount',
+          message: 'سهم صفر یعنی این پرداخت ترکیبی نیست؛ روش تک‌مقصدی را انتخاب کنید',
+        },
+      ]);
+    }
+
+    throw AppError.validation(
+      `جمع سهم‌ها باید برابر مبلغ کل فاکتور (${problem.total.toString()} ریال) باشد`,
+      [
+        {
+          path: 'payment.pettyCashAmount',
+          message: `اکنون ${problem.sum.toString()} ریال است`,
+        },
+      ],
+    );
+  }
+
+  /** حساب ذی‌نفع، با snapshot شبا. */
+  private async resolveBeneficiary(
+    vendorBankAccountId: string | null,
+    vendorId: string | null,
+  ): Promise<{
+    vendorBankAccount: { connect: { id: string } };
+    ibanSnapshot: string;
+    bankTitleSnapshot: string | null;
+    accountTitleSnapshot: string | null;
+  }> {
+    if (!vendorBankAccountId) {
+      throw AppError.validation('برای پرداخت به ذی‌نفع، انتخاب شبا الزامی است', [
+        { path: 'payment.vendorBankAccountId', message: 'شبا انتخاب نشده است' },
+      ]);
+    }
+
+    const account = await this.prisma.vendorBankAccount.findUnique({
+      where: { id: vendorBankAccountId },
+      include: { bank: true },
+    });
+
+    if (!account || !account.isActive) {
+      throw AppError.validation('شبای انتخاب‌شده معتبر یا فعال نیست', [
+        { path: 'payment.vendorBankAccountId', message: 'شبا معتبر نیست' },
+      ]);
+    }
+    // شبا باید متعلق به همان فروشنده فاکتور باشد.
+    if (vendorId === null || account.vendorId !== vendorId) {
+      throw AppError.validation('شبای انتخاب‌شده متعلق به فروشنده این فاکتور نیست', [
+        { path: 'payment.vendorBankAccountId', message: 'شبا متعلق به این فروشنده نیست' },
+      ]);
+    }
+    if (!validateIban(account.ibanNormalized).valid) {
+      throw AppError.validation('شبای ذخیره‌شده معتبر نیست', [
+        { path: 'payment.vendorBankAccountId', message: 'شبا معتبر نیست' },
+      ]);
+    }
+
+    return {
+      vendorBankAccount: { connect: { id: account.id } },
+      ibanSnapshot: account.ibanNormalized,
+      bankTitleSnapshot: account.bank?.titleFa ?? null,
+      accountTitleSnapshot: account.accountTitle,
+    };
+  }
+
+  /** کارپرداز تنخواه‌دار، با snapshot نام و حسابش (ADR-0005). */
+  private async resolvePettyCash(holderId: string): Promise<{
+    pettyCashHolder: { connect: { id: string } };
+    pettyCashHolderNameSnapshot: string;
+    pettyCashAccountHolderSnapshot: string;
+    pettyCashBankTitleSnapshot: string | null;
+    pettyCashIbanSnapshot: string | null;
+  }> {
     const holder = await this.prisma.pettyCashHolder.findUnique({
-      where: { id: input.payment.pettyCashHolderId },
+      where: { id: holderId },
       include: { bank: { select: { titleFa: true } } },
     });
     if (!holder || !holder.isActive) {
@@ -708,7 +839,6 @@ export class InvoicesService {
     }
 
     return {
-      ...base,
       pettyCashHolder: { connect: { id: holder.id } },
       pettyCashHolderNameSnapshot: holder.fullName,
       // نبودِ صاحب حساب یعنی حساب به نام خود تنخواه‌دار است.

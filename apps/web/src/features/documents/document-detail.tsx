@@ -608,10 +608,30 @@ function InvoiceCard({
               : 'انتخاب نشده'
           }
         />
+        {/*
+          پرداخت ترکیبی: سهم هر مقصد، کنار هم.
+
+          نوشتن «ترکیبی» بدون دو عدد، چیزی به خواننده نمی‌گوید — پرسش بعدی‌اش
+          همیشه «چقدر به کدام؟» است.
+        */}
+        {invoice.payment?.beneficiaryAmount && invoice.payment.pettyCashAmount ? (
+          <Field
+            label="تقسیم پرداخت"
+            value={
+              <>
+                {`سهم ذی‌نفع: ${formatMoney(invoice.payment.beneficiaryAmount)}`}
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {`سهم کارپرداز: ${formatMoney(invoice.payment.pettyCashAmount)}`}
+                </span>
+              </>
+            }
+          />
+        ) : null}
+
         {/* تنخواه‌دار فقط وقتی دیده می‌شود که ثبت شده باشد؛ خانهٔ خالی «—» ارزشی ندارد. */}
         {invoice.payment?.pettyCashHolderNameSnapshot ? (
           <Field
-            label="تنخواه‌دار"
+            label={invoice.payment.methodKind === 'SPLIT' ? 'کارپرداز' : 'تنخواه‌دار'}
             value={
               <>
                 {invoice.payment.pettyCashHolderNameSnapshot}

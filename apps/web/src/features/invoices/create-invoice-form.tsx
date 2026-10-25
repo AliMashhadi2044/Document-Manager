@@ -35,7 +35,7 @@ import { ItemsFields, emptyItemsDraft, invoiceTaxToPayload, itemsToPayload, type
 import { UtilityFields, EMPTY_UTILITY, type UtilityDraft } from './utility-fields';
 import { FuelFields, emptyFuelDraft, type FuelDraft } from './fuel-fields';
 import { PaymentFields, EMPTY_PAYMENT, paymentToPayload, type PaymentDraft, type PaymentMethodRef } from './payment-fields';
-import type { RoundingPolicyRef } from './invoice-preview';
+import { detailsTotal, type RoundingPolicyRef } from './invoice-preview';
 
 interface BootstrapData {
   readonly paymentMethods: readonly PaymentMethodRef[];
@@ -209,6 +209,8 @@ export function CreateInvoiceForm({
         pettyCashHolderId: data.payment.pettyCashHolderId ?? '',
         paymentIdentifier: data.payment.paymentIdentifier ?? '',
         billIdentifier: data.payment.billIdentifier ?? '',
+        beneficiaryAmount: data.payment.beneficiaryAmount ?? '',
+        pettyCashAmount: data.payment.pettyCashAmount ?? '',
         notes: data.payment.notes ?? '',
       });
     }
@@ -335,6 +337,19 @@ export function CreateInvoiceForm({
 
   const reference = bootstrap.data;
   const isoInvoiceDate = safeIso(invoiceDate);
+
+  /*
+    مبلغ کل فاکتور، همان‌طور که سرور حسابش می‌کند.
+
+    فقط پرداخت ترکیبی به آن نیاز دارد (تقسیم مبلغ بین دو مقصد)، ولی از همان
+    ورودی‌ای می‌آید که ثبت می‌شود — نه از drafts — تا عددی که کاربر تقسیم می‌کند
+    همان عددی باشد که ثبت خواهد شد.
+  */
+  const draftTotal = useMemo(() => {
+    if (!kind) return null;
+    const details = buildDetails(kind, { itemsDraft, utilityDraft, fuelDraft }, policy);
+    return details === null ? null : detailsTotal(details, policy);
+  }, [kind, itemsDraft, utilityDraft, fuelDraft, policy]);
 
   const submit = (): void => {
     setMessage(null);
@@ -546,6 +561,7 @@ export function CreateInvoiceForm({
             ) : null}
 
             <PaymentFields
+              totalAmount={draftTotal}
               draft={payment}
               onChange={(next) => {
                 setPaymentTouched(true);

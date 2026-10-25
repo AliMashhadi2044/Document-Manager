@@ -112,13 +112,22 @@ Data Dictionary موتور گزارش **تولید خودکار** می‌شود 
 
 | فیلد | نوع | شرط |
 |---|---|---|
-| `method_kind` | enum | `BENEFICIARY_ACCOUNT` \| `PETTY_CASH` \| `BILL` |
-| `vendor_bank_account_id` | uuid | فقط `BENEFICIARY_ACCOUNT` |
+| `method_kind` | enum | `BENEFICIARY_ACCOUNT` \| `PETTY_CASH` \| `BILL` \| `SPLIT` |
+| `vendor_bank_account_id` | uuid | `BENEFICIARY_ACCOUNT` و `SPLIT` |
 | `iban_snapshot` | char(26) | تصویر شبا در لحظه ثبت |
 | `bank_title_snapshot` | varchar(100) | نام بانک تشخیص‌داده‌شده |
 | `payment_identifier` | varchar(100) | شناسه پرداخت — **متعلق به فاکتور، نه به شبا** |
 | `bill_identifier` | varchar(100) | فقط `BILL` |
-| `petty_cash_holder_id` | uuid | فقط `PETTY_CASH` — انتخاب از فهرست افراد (تأییدشده) |
+| `petty_cash_holder_id` | uuid | `PETTY_CASH` (اختیاری) و `SPLIT` (الزامی) — انتخاب از فهرست تنخواه‌داران |
+| `beneficiary_amount` | bigint | فقط `SPLIT` — سهم ذی‌نفع |
+| `petty_cash_amount` | bigint | فقط `SPLIT` — سهم کارپرداز |
+
+**پرداخت ترکیبی.** یک فاکتور همیشه یک مقصد ندارد: بخشی نقداً دست کارپرداز رفته و
+بخش دیگر باید به حساب ذی‌نفع واریز شود. دو ستون بالا **تکرار** مبلغ فاکتور نیستند،
+تقسیم آن‌اند — جمعشان دقیقاً `invoices.total_amount` است و همین را یک تریگر
+`DEFERRABLE` تضمین می‌کند، نه فقط لایهٔ سرویس (قاعدهٔ «مبالغ فقط یک‌جا زندگی
+می‌کنند»). به تعویق افتادن لازم است چون ردیف‌ها و پرداخت در یک تراکنش نوشته می‌شوند
+و مبلغ نهایی فاکتور ممکن است بعد از ردیف پرداخت بنشیند.
 
 ## ۴. فروشنده و خریدار
 
