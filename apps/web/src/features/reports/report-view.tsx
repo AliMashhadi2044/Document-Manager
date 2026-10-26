@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import type { LaidOutReportDto, ReportBlock, ReportTableBlock } from './reports.api';
 
 /**
@@ -8,19 +10,25 @@ import type { LaidOutReportDto, ReportBlock, ReportTableBlock } from './reports.
  * که سرور با قالب ساخته است. پس همین مؤلفه، هم گزارش مالیات را نشان می‌دهد و هم هر
  * قالبی که در طراح فاز ۷ ساخته شود — بدون یک خط تغییر.
  *
- * دو اقدام روی ردیف («تعیین نوع کالا» و «جزئیات مبالغ») جزو گزارش نیستند و کار
- * کاربرند؛ اختیاری‌اند تا پیش‌نمایش طراح بتواند بی‌آن‌ها همین نما را نشان دهد.
+ * اقدام‌های روی ردیف جزو گزارش نیستند و کار کاربرند، پس اینجا هم تعریف نمی‌شوند:
+ * صفحهٔ پیش‌نمایش یک تابع می‌دهد و هر چه خواست می‌سازد. همین باعث شد گزارش دوم
+ * (شبای ذینفعان) با اقدام‌های کاملاً متفاوت، بدون یک خط تغییر در این فایل بنشیند —
+ * پیش از این، نام و شناسهٔ **فروشنده** در امضای همین مؤلفه سفت شده بود.
  */
 export function ReportView({
   report,
-  rowVendorIds,
-  onProductType,
-  onDetails,
+  renderRowActions,
 }: {
   report: LaidOutReportDto;
-  rowVendorIds?: readonly string[] | undefined;
-  onProductType?: ((vendorId: string, vendorName: string) => void) | undefined;
-  onDetails?: ((vendorId: string, vendorName: string) => void) | undefined;
+  /**
+   * اقدام‌های یک ردیف؛ `null` یعنی این ردیف اقدامی ندارد.
+   *
+   * اگر هیچ ردیفی اقدام نداشته باشد، ستون «اقدام» اصلاً ساخته نمی‌شود — پیش‌نمایش
+   * طراح همین حالت را می‌خواهد.
+   */
+  renderRowActions?:
+    | ((rowIndex: number, cells: ReportTableBlock['rows'][number]) => ReactNode)
+    | undefined;
 }): JSX.Element {
   return (
     <article
@@ -36,13 +44,7 @@ export function ReportView({
       <div className="mt-5 space-y-5">
         {report.body.map((block) =>
           block.kind === 'table' ? (
-            <ReportTable
-              key={block.id}
-              table={block}
-              rowVendorIds={rowVendorIds ?? []}
-              onProductType={onProductType}
-              onDetails={onDetails}
-            />
+            <ReportTable key={block.id} table={block} renderRowActions={renderRowActions} />
           ) : (
             <RenderBlock key={block.id} block={block} />
           ),
@@ -123,19 +125,15 @@ function SignatureBlock({
 
 function ReportTable({
   table,
-  rowVendorIds,
-  onProductType,
-  onDetails,
+  renderRowActions,
 }: {
   table: ReportTableBlock;
-  rowVendorIds: readonly string[];
-  onProductType?: ((vendorId: string, vendorName: string) => void) | undefined;
-  onDetails?: ((vendorId: string, vendorName: string) => void) | undefined;
+  renderRowActions?:
+    | ((rowIndex: number, cells: ReportTableBlock['rows'][number]) => ReactNode)
+    | undefined;
 }): JSX.Element {
-  // شناسه فروشنده ستون گزارش نیست؛ از همان ردیف خوانده می‌شود تا اقدام‌ها بدانند روی
-  // کدام فروشنده کار می‌کنند. ستون «طرف قرارداد» نام را دارد.
-  const nameIndex = table.columns.findIndex((column) => column.key === 'counterparty');
-  const hasActions = onProductType !== undefined || onDetails !== undefined;
+  const actions = table.rows.map((row, index) => renderRowActions?.(index, row) ?? null);
+  const hasActions = actions.some((action) => action !== null);
 
   return (
     <div className="overflow-x-auto">
@@ -177,9 +175,6 @@ function ReportTable({
 
         <tbody>
           {table.rows.map((row, rowIndex) => {
-            const vendorName = nameIndex >= 0 ? (row[nameIndex]?.text ?? '') : '';
-            const vendorId = rowVendorIds[rowIndex] ?? '';
-
             return (
               <tr key={`row-${rowIndex}`} className="break-inside-avoid">
                 {row.map((cell, cellIndex) => (
@@ -217,12 +212,7 @@ function ReportTable({
                 ))}
                 {hasActions ? (
                   <td className="no-print border border-border px-1 py-1 text-center">
-                    <RowActions
-                      vendorId={vendorId}
-                      vendorName={vendorName}
-                      onProductType={onProductType}
-                      onDetails={onDetails}
-                    />
+                    {actions[rowIndex]}
                   </td>
                 ) : null}
               </tr>
@@ -285,11 +275,19 @@ function ReportTable({
                   );
                 }
 
-                if (index < table.totalsLabelSpan) return null;
+                /*
+                  پهنای هر سلول از چیدمان می‌آید.
+
+                  سلولِ «جمع به حروف» چند ستون را می‌گیرد — همان کاری که فرم کاغذی
+                  با ادغام خانه‌ها می‌کند — و ستون‌های پوشانده‌شده پهنای صفر دارند.
+                */
+                const span = table.totalsSpans[index] ?? 1;
+                if (span === 0) return null;
 
                 return (
                   <td
                     key={table.columns[index]?.key ?? index}
+                    colSpan={span > 1 ? span : undefined}
                     className={`border border-border px-1.5 py-1 ${alignClass(cell.align)}`}
                   >
                     {cell.text}
@@ -301,43 +299,6 @@ function ReportTable({
           </tbody>
         ) : null}
       </table>
-    </div>
-  );
-}
-
-function RowActions({
-  vendorId,
-  vendorName,
-  onProductType,
-  onDetails,
-}: {
-  vendorId: string;
-  vendorName: string;
-  onProductType?: ((vendorId: string, vendorName: string) => void) | undefined;
-  onDetails?: ((vendorId: string, vendorName: string) => void) | undefined;
-}): JSX.Element | null {
-  if (vendorId === '') return null;
-
-  return (
-    <div className="flex flex-col gap-0.5">
-      {onProductType ? (
-        <button
-          type="button"
-          className="rounded px-1 py-0.5 text-[11px] text-primary hover:bg-muted"
-          onClick={() => onProductType(vendorId, vendorName)}
-        >
-          نوع کالا
-        </button>
-      ) : null}
-      {onDetails ? (
-        <button
-          type="button"
-          className="rounded px-1 py-0.5 text-[11px] text-primary hover:bg-muted"
-          onClick={() => onDetails(vendorId, vendorName)}
-        >
-          جزئیات
-        </button>
-      ) : null}
     </div>
   );
 }

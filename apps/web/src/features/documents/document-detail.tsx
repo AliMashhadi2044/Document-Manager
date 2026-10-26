@@ -61,7 +61,8 @@ export function DocumentDetailView({
   const [showReopen, setShowReopen] = useState(false);
   const [showSendBack, setShowSendBack] = useState(false);
   const [sendBackReason, setSendBackReason] = useState('');
-  const [showReport, setShowReport] = useState(false);
+  /** کدام گزارش باز است؛ `null` یعنی هیچ‌کدام. */
+  const [showReport, setShowReport] = useState<string | null>(null);
   const [showAddInvoice, setShowAddInvoice] = useState(false);
   const removeInvoice = useDeleteInvoice();
   const [notice, setNotice] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
@@ -79,7 +80,12 @@ export function DocumentDetailView({
 
   if (showReport && user) {
     return (
-      <ReportPreview documentId={documentId} user={user} onBack={() => setShowReport(false)} />
+      <ReportPreview
+        documentId={documentId}
+        user={user}
+        reportTypeKey={showReport}
+        onBack={() => setShowReport(null)}
+      />
     );
   }
 
@@ -109,9 +115,18 @@ export function DocumentDetailView({
             </Button>
           ) : null}
           {permissions.includes('report:run') && data.status !== 'DRAFT' ? (
-            <Button variant="secondary" onClick={() => setShowReport(true)}>
-              گزارش مالیات
-            </Button>
+            <>
+              <Button variant="secondary" onClick={() => setShowReport('TAX_REPORT')}>
+                گزارش مالیات
+              </Button>
+              {/*
+                گزارش دوم کنار اولی، نه در منویی تودرتو: هر دو خروجیِ همین سندند و
+                بایگان معمولاً هر دو را پشت سر هم می‌گیرد.
+              */}
+              <Button variant="secondary" onClick={() => setShowReport('BENEFICIARY_IBAN')}>
+                شبای ذینفعان
+              </Button>
+            </>
           ) : null}
           {canSendToArchive ? (
             <Button

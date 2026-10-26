@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "reportTypeKey": "BENEFICIARY_IBAN",
+  "titleFa": "شماره شبا ذینفعان سند",
+  "page": {
+    "size": "A4",
+    "orientation": "landscape",
+    "margins": {
+      "top": 12,
+      "bottom": 12,
+      "inlineStart": 10,
+      "inlineEnd": 10
+    },
+    "direction": "rtl"
+  },
+  "styles": {
+    "fontFamily": "Vazirmatn, Tahoma, sans-serif",
+    "baseFontSizePt": 9,
+    "headingFontSizePt": 13,
+    "tableFontSizePt": 9,
+    "borderWidthPx": 1,
+    "borderColor": "#333333",
+    "textColor": "#000000",
+    "mutedTextColor": "#555555"
+  },
+  "header": {
+    "repeatOnEveryPage": true,
+    "blocks": [
+      {
+        "id": "org-name",
+        "type": "text",
+        "text": "{{organization.name}}",
+        "align": "center",
+        "bold": true,
+        "fontSizePt": 13
+      },
+      {
+        "id": "report-title",
+        "type": "text",
+        "text": "شماره شبا ذینفعان سند",
+        "align": "center",
+        "bold": true,
+        "fontSizePt": 12
+      },
+      {
+        "id": "document-line",
+        "type": "text",
+        "text": "شرح سند: {{document.title}} — سال مالی {{document.fiscalYear}}",
+        "align": "center",
+        "bold": false
+      },
+      {
+        "id": "document-number-line",
+        "type": "text",
+        "text": "شماره سند: {{document.documentNumber}} — تاریخ سند: {{document.documentDateJalali}}",
+        "align": "center",
+        "bold": false,
+        "visibleWhen": {
+          "k": "not",
+          "of": {
+            "k": "empty",
+            "of": {
+              "k": "var",
+              "path": "document.documentNumber"
+            }
+          }
+        }
+      },
+      {
+        "id": "header-divider",
+        "type": "divider"
+      }
+    ]
+  },
+  "body": [
+    {
+      "id": "beneficiary-table",
+      "type": "table",
+      "dataSource": "document.beneficiaries",
+      "minRows": 5,
+      "sortBy": [],
+      "pagination": {
+        "repeatHeaderOnNewPage": true,
+        "avoidRowBreak": true
+      },
+      "totalsRow": {
+        "enabled": true,
+        "labelFa": "جمع کل",
+        "cells": {
+          "accountHolder": { "kind": "sumInWords", "of": "total" },
+          "total": "sum"
+        }
+      },
+      "columns": [
+        {
+          "key": "rowNo",
+          "titleFa": "ردیف",
+          "width": {
+            "unit": "mm",
+            "value": 10
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.index"
+          },
+          "format": {
+            "kind": "integer",
+            "persianDigits": true,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          },
+          "rowNumber": true
+        },
+        {
+          "key": "identifier",
+          "titleFa": "شماره شبا / شناسه قبض و پرداخت",
+          "width": {
+            "unit": "mm",
+            "value": 72
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.identifier"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": false,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          },
+          "multiline": {
+            "lines": [
+              {
+                "value": {
+                  "k": "var",
+                  "path": "row.secondaryIdentifier"
+                },
+                "muted": false,
+                "format": {
+                  "kind": "text",
+                  "persianDigits": false,
+                  "thousandSeparator": false,
+                  "decimals": 0,
+                  "emptyText": ""
+                }
+              }
+            ]
+          }
+        },
+        {
+          "key": "accountHolder",
+          "titleFa": "نام صاحب حساب",
+          "width": {
+            "unit": "mm",
+            "value": 60
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.accountHolder"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": false,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        },
+        {
+          "key": "bankTitle",
+          "titleFa": "نام بانک",
+          "width": {
+            "unit": "mm",
+            "value": 28
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.bankTitle"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": false,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        },
+        {
+          "key": "total",
+          "titleFa": "جمع",
+          "width": {
+            "unit": "mm",
+            "value": 38
+          },
+          "align": "end",
+          "value": {
+            "k": "var",
+            "path": "row.total"
+          },
+          "format": {
+            "kind": "currency",
+            "persianDigits": true,
+            "thousandSeparator": true,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        }
+      ]
+    }
+  ],
+  "footer": {
+    "repeatOnEveryPage": false,
+    "blocks": [
+      {
+        "id": "footer-space",
+        "type": "spacer",
+        "heightMm": 6
+      },
+      {
+        "id": "signatures",
+        "type": "signatureRow",
+        "blocks": [
+          {
+            "id": "sign-procurement",
+            "type": "signature",
+            "signatoryRoleKey": "PROCUREMENT_LEAD",
+            "align": "center",
+            "spaceMm": 18
+          },
+          {
+            "id": "sign-review",
+            "type": "signature",
+            "signatoryRoleKey": "REVIEW_LEAD",
+            "align": "center",
+            "spaceMm": 18
+          }
+        ]
+      }
+    ]
+  }
+}

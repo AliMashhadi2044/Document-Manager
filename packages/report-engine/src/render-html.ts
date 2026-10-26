@@ -150,7 +150,17 @@ function renderTable(table: LaidOutTable): string {
               const span = table.totalsLabelSpan > 1 ? ` colspan="${table.totalsLabelSpan}"` : '';
               return `<td class="align-center"${span}>${escapeHtml(table.totalsLabel)}</td>`;
             }
-            return index < table.totalsLabelSpan ? '' : renderCell(cell);
+
+            /*
+              پهنای سلول از چیدمان می‌آید، نه از حدسِ اینجا.
+
+              سلولِ «جمع به حروف» چند ستون را می‌گیرد و ستون‌های پوشانده‌شده پهنای
+              صفر دارند؛ رد کردنشان همان کاری است که ادغام خانه در فرم کاغذی
+              می‌کند.
+            */
+            const span = table.totalsSpans[index] ?? 1;
+            if (span === 0) return '';
+            return renderCell(cell, span);
           })
           .join('')}</tr>`;
 
@@ -173,9 +183,11 @@ ${totals}
  * سلول مثل هر سلول دیگری یک‌تکه می‌ماند؛ خط جداکننده روی یک نیمهٔ خالی فقط جدول را
  * شلوغ می‌کند. (خط‌های بی‌متن را چیدمان از قبل حذف کرده است.)
  */
-function renderCell(cell: LaidOutCell): string {
+function renderCell(cell: LaidOutCell, colspan = 1): string {
+  const span = colspan > 1 ? ` colspan="${colspan}"` : '';
+
   if (cell.extraLines.length === 0) {
-    return `<td class="align-${cell.align}"><span class="cell-line">${escapeHtml(
+    return `<td class="align-${cell.align}"${span}><span class="cell-line">${escapeHtml(
       cell.text,
     )}</span></td>`;
   }
@@ -188,7 +200,7 @@ function renderCell(cell: LaidOutCell): string {
     ),
   ].join('');
 
-  return `<td class="align-${cell.align} split-cell">${parts}</td>`;
+  return `<td class="align-${cell.align} split-cell"${span}>${parts}</td>`;
 }
 
 function buildCss(report: LaidOutReport, fontFaceCss: string): string {

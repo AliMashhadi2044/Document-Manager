@@ -98,7 +98,7 @@ export class ProductTypesService {
       */
       this.prisma.invoice.findMany({
         where: { documentId, vendorId, description: { not: null } },
-        orderBy: [{ invoiceDate: 'asc' }, { id: 'asc' }],
+        orderBy: [{ invoiceDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
         select: {
           id: true,
           description: true,
@@ -158,8 +158,8 @@ export class ProductTypesService {
 
     const invoices = await this.prisma.invoice.findMany({
       where: { documentId, vendorId },
-      // همان ترتیبی که تجمیع گزارش استفاده می‌کند: تاریخ صعودی، سپس شناسه.
-      orderBy: [{ invoiceDate: 'asc' }, { id: 'asc' }],
+      // همان ترتیبی که تجمیع گزارش استفاده می‌کند: تاریخ، سپس ترتیب ثبت.
+      orderBy: [{ invoiceDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
         invoiceNumber: true,

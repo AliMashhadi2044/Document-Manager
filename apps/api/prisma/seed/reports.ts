@@ -8,6 +8,7 @@ import { allowedValuePaths, collectionFields } from '../../src/modules/reporting
 // کامپایل می‌شود تا در تصویر production بدون tsx قابل اجرا باشد. `import.meta.url`
 // در حالت دوم اصلاً مجاز نیست، و مسیر نسبی به cwd هم در دو حالت یکی نمی‌ماند.
 import taxReportTemplate from './templates/tax-report.json';
+import beneficiaryIbanTemplate from './templates/beneficiary-iban-report.json';
 
 /**
  * گزارش مالیات به‌صورت **داده**، نه کد (docs/09 §۹).
@@ -20,13 +21,70 @@ import taxReportTemplate from './templates/tax-report.json';
  * seed‌شده یعنی خطایی که تازه موقع اجرای گزارش توسط کاربر پیدا می‌شود.
  */
 
-export async function seedReports(prisma: PrismaClient): Promise<void> {
-  const raw: unknown = taxReportTemplate;
+/**
+ * مقایسهٔ دو قالب، مستقل از **ترتیب کلیدها**.
+ *
+ * PostgreSQL ستون `jsonb` را با ترتیب کلیدِ خودش برمی‌گرداند، نه ترتیبی که نوشته
+ * شده. پس `JSON.stringify` دو طرف هیچ‌وقت برابر درنمی‌آمد و هر بار اجرای seed یک
+ * نسخهٔ تازه منتشر می‌کرد — قالب دست‌نخورده، ولی شمارهٔ نسخه هر بار یکی بالاتر.
+ *
+ * اینجا هر دو طرف با کلیدهای مرتب‌شده سریال می‌شوند تا مقایسه دربارهٔ **محتوا**
+ * باشد و نه دربارهٔ شکلِ ذخیره‌سازی.
+ */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      // مقدار `undefined` در JSON وجود ندارد؛ نگه داشتنش دو طرف را ناهم‌شکل می‌کرد.
+      .filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
 
-  const parsed = templateV1Schema.safeParse(raw);
+/** قالب‌های سیستمی، به ترتیبی که منتشر می‌شوند. */
+const SYSTEM_TEMPLATES: readonly {
+  readonly key: string;
+  readonly titleFa: string;
+  readonly definitionName: string;
+  readonly raw: unknown;
+}[] = [
+  {
+    key: 'TAX_REPORT',
+    titleFa: 'گزارش مالیات بر ارزش افزوده',
+    definitionName: 'گزارش مالیات بر ارزش افزوده (سیستمی)',
+    raw: taxReportTemplate,
+  },
+  {
+    key: 'BENEFICIARY_IBAN',
+    titleFa: 'شماره شبا ذینفعان سند',
+    definitionName: 'شماره شبا ذینفعان سند (سیستمی)',
+    raw: beneficiaryIbanTemplate,
+  },
+];
+
+export async function seedReports(prisma: PrismaClient): Promise<void> {
+  for (const entry of SYSTEM_TEMPLATES) {
+    await seedSystemTemplate(prisma, entry);
+  }
+}
+
+/**
+ * یک قالب سیستمی.
+ *
+ * تابع عمداً **عمومی** است و نه یکی به‌ازای هر گزارش: قاعدهٔ «نسخهٔ منتشرشده ویرایش
+ * نمی‌شود» و «قالب فعال یک انتخاب صریح است» برای همهٔ گزارش‌ها یکی است، و دو نسخهٔ
+ * کپی‌شده‌اش دیر یا زود واگرا می‌شدند.
+ */
+async function seedSystemTemplate(
+  prisma: PrismaClient,
+  entry: { key: string; titleFa: string; definitionName: string; raw: unknown },
+): Promise<void> {
+  const parsed = templateV1Schema.safeParse(entry.raw);
   if (!parsed.success) {
     throw new Error(
-      `قالب گزارش مالیات معتبر نیست: ${parsed.error.issues
+      `قالب «${entry.titleFa}» معتبر نیست: ${parsed.error.issues
         .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
         .join(' | ')}`,
     );
@@ -46,18 +104,18 @@ export async function seedReports(prisma: PrismaClient): Promise<void> {
   });
   if (problems.length > 0) {
     throw new Error(
-      `قالب گزارش مالیات با فهرست داده نمی‌خواند: ${problems
+      `قالب «${entry.titleFa}» با فهرست داده نمی‌خواند: ${problems
         .map((problem) => `${problem.path}: ${problem.message}`)
         .join(' | ')}`,
     );
   }
 
   const reportType = await prisma.reportType.upsert({
-    where: { key: 'TAX_REPORT' },
-    update: { titleFa: 'گزارش مالیات بر ارزش افزوده', dataScopeKey: 'document', isSystem: true },
+    where: { key: entry.key },
+    update: { titleFa: entry.titleFa, dataScopeKey: 'document', isSystem: true },
     create: {
-      key: 'TAX_REPORT',
-      titleFa: 'گزارش مالیات بر ارزش افزوده',
+      key: entry.key,
+      titleFa: entry.titleFa,
       dataScopeKey: 'document',
       isSystem: true,
     },
@@ -71,18 +129,17 @@ export async function seedReports(prisma: PrismaClient): Promise<void> {
   if (existing?.currentVersion) {
     // نسخه منتشرشده **ویرایش نمی‌شود**. اگر فایل قالب عوض شده باشد، نسخه تازه‌ای
     // ساخته می‌شود تا خروجی‌های تاریخی به نسخه خودشان بسته بمانند.
-    const unchanged =
-      JSON.stringify(existing.currentVersion.template) === JSON.stringify(template);
+    const unchanged = canonical(existing.currentVersion.template) === canonical(template);
     if (unchanged) {
       if (reportType.activeDefinitionId === null) {
         await prisma.reportType.update({
           where: { id: reportType.id },
           data: { activeDefinitionId: existing.id },
         });
-        console.log('✓ قالب سیستمی گزارش مالیات به‌عنوان قالب فعال انتخاب شد');
+        console.log(`✓ قالب سیستمی «${entry.titleFa}» به‌عنوان قالب فعال انتخاب شد`);
         return;
       }
-      console.log('• قالب گزارش مالیات بدون تغییر است');
+      console.log(`• قالب «${entry.titleFa}» بدون تغییر است`);
       return;
     }
 
@@ -114,7 +171,7 @@ export async function seedReports(prisma: PrismaClient): Promise<void> {
       });
     }
 
-    console.log(`✓ نسخه ${nextNo} قالب گزارش مالیات منتشر شد`);
+    console.log(`✓ نسخه ${nextNo} قالب «${entry.titleFa}» منتشر شد`);
     return;
   }
 
@@ -123,7 +180,7 @@ export async function seedReports(prisma: PrismaClient): Promise<void> {
     (await prisma.reportDefinition.create({
       data: {
         reportTypeId: reportType.id,
-        name: 'گزارش مالیات بر ارزش افزوده (سیستمی)',
+        name: entry.definitionName,
         status: 'PUBLISHED',
         isSystem: true,
       },
@@ -151,7 +208,7 @@ export async function seedReports(prisma: PrismaClient): Promise<void> {
     data: { activeDefinitionId: definition.id },
   });
 
-  console.log('✓ قالب گزارش مالیات (نسخه ۱) ثبت و منتشر شد');
+  console.log(`✓ قالب «${entry.titleFa}» (نسخه ۱) ثبت و منتشر شد`);
 }
 
 /**
@@ -180,6 +237,8 @@ export async function seedProductTypesAndSignatories(prisma: PrismaClient): Prom
 
   const signatories = [
     { roleKey: 'PROCUREMENT_LEAD', fullName: 'محمدصادق محمدی', positionTitle: 'مسئول کارپردازی' },
+    // «مسئول رسیدگی» پای فرم شبای ذینفعان را امضا می‌کند.
+    { roleKey: 'REVIEW_LEAD', fullName: 'علی مهدوی', positionTitle: 'مسئول رسیدگی' },
     { roleKey: 'GENERAL_MANAGER', fullName: 'احمدرضا اجتهادی', positionTitle: 'مدیرکل' },
   ];
   for (const [index, signatory] of signatories.entries()) {

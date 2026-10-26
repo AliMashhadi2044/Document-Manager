@@ -35,6 +35,15 @@ export interface ReportRunResult {
    * جدا از چیدمان و کنار آن فرستاده می‌شود، نه داخل سلول‌ها.
    */
   readonly rowVendorIds: readonly string[];
+  /**
+   * شناسهٔ هر ردیف، برای اقدام‌های روی ردیف.
+   *
+   * جداست از `rowVendorIds` چون هر گزارشی دربارهٔ فروشنده نیست: ردیف گزارش شبای
+   * ذینفعان یک **مقصد پرداخت** است و شناسه‌اش `key` همان ردیف.
+   */
+  readonly rowKeys: readonly string[];
+  /** فاکتورهایی که روش پرداخت ندارند و در گزارش شبا ردیفی نساخته‌اند. */
+  readonly skippedPaymentCount: number;
 }
 
 /**
@@ -285,9 +294,19 @@ export class ReportsService {
     */
     const report = layoutReport(source.template, dataset, { textOverrides });
 
-    const aggregateRows = dataset.collections['document.vendorAggregates'] ?? [];
+    /*
+      ردیف‌های گزارش از **مجموعهٔ همان قالب** خوانده می‌شوند، نه از یک کلید ثابت.
+
+      پیش از این همیشه تجمیع فروشنده خوانده می‌شد؛ با قالب دوم، تعداد ردیف و
+      شناسه‌هایشان به گزارشی مربوط می‌شد که اصلاً اجرا نشده بود.
+    */
+    const firstTable = source.template.body.find((block) => block.type === 'table');
+    const collectionKey =
+      firstTable && firstTable.type === 'table' ? firstTable.dataSource : 'document.vendorAggregates';
+    const aggregateRows = dataset.collections[collectionKey] ?? [];
     const rowCount = aggregateRows.length;
     const rowVendorIds = aggregateRows.map((row) => String(row['vendorId'] ?? ''));
+    const rowKeys = aggregateRows.map((row) => String(row['key'] ?? row['vendorId'] ?? ''));
 
     const run = await this.prisma.reportRun.create({
       data: {
@@ -322,8 +341,10 @@ export class ReportsService {
       runId: run.id,
       report,
       skippedInvoiceCount: dataset.skippedInvoiceCount,
+      skippedPaymentCount: dataset.skippedPaymentCount,
       rowCount,
       rowVendorIds,
+      rowKeys,
     };
   }
 

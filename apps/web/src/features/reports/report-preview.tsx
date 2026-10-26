@@ -9,29 +9,35 @@ import { HeaderEditDialog } from './header-edit-dialog';
 import { ReportView } from './report-view';
 import { ProductTypeDialog } from './product-type-dialog';
 import { AmountDetailsDialog } from './amount-details-dialog';
+import { BeneficiaryDetailsDialog } from './beneficiary-details-dialog';
 import type { CurrentUser } from '../auth/auth.api';
 
-const REPORT_TYPE_KEY = 'TAX_REPORT';
+const TAX = 'TAX_REPORT';
+const BENEFICIARY = 'BENEFICIARY_IBAN';
 
 /**
- * پیش‌نمایش گزارش مالیات.
+ * پیش‌نمایش یک گزارش سند.
  *
  * نکته‌ای که شکل این صفحه را تعیین می‌کند: **اینجا هیچ قاعده‌ای از گزارش پیاده نشده
  * است.** ستون‌ها، ترتیبشان، قالب اعدادشان و ردیف جمع همگی از سند چیدمانی می‌آیند که
  * سرور با قالب ساخته است. اگر فردا قالب در طراح بصری عوض شود، این صفحه بدون تغییر
  * همان را نشان می‌دهد — که اصل «گزارش تازه بدون تغییر کد» است.
  *
- * دو اقدام روی هر ردیف هست که جزو خود گزارش نیستند و کار کاربرند: «تعیین نوع کالا» و
- * «جزئیات مبالغ».
+ * تنها چیزی که به گزارش بستگی دارد، **اقدام‌های روی ردیف** است؛ آن‌ها جزو گزارش
+ * نیستند و کار کاربرند: گزارش مالیات «نوع کالا» و «جزئیات مبالغ» دارد، گزارش شبای
+ * ذینفعان «جزئیات مقصد». نوار ابزار، چاپ، ویرایش سربرگ و خروجی‌ها برای هر دو یکی
+ * است و همین باعث شد گزارش دوم بدون کپی کردن این صفحه بنشیند.
  */
 export function ReportPreview({
   documentId,
   user,
   onBack,
+  reportTypeKey = TAX,
 }: {
   documentId: string;
   user: CurrentUser;
   onBack: () => void;
+  reportTypeKey?: string;
 }): JSX.Element {
   /*
     متن‌های سربرگ که کاربر برای همین خروجی عوض کرده است.
@@ -43,11 +49,12 @@ export function ReportPreview({
   const [textOverrides, setTextOverrides] = useState<TextOverrides>({});
   const [editingHeader, setEditingHeader] = useState(false);
 
-  const preview = useReportPreview(REPORT_TYPE_KEY, documentId, textOverrides);
+  const preview = useReportPreview(reportTypeKey, documentId, textOverrides);
   const [productTypeFor, setProductTypeFor] = useState<{ vendorId: string; vendorName: string } | null>(
     null,
   );
   const [detailsFor, setDetailsFor] = useState<{ vendorId: string; vendorName: string } | null>(null);
+  const [beneficiaryFor, setBeneficiaryFor] = useState<{ key: string; title: string } | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 
@@ -71,7 +78,9 @@ export function ReportPreview({
     );
   }
 
-  const { report, skippedInvoiceCount, rowCount, rowVendorIds } = preview.data;
+  const { report, skippedInvoiceCount, skippedPaymentCount, rowCount, rowVendorIds, rowKeys } =
+    preview.data;
+  const isBeneficiary = reportTypeKey === BENEFICIARY;
   const canSetProductType = user.permissions.includes('document:update');
   const canExport = user.permissions.includes('report:export');
 
@@ -80,7 +89,7 @@ export function ReportPreview({
     setDownloading(true);
     try {
       await downloadReport(
-        REPORT_TYPE_KEY,
+        reportTypeKey,
         documentId,
         format,
         `${report.titleFa}.${format === 'excel' ? 'xlsx' : format}`,
@@ -149,29 +158,67 @@ export function ReportPreview({
         </p>
       ) : null}
 
-      {/* هشدار شمارش‌شده §۸: کاربر باید بداند چند فاکتور در گزارش نیامده‌اند. */}
-      {skippedInvoiceCount > 0 ? (
+      {/*
+        هشدار شمارش‌شده §۸ — با **دلیل درست** برای همین گزارش.
+
+        فاکتور بدون فروشنده از گزارش مالیات می‌افتد و فاکتور بدون روش پرداخت از
+        گزارش شبا؛ نشان دادن دلیل دیگری، کاربر را دنبال چیزی می‌فرستد که خراب نیست.
+      */}
+      {!isBeneficiary && skippedInvoiceCount > 0 ? (
         <p role="status" className="no-print rounded-md bg-warning/10 p-3 text-sm text-warning">
           {toPersianDigits(String(skippedInvoiceCount))} فاکتور بدون فروشنده در این گزارش نیامده
           است. گزارش مالیات بر اساس فروشنده تجمیع می‌شود و فاکتور بدون فروشنده ردیفی ندارد.
         </p>
       ) : null}
 
+      {isBeneficiary && skippedPaymentCount > 0 ? (
+        <p role="status" className="no-print rounded-md bg-warning/10 p-3 text-sm text-warning">
+          {toPersianDigits(String(skippedPaymentCount))} فاکتور بدون روش پرداخت در این گزارش
+          نیامده است. این گزارش بر اساس مقصد پرداخت تجمیع می‌شود و فاکتوری که روش پرداختش ثبت
+          نشده، مقصدی ندارد.
+        </p>
+      ) : null}
+
       {rowCount === 0 ? (
         <p className="no-print rounded-md border border-dashed border-border p-5 text-sm text-muted-foreground">
-          هیچ فروشنده‌ای در این سند فاکتور ندارد، پس گزارش ردیفی ندارد.
+          {isBeneficiary
+            ? 'هیچ فاکتوری در این سند روش پرداخت ثبت‌شده ندارد، پس گزارش ردیفی ندارد.'
+            : 'هیچ فروشنده‌ای در این سند فاکتور ندارد، پس گزارش ردیفی ندارد.'}
         </p>
       ) : null}
 
       <ReportView
         report={report}
-        rowVendorIds={rowVendorIds}
-        onProductType={
-          canSetProductType
-            ? (vendorId, vendorName) => setProductTypeFor({ vendorId, vendorName })
-            : undefined
-        }
-        onDetails={(vendorId, vendorName) => setDetailsFor({ vendorId, vendorName })}
+        renderRowActions={(rowIndex, cells) => {
+          if (isBeneficiary) {
+            const key = rowKeys[rowIndex] ?? '';
+            if (key === '') return null;
+            // عنوان دیالوگ از خودِ ردیف می‌آید؛ ستون دوم شبا یا شناسهٔ قبض است.
+            const label = cells[1]?.text ?? '';
+            return (
+              <RowButton onClick={() => setBeneficiaryFor({ key, title: label })}>
+                جزئیات
+              </RowButton>
+            );
+          }
+
+          const vendorId = rowVendorIds[rowIndex] ?? '';
+          if (vendorId === '') return null;
+          const vendorName = cells[1]?.text ?? '';
+
+          return (
+            <div className="flex flex-col gap-0.5">
+              {canSetProductType ? (
+                <RowButton onClick={() => setProductTypeFor({ vendorId, vendorName })}>
+                  نوع کالا
+                </RowButton>
+              ) : null}
+              <RowButton onClick={() => setDetailsFor({ vendorId, vendorName })}>
+                جزئیات
+              </RowButton>
+            </div>
+          );
+        }}
       />
 
       {productTypeFor ? (
@@ -179,8 +226,17 @@ export function ReportPreview({
           documentId={documentId}
           vendorId={productTypeFor.vendorId}
           vendorName={productTypeFor.vendorName}
-          reportTypeKey={REPORT_TYPE_KEY}
+          reportTypeKey={reportTypeKey}
           onClose={() => setProductTypeFor(null)}
+        />
+      ) : null}
+
+      {beneficiaryFor ? (
+        <BeneficiaryDetailsDialog
+          documentId={documentId}
+          beneficiaryKey={beneficiaryFor.key}
+          title={beneficiaryFor.title}
+          onClose={() => setBeneficiaryFor(null)}
         />
       ) : null}
 
@@ -205,5 +261,24 @@ export function ReportPreview({
         />
       ) : null}
     </div>
+  );
+}
+
+/** دکمهٔ کوچک ستون «اقدام» — تنها چیزی که در این صفحه ظاهرِ مشترک دارد. */
+function RowButton({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      className="rounded px-1 py-0.5 text-[11px] text-primary hover:bg-muted"
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }

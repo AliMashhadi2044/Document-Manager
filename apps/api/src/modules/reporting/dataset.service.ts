@@ -5,6 +5,8 @@ import {
   INVOICE_KIND_LABELS,
   PERSON_TYPE_LABELS,
   aggregateByVendor,
+  groupBeneficiaries,
+  type BeneficiaryInvoiceInput,
   isoDateToJalali,
   formatJalali,
   moneyToString,
@@ -70,7 +72,12 @@ export class DatasetService {
     documentId: string,
     user: AuthenticatedUser,
     generatedAt: Date,
-  ): Promise<ReportDataset & { readonly skippedInvoiceCount: number }> {
+  ): Promise<
+    ReportDataset & {
+      readonly skippedInvoiceCount: number;
+      readonly skippedPaymentCount: number;
+    }
+  > {
     const document = await this.access.assertDocumentVisible(documentId, user);
 
     const [full, organization, signatories, productTypes] = await Promise.all([
@@ -79,9 +86,19 @@ export class DatasetService {
         include: {
           buyerSnapshot: true,
           invoices: {
+            /*
+              ترتیب قطعی گزارش: تاریخ صورتحساب، سپس **ترتیب ثبت**، و در آخر شناسه.
+
+              `createdAt` تزیین نیست: دو فاکتور با یک تاریخ، «اولین»شان همان است که
+              کاربر اول ثبت کرده — نه آن‌که شناسهٔ تصادفی‌اش کوچک‌تر درآمده. ستون
+              «نوع کالا» از همین «اولین» پر می‌شود، پس ترتیب تصادفی یعنی عنوانی که
+              هر بار می‌تواند فرق کند.
+            */
+            orderBy: [{ invoiceDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
             include: {
               vendorSnapshot: true,
               invoiceType: { select: { titleFa: true } },
+              payment: true,
             },
           },
         },
@@ -116,7 +133,7 @@ export class DatasetService {
       فاکتور** همان فروشنده در همین سند — کاربر شرح را موقع ثبت فاکتور نوشته و
       دوباره پرسیدنش کار اضافه است. پس این ستون بدون هیچ کاری هم معمولاً درست است.
 
-      ترتیب «اولین» همان ترتیب قطعی گزارش است (تاریخ صعودی، سپس شناسه) و فاکتورها
+      ترتیب «اولین» همان ترتیب قطعی گزارش است (تاریخ، سپس ترتیب ثبت) و فاکتورها
       از همان `include` با همین ترتیب آمده‌اند.
     */
     const productTypeByVendor = new Map(
@@ -184,6 +201,46 @@ export class DatasetService {
       totalAmount: invoice.totalAmount.toString(),
     }));
 
+    /*
+      مقصدهای پرداخت — ورودی گزارش «شماره شبا ذینفعان سند».
+
+      قاعدهٔ گروه‌بندی در `@dm/shared` است و نه اینجا: دیالوگ «جزئیات» باید دقیقاً
+      همان تقسیم را نشان دهد، و دو پیاده‌سازی دیر یا زود دو عدد می‌دهند.
+    */
+    const beneficiaryInput: BeneficiaryInvoiceInput[] = full.invoices.map((invoice) => ({
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: invoice.invoiceDate.toISOString().slice(0, 10),
+      totalAmount: invoice.totalAmount as Money,
+      vendorName: invoice.vendorSnapshot?.name ?? '',
+      methodKind: invoice.payment?.methodKind ?? null,
+      ibanSnapshot: invoice.payment?.ibanSnapshot ?? null,
+      bankTitleSnapshot: invoice.payment?.bankTitleSnapshot ?? null,
+      accountTitleSnapshot: invoice.payment?.accountTitleSnapshot ?? null,
+      paymentIdentifier: invoice.payment?.paymentIdentifier ?? null,
+      billIdentifier: invoice.payment?.billIdentifier ?? null,
+      pettyCashHolderNameSnapshot: invoice.payment?.pettyCashHolderNameSnapshot ?? null,
+      pettyCashAccountHolderSnapshot: invoice.payment?.pettyCashAccountHolderSnapshot ?? null,
+      pettyCashBankTitleSnapshot: invoice.payment?.pettyCashBankTitleSnapshot ?? null,
+      pettyCashIbanSnapshot: invoice.payment?.pettyCashIbanSnapshot ?? null,
+      beneficiaryAmount: (invoice.payment?.beneficiaryAmount ?? null) as Money | null,
+      pettyCashAmount: (invoice.payment?.pettyCashAmount ?? null) as Money | null,
+    }));
+
+    const beneficiaryGrouping = groupBeneficiaries(beneficiaryInput);
+
+    const beneficiaryRows = beneficiaryGrouping.rows.map((row, index) => ({
+      index: index + 1,
+      key: row.key,
+      kind: row.kind,
+      identifier: row.identifier,
+      secondaryIdentifier: row.secondaryIdentifier,
+      accountHolder: row.accountHolder,
+      bankTitle: row.bankTitle,
+      invoiceCount: row.shares.length,
+      total: moneyToString(row.total),
+    }));
+
     const documentDate = full.documentDate?.toISOString().slice(0, 10) ?? '';
 
     return {
@@ -215,6 +272,7 @@ export class DatasetService {
       },
       collections: {
         'document.vendorAggregates': vendorAggregates,
+        'document.beneficiaries': beneficiaryRows,
         'document.invoices': invoiceRows,
       },
       signatories: signatories.map(
@@ -229,6 +287,14 @@ export class DatasetService {
       roundingMode: readRoundingMode(document.roundingPolicy),
       generatedAt: generatedAt.toISOString().slice(0, 10),
       skippedInvoiceCount: skippedInvoiceIds.length,
+      /*
+        دو شمارندهٔ جدا، چون دو دلیلِ جداگانه‌اند.
+
+        فاکتوری که فروشنده ندارد از گزارش مالیات می‌افتد؛ فاکتوری که روش پرداخت
+        ندارد از گزارش شبا. یکی کردنشان یعنی هشداری که به کاربر دلیل درست را
+        نمی‌گوید.
+      */
+      skippedPaymentCount: beneficiaryGrouping.skippedInvoiceIds.length,
     };
   }
 

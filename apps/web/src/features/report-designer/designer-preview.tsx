@@ -278,7 +278,7 @@ export function DesignerPreview({
             </p>
           ) : null}
 
-          <ReportView report={preview.report} rowVendorIds={preview.rowVendorIds} />
+          <ReportView report={preview.report} />
         </section>
       ) : null}
     </div>

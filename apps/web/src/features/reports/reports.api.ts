@@ -32,6 +32,13 @@ export interface ReportTableBlock {
   readonly totalsLabel: string | null;
   /** چند ستون را برچسب «جمع کل» می‌پوشاند. */
   readonly totalsLabelSpan: number;
+  /**
+   * پهنای هر سلول ردیف جمع، به تعداد ستون؛ `0` یعنی سلولِ پیش از آن پوشانده‌اش.
+   *
+   * لازم شد چون جمعِ نوشته‌شده به حروف در یک ستون باریک جا نمی‌شود و باید تا ستون
+   * عددی بعدی کشیده شود — همان ادغام خانه‌ای که فرم کاغذی دارد.
+   */
+  readonly totalsSpans: readonly number[];
 }
 
 export interface ReportTextBlock {
@@ -80,8 +87,12 @@ export interface ReportPreview {
   readonly rowCount: number;
   /** فاکتورهای بدون فروشنده که در گزارش نیامده‌اند — هشدار شمارش‌شده §۸. */
   readonly skippedInvoiceCount: number;
+  /** فاکتورهای بدون روش پرداخت که در گزارش شبا ردیفی نساخته‌اند — دلیل جدا، شمارندهٔ جدا. */
+  readonly skippedPaymentCount: number;
   /** شناسه فروشنده هر ردیف، برای اقدام‌های رابط کاربری؛ ستون گزارش نیست. */
   readonly rowVendorIds: readonly string[];
+  /** شناسهٔ هر ردیف برای اقدام‌ها؛ در گزارش شبا، کلید مقصد پرداخت. */
+  readonly rowKeys: readonly string[];
   readonly report: LaidOutReportDto;
 }
 
@@ -211,6 +222,42 @@ export function useAmountDetails() {
         `/reports/documents/${documentId}/vendors/${vendorId}/amount-details`,
         { method: 'POST' },
       ),
+  });
+}
+
+/** ریز یک مقصد پرداخت: از هر فاکتور چقدر به این حساب رفته است. */
+export interface BeneficiaryDetails {
+  readonly identifier: string;
+  readonly secondaryIdentifier: string;
+  readonly accountHolder: string;
+  readonly bankTitle: string;
+  readonly kind: 'IBAN' | 'BILL' | 'PETTY_CASH';
+  readonly total: string;
+  readonly invoices: readonly {
+    readonly id: string;
+    readonly invoiceNumber: string | null;
+    readonly invoiceDate: string;
+    readonly vendorName: string;
+    readonly invoiceTypeTitle: string;
+    readonly chapterTitle: string;
+    readonly invoiceTotal: string;
+    readonly amount: string;
+    /** فاکتور ترکیبی بوده و فقط بخشی از مبلغش به این مقصد می‌رود. */
+    readonly isPartial: boolean;
+  }[];
+}
+
+/**
+ * کلید مقصد در **بدنه** می‌رود و نه در نشانی: شبا و شناسهٔ قبض در آن هستند و نشانی
+ * صفحه جای داده‌ای نیست که در تاریخچهٔ مرورگر و لاگ بماند.
+ */
+export function useBeneficiaryDetails() {
+  return useMutation({
+    mutationFn: ({ documentId, key }: { documentId: string; key: string }) =>
+      apiFetch<BeneficiaryDetails>(`/reports/documents/${documentId}/beneficiaries/details`, {
+        method: 'POST',
+        json: { key },
+      }),
   });
 }
 

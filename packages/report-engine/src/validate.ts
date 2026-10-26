@@ -177,11 +177,23 @@ export function validateTemplate(
           });
         }
 
-        for (const key of Object.keys(block.totalsRow?.cells ?? {})) {
+        for (const [key, cell] of Object.entries(block.totalsRow?.cells ?? {})) {
           if (!keys.has(key)) {
             problems.push({
               path: `${at}.totalsRow`,
               message: `ردیف جمع به ستون ناموجود «${key}» اشاره می‌کند`,
+            });
+          }
+
+          /*
+            «جمع به حروف» عدد را از ستون دیگری می‌خواند؛ آن ستون هم باید وجود
+            داشته باشد. بدون این بررسی، نتیجه خاموشانه «صفر» می‌شد — عددی درست
+            برای جمعی که اصلاً خوانده نشده.
+          */
+          if (typeof cell === 'object' && !keys.has(cell.of)) {
+            problems.push({
+              path: `${at}.totalsRow`,
+              message: `جمع به حروف به ستون ناموجود «${cell.of}» اشاره می‌کند`,
             });
           }
         }

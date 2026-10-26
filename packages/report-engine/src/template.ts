@@ -99,7 +99,24 @@ export const tableColumnSchema = z.object({
 });
 export type TableColumn = z.infer<typeof tableColumnSchema>;
 
-export const aggregateSchema = z.enum(['sum', 'count', 'none']);
+/**
+ * چه چیزی در ردیف جمع بنشیند.
+ *
+ * `{ kind: 'sumInWords', of: 'total' }` جمعِ **ستون دیگری** را به حروف فارسی
+ * می‌نویسد — کاری که فرم کاغذی می‌کند: رقم را می‌شود با یک قلم عوض کرد، حروف را نه.
+ *
+ * چرا `of` لازم است و نه جمعِ ستون خودش: خانه‌ای که حروف در آن می‌نشیند، ستونی
+ * متنی است (نام صاحب حساب) و جمعش صفر است. عدد باید از همان ستونی بیاید که روی
+ * کاغذ هم کنارش چاپ می‌شود، وگرنه رقم و حروف دو چیز متفاوت می‌گویند.
+ *
+ * سلولش تا ستون عددیِ بعدی کشیده می‌شود، چون یک عبارت بلند در یک ستون باریک
+ * خوانده نمی‌شود.
+ */
+export const aggregateSchema = z.union([
+  z.enum(['sum', 'count', 'none']),
+  z.object({ kind: z.literal('sumInWords'), of: z.string().min(1).max(60) }),
+]);
+export type AggregateSpec = z.infer<typeof aggregateSchema>;
 
 const tableBlockSchema = z.object({
   ...blockBase,

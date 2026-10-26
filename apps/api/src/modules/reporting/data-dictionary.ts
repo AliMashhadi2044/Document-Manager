@@ -104,6 +104,24 @@ export const DATA_SOURCES: readonly DataSourceDefinition[] = [
     ],
   },
   {
+    key: 'document.beneficiaries',
+    titleFa: 'مقصدهای پرداخت سند (شماره شبا ذینفعان)',
+    cardinality: 'list',
+    // همان دو مجوز تجمیع فروشنده: دیدن سند، و حق اجرای گزارش.
+    requiredPermissions: ['document:read', 'report:run'],
+    fields: [
+      { key: 'index', titleFa: 'ردیف', type: 'integer' },
+      text('key', 'کلید مقصد'),
+      text('kind', 'نوع مقصد'),
+      text('identifier', 'شماره شبا / شناسه'),
+      text('secondaryIdentifier', 'شناسه پرداخت'),
+      text('accountHolder', 'نام صاحب حساب'),
+      text('bankTitle', 'نام بانک'),
+      { key: 'invoiceCount', titleFa: 'تعداد فاکتور', type: 'integer' },
+      money('total', 'جمع'),
+    ],
+  },
+  {
     key: 'document.invoices',
     titleFa: 'فاکتورهای سند',
     cardinality: 'list',

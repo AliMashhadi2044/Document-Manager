@@ -6,6 +6,7 @@ import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { DatasetService } from './dataset.service';
 import { ProductTypesService } from './product-types.service';
+import { BeneficiariesService } from './beneficiaries.service';
 import { ExcelExporter } from './excel.exporter';
 import { PdfRenderer } from './pdf.renderer';
 import { TemplatesService } from './templates.service';
@@ -23,6 +24,7 @@ import { TemplatesService } from './templates.service';
     ReportsService,
     DatasetService,
     ProductTypesService,
+    BeneficiariesService,
     ExcelExporter,
     PdfRenderer,
     TemplatesService,

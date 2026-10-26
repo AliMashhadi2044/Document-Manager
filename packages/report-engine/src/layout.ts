@@ -10,7 +10,7 @@
  * مجوز کاربر اجراکننده حل کرده است.
  */
 
-import type { RoundingMode } from '@dm/shared';
+import { numberToPersianWords, type RoundingMode } from '@dm/shared';
 
 import {
   conditionNodes,
@@ -82,6 +82,17 @@ export interface LaidOutTable {
    */
   readonly fillerRows: readonly (readonly LaidOutCell[])[];
   readonly totals: readonly LaidOutCell[] | null;
+  /**
+   * پهنای هر سلول ردیف جمع، به تعداد ستون.
+   *
+   * `0` یعنی این سلول را رد کن؛ سلولِ پیش از آن پوشانده‌اش. لازم شد چون جمعِ
+   * نوشته‌شده به حروف در یک ستون باریک جا نمی‌شود و باید تا ستون عددی بعدی کشیده
+   * شود — همان کاری که فرم کاغذی با ادغام خانه‌ها می‌کند.
+   *
+   * ستون‌هایی که برچسب «جمع کل» می‌پوشاندشان هم اینجا `0`اند؛ `totalsLabelSpan`
+   * پهنای خودِ برچسب را می‌گوید.
+   */
+  readonly totalsSpans: readonly number[];
   readonly totalsLabel: string | null;
   /**
    * چند ستون را برچسب «جمع کل» می‌پوشاند.
@@ -366,9 +377,34 @@ function layoutTable(
     });
   });
 
+  /** جمع خام یک ستون، از **مقادیر همان ستون** و نه از محاسبهٔ دوباره. */
+  const sumOfColumn = (key: string): bigint => {
+    const columnIndex = columns.findIndex((column) => column.key === key);
+    if (columnIndex === -1) return 0n;
+
+    let sum = 0n;
+    for (const row of rows) {
+      const cell = row[columnIndex];
+      if (cell && typeof cell.raw === 'bigint') sum += cell.raw;
+    }
+    return sum;
+  };
+
   const totals = block.totalsRow?.enabled
     ? columns.map((column): LaidOutCell => {
         const aggregate = block.totalsRow?.cells[column.key] ?? 'none';
+
+        if (typeof aggregate === 'object') {
+          // جمع از ستونی می‌آید که `of` می‌گوید؛ ستونِ خودِ حروف متنی است و جمعش صفر.
+          const sum = sumOfColumn(aggregate.of);
+          return {
+            text: numberToPersianWords(sum),
+            raw: sum,
+            align: 'center',
+            extraLines: [],
+          };
+        }
+
         if (aggregate === 'none') {
           return { text: '', raw: null, align: column.align, extraLines: [] };
         }
@@ -381,14 +417,10 @@ function layoutTable(
             extraLines: [],
           };
         }
+
         // جمع ستون از **مقادیر خام همان ستون** گرفته می‌شود، نه از محاسبه دوباره:
         // اگر فردا عبارت ستون عوض شود، جمع هم با آن عوض می‌شود.
-        let sum = 0n;
-        const columnIndex = columns.indexOf(column);
-        for (const row of rows) {
-          const cell = row[columnIndex];
-          if (cell && typeof cell.raw === 'bigint') sum += cell.raw;
-        }
+        const sum = sumOfColumn(column.key);
         return {
           text: formatValue(sum, column.format),
           raw: sum,
@@ -429,7 +461,39 @@ function layoutTable(
   const firstAggregated = columns.findIndex(
     (column) => (block.totalsRow?.cells[column.key] ?? 'none') !== 'none',
   );
+  /** آیا این ستون در ردیف جمع، «جمع به حروف» است؟ */
+  const isWords = (key: string): boolean => {
+    const cell = block.totalsRow?.cells[key];
+    return typeof cell === 'object' && cell.kind === 'sumInWords';
+  };
   const totalsLabelSpan = firstAggregated === -1 ? 1 : Math.max(1, firstAggregated);
+
+  /*
+    پهنای سلول‌های ردیف جمع.
+
+    قاعده یک خط است: هر سلول یک ستون است، مگر سلولِ «جمع به حروف» که تا ستون
+    تجمیع‌شدهٔ بعدی کشیده می‌شود. ستون‌هایی که برچسب یا یک سلولِ کشیده پوشانده،
+    پهنای صفر می‌گیرند تا خروجی‌گیرها ردشان کنند.
+  */
+  const totalsSpans: number[] = columns.map((_column, index) => (index < totalsLabelSpan ? 0 : 1));
+  if (totalsSpans.length > 0) totalsSpans[0] = totalsLabelSpan;
+
+  for (let index = totalsLabelSpan; index < columns.length; index += 1) {
+    const column = columns[index] as (typeof columns)[number];
+    if (!isWords(column.key)) continue;
+
+    let end = index + 1;
+    while (
+      end < columns.length &&
+      (block.totalsRow?.cells[(columns[end] as (typeof columns)[number]).key] ?? 'none') === 'none'
+    ) {
+      end += 1;
+    }
+
+    totalsSpans[index] = end - index;
+    for (let covered = index + 1; covered < end; covered += 1) totalsSpans[covered] = 0;
+    index = end - 1;
+  }
 
   return {
     kind: 'table',
@@ -444,6 +508,7 @@ function layoutTable(
     rows,
     fillerRows,
     totals,
+    totalsSpans,
     totalsLabel: block.totalsRow?.enabled ? block.totalsRow.labelFa : null,
     totalsLabelSpan,
     repeatHeaderOnNewPage: block.pagination.repeatHeaderOnNewPage,

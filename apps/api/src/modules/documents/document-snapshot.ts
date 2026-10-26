@@ -30,7 +30,7 @@ export async function buildDocumentSnapshot(
       stadMetadata: true,
       buyerSnapshot: true,
       invoices: {
-        orderBy: [{ invoiceDate: 'asc' }, { id: 'asc' }],
+        orderBy: [{ invoiceDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
         include: {
           vendorSnapshot: true,
           buyerSnapshot: true,

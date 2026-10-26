@@ -241,14 +241,29 @@ export function TableEditor({
                       : `${toPersianDigits(String(column.width.value ?? 0))} ${column.width.unit === 'mm' ? 'م‌م' : '٪'}`}
                   </span>
 
-                  {totals?.enabled === true ? (
+                  {/*
+                    «جمع به حروف» هنوز در طراح ساخته نمی‌شود — هدفِ ستونش هم لازم
+                    دارد و این دو انتخاب با یک فهرست بازشو بیان نمی‌شوند. پس
+                    به‌جای تبدیل خاموشانه‌اش به «بدون جمع» (که قالب را خراب
+                    می‌کرد)، همان‌طور که هست نشان داده می‌شود.
+                  */}
+                  {totals?.enabled === true && typeof totals.cells[column.key] === 'object' ? (
+                    <span
+                      title="این حالت در فایل قالب تنظیم شده است و در طراح قابل تغییر نیست."
+                      className="rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground"
+                    >
+                      جمع به حروف
+                    </span>
+                  ) : null}
+
+                  {totals?.enabled === true && typeof totals.cells[column.key] !== 'object' ? (
                     <div className="w-28">
                       <Select
                         size="sm"
                         prefsKey={null}
                         placeholder={null}
                         aria-label={`تابع ردیف جمع برای ستون ${column.titleFa}`}
-                        value={totals.cells[column.key] ?? 'none'}
+                        value={(totals.cells[column.key] as string | undefined) ?? 'none'}
                         onChange={(nextValue) =>
                           onChange({
                             ...block,

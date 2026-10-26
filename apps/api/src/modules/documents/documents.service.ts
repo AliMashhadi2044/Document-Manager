@@ -113,7 +113,7 @@ export class DocumentsService {
         stadMetadata: { include: { requestType: true } },
         invoices: {
           // قاعده §۹: تاریخ صورتحساب صعودی، با ترتیب ثانویه پایدار.
-          orderBy: [{ invoiceDate: 'asc' }, { id: 'asc' }],
+          orderBy: [{ invoiceDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
           include: {
             vendorSnapshot: true,
             // گروه بودجه همراه فصل می‌آید: سند فقط یک گروه می‌پذیرد و رابط باید

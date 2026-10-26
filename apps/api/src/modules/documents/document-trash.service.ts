@@ -116,7 +116,7 @@ export class DocumentTrashService {
         deletedBy: { select: { id: true, fullName: true } },
         stadMetadata: { include: { requestType: true } },
         invoices: {
-          orderBy: [{ invoiceDate: 'asc' }, { id: 'asc' }],
+          orderBy: [{ invoiceDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
           include: {
             vendorSnapshot: true,
             chapter: { select: { title: true, category: { select: { key: true } } } },

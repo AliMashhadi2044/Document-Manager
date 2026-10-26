@@ -26,6 +26,7 @@ import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { ReportsService } from './reports.service';
 import { DatasetService } from './dataset.service';
 import { ProductTypesService } from './product-types.service';
+import { BeneficiariesService } from './beneficiaries.service';
 import { ExcelExporter, safeSheetName } from './excel.exporter';
 import { PdfRenderer } from './pdf.renderer';
 import { TemplatesService } from './templates.service';
@@ -71,6 +72,14 @@ const textOverridesSchema = z
 
 const reportRunBodySchema = z.object({ textOverrides: textOverridesSchema });
 
+/**
+ * کلید یک مقصد پرداخت.
+ *
+ * رشتهٔ مات است و ساختارش قرارداد داخلی گزارش؛ سرور آن را در فهرست مقصدهای **همان
+ * سند** می‌جوید و نه در جای دیگر، پس کلیدِ ساختگی فقط ۴۰۴ می‌گیرد.
+ */
+const beneficiaryKeySchema = z.object({ key: z.string().min(1).max(200) });
+
 const copyTemplateSchema = z.object({
   name: z.string().trim().min(1, 'نام قالب الزامی است').max(200),
 });
@@ -98,6 +107,7 @@ export class ReportsController {
     private readonly reports: ReportsService,
     private readonly datasets: DatasetService,
     private readonly productTypes: ProductTypesService,
+    private readonly beneficiaries: BeneficiariesService,
     private readonly excel: ExcelExporter,
     private readonly pdf: PdfRenderer,
     private readonly templates: TemplatesService,
@@ -145,7 +155,10 @@ export class ReportsController {
       rowCount: result.rowCount,
       // هشدار شمارش‌شده §۸: چند فاکتور بدون فروشنده از گزارش بیرون مانده‌اند.
       skippedInvoiceCount: result.skippedInvoiceCount,
+      // و چند فاکتور بدون روش پرداخت از گزارش شبا — دو دلیل جدا، دو شمارنده.
+      skippedPaymentCount: result.skippedPaymentCount,
       rowVendorIds: result.rowVendorIds,
+      rowKeys: result.rowKeys,
       report: serializeReport(result.report),
     };
   }
@@ -296,6 +309,25 @@ export class ReportsController {
     return this.productTypes.amountDetails(documentId, vendorId, user);
   }
 
+  /**
+   * جزئیات یک مقصد پرداخت در گزارش شبای ذینفعان.
+   *
+   * کلید مقصد در **بدنه** می‌رود و نه در مسیر: شبا و شناسهٔ قبض در آن هستند و
+   * نشانی صفحه جای داده‌ای نیست که در لاگ و تاریخچهٔ مرورگر بماند (docs/10).
+   */
+  @RequirePermission('report:run')
+  @ReadOnlyRoute()
+  @Post('documents/:documentId/beneficiaries/details')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'فاکتورهای تشکیل‌دهنده یک ردیف شبای ذینفعان' })
+  async beneficiaryDetails(
+    @Param('documentId') documentId: string,
+    @Body(new ZodBody(beneficiaryKeySchema)) body: z.infer<typeof beneficiaryKeySchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.beneficiaries.details(documentId, body.key, user);
+  }
+
   @RequirePermission('document:update')
   @Post('documents/:documentId/vendors/:vendorId/product-type')
   @ApiOperation({ summary: 'تعیین نوع کالای یک فروشنده در این سند' })
@@ -437,7 +469,10 @@ export class ReportsController {
       runId: result.runId,
       rowCount: result.rowCount,
       skippedInvoiceCount: result.skippedInvoiceCount,
+      // و چند فاکتور بدون روش پرداخت از گزارش شبا — دو دلیل جدا، دو شمارنده.
+      skippedPaymentCount: result.skippedPaymentCount,
       rowVendorIds: result.rowVendorIds,
+      rowKeys: result.rowKeys,
       report: serializeReport(result.report),
     };
   }
@@ -461,7 +496,10 @@ export class ReportsController {
       runId: result.runId,
       rowCount: result.rowCount,
       skippedInvoiceCount: result.skippedInvoiceCount,
+      // و چند فاکتور بدون روش پرداخت از گزارش شبا — دو دلیل جدا، دو شمارنده.
+      skippedPaymentCount: result.skippedPaymentCount,
       rowVendorIds: result.rowVendorIds,
+      rowKeys: result.rowKeys,
       report: serializeReport(result.report),
     };
   }
