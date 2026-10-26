@@ -50,6 +50,7 @@ async function addInvoice(
     iban?: boolean;
     holder?: string;
     pettyShare?: string;
+    paymentIdentifier?: string;
   },
 ): Promise<void> {
   await page.getByRole('button', { name: 'افزودن فاکتور' }).click();
@@ -69,6 +70,9 @@ async function addInvoice(
 
   await pickOption(page, 'روش پرداخت', { text: options.method });
   if (options.iban) await pickOption(page, 'شبای ذی‌نفع');
+  if (options.paymentIdentifier) {
+    await page.getByLabel('شناسه پرداخت').fill(options.paymentIdentifier);
+  }
   if (options.holder) {
     await pickOption(page, options.method === 'ترکیبی' ? 'کارپرداز' : 'تنخواه‌دار', {
       text: options.holder,
@@ -122,6 +126,7 @@ test.describe('گزارش شبای ذینفعان', () => {
       vendor,
       method: 'حساب ذی‌نفع',
       iban: true,
+      paymentIdentifier: '900111',
     });
     await addInvoice(page, {
       description: 'کالای دوم',
@@ -186,6 +191,18 @@ test.describe('گزارش شبای ذینفعان', () => {
     const totalsRow = table.locator('td', { hasText: /^جمع کل$/ }).locator('..');
     const printed = moneyNumbers((await totalsRow.textContent()) ?? '');
     expect(printed.at(-1), 'جمع کل با جمع ردیف‌ها نمی‌خواند').toBe(sum);
+
+    /*
+      شناسهٔ پرداخت فروشنده، زیر شبای همان ردیف می‌آید.
+
+      شناسه به **فاکتور** تعلق دارد و نه به شبا (§۱۳.۱)، پس ردیف همچنان یکی است و
+      شناسه در خط دوم همان سلول می‌نشیند.
+    */
+    // شناسه مثل شبا با ارقام لاتین می‌ماند: شمارهٔ بانکی را کسی فارسی نمی‌خواند.
+    await expect(
+      table.getByText('900111'),
+      'شناسهٔ پرداخت زیر شبا نیامده است',
+    ).toBeVisible();
 
     /*
       ردیف کارپرداز، کنار شبایش «تنخواه کارت کارپردازی» هم دارد.

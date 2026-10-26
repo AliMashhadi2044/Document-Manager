@@ -96,12 +96,22 @@ interface Draft {
   key: string;
   kind: BeneficiaryKind;
   identifier: string;
-  secondaryIdentifier: string;
+  /**
+   * خط دوم سلول، **جمع‌شونده**.
+   *
+   * شناسهٔ پرداخت به **فاکتور** تعلق دارد و نه به شبا (§۱۳.۱)، پس یک حساب می‌تواند
+   * در دو فاکتور دو شناسهٔ متفاوت داشته باشد. نشان دادن فقط یکی‌شان، عددی را پنهان
+   * می‌کرد که روی فرم باید دیده شود؛ پس همه می‌آیند، بدون تکرار.
+   */
+  secondaries: string[];
   accountHolder: string;
   bankTitle: string;
   total: bigint;
   shares: BeneficiaryShare[];
 }
+
+/** جداکنندهٔ شناسه‌های چندگانه در یک سلول. */
+const SECONDARY_SEPARATOR = '، ';
 
 /**
  * تجمیع مقصدها.
@@ -116,7 +126,11 @@ export function groupBeneficiaries(
   const drafts = new Map<string, Draft>();
   const skippedInvoiceIds: string[] = [];
 
-  const add = (draft: Omit<Draft, 'total' | 'shares'>, share: BeneficiaryShare): void => {
+  const add = (
+    draft: Omit<Draft, 'total' | 'shares' | 'secondaries'>,
+    share: BeneficiaryShare,
+    secondary: string,
+  ): void => {
     // سهم صفر ردیف نمی‌سازد: مقصدی که چیزی نمی‌گیرد، مقصد نیست.
     if (share.amount <= 0n) return;
 
@@ -124,9 +138,18 @@ export function groupBeneficiaries(
     if (existing) {
       existing.total += share.amount;
       existing.shares.push(share);
+      if (secondary !== '' && !existing.secondaries.includes(secondary)) {
+        existing.secondaries.push(secondary);
+      }
       return;
     }
-    drafts.set(draft.key, { ...draft, total: share.amount, shares: [share] });
+
+    drafts.set(draft.key, {
+      ...draft,
+      total: share.amount,
+      shares: [share],
+      secondaries: secondary === '' ? [] : [secondary],
+    });
   };
 
   for (const invoice of invoices) {
@@ -143,17 +166,29 @@ export function groupBeneficiaries(
     }
 
     if (invoice.methodKind === 'BILL') {
-      add(billDraft(invoice), { ...base, amount: invoice.totalAmount, isPartial: false });
+      add(
+        billDraft(invoice),
+        { ...base, amount: invoice.totalAmount, isPartial: false },
+        invoice.paymentIdentifier ?? '',
+      );
       continue;
     }
 
     if (invoice.methodKind === 'BENEFICIARY_ACCOUNT') {
-      add(ibanDraft(invoice), { ...base, amount: invoice.totalAmount, isPartial: false });
+      add(
+        ibanDraft(invoice),
+        { ...base, amount: invoice.totalAmount, isPartial: false },
+        invoice.paymentIdentifier ?? '',
+      );
       continue;
     }
 
     if (invoice.methodKind === 'PETTY_CASH') {
-      add(pettyDraft(invoice), { ...base, amount: invoice.totalAmount, isPartial: false });
+      add(
+        pettyDraft(invoice),
+        { ...base, amount: invoice.totalAmount, isPartial: false },
+        pettySecondary(invoice),
+      );
       continue;
     }
 
@@ -165,16 +200,24 @@ export function groupBeneficiaries(
         از مبلغ فاکتور است؛ وگرنه کاربری که جمع ردیف‌ها را با جمع فاکتورها مقایسه
         می‌کند، فکر می‌کند جایی اشتباه شده.
       */
-      add(ibanDraft(invoice), {
-        ...base,
-        amount: (invoice.beneficiaryAmount ?? (0n as Money)) as Money,
-        isPartial: true,
-      });
-      add(pettyDraft(invoice), {
-        ...base,
-        amount: (invoice.pettyCashAmount ?? (0n as Money)) as Money,
-        isPartial: true,
-      });
+      add(
+        ibanDraft(invoice),
+        {
+          ...base,
+          amount: (invoice.beneficiaryAmount ?? (0n as Money)) as Money,
+          isPartial: true,
+        },
+        invoice.paymentIdentifier ?? '',
+      );
+      add(
+        pettyDraft(invoice),
+        {
+          ...base,
+          amount: (invoice.pettyCashAmount ?? (0n as Money)) as Money,
+          isPartial: true,
+        },
+        pettySecondary(invoice),
+      );
       continue;
     }
 
@@ -188,7 +231,7 @@ export function groupBeneficiaries(
       key: draft.key,
       kind: draft.kind,
       identifier: draft.identifier,
-      secondaryIdentifier: draft.secondaryIdentifier,
+      secondaryIdentifier: draft.secondaries.join(SECONDARY_SEPARATOR),
       accountHolder: draft.accountHolder,
       bankTitle: draft.bankTitle,
       total: draft.total as Money,
@@ -198,21 +241,28 @@ export function groupBeneficiaries(
   };
 }
 
-function ibanDraft(invoice: BeneficiaryInvoiceInput): Omit<Draft, 'total' | 'shares'> {
+type DraftHead = Omit<Draft, 'total' | 'shares' | 'secondaries'>;
+
+function ibanDraft(invoice: BeneficiaryInvoiceInput): DraftHead {
   const iban = invoice.ibanSnapshot ?? '';
   return {
-    // شبا کلید است: یک فروشنده می‌تواند دو حساب داشته باشد و هر حساب ردیف خودش.
+    /*
+      کلید، **شبا**ست و نه شبا به‌اضافهٔ شناسهٔ پرداخت.
+
+      شناسهٔ پرداخت به فاکتور تعلق دارد (§۱۳.۱)، پس اگر در کلید می‌آمد، یک حساب با
+      دو شناسه دو ردیف می‌شد و فرم دیگر «هر مقصد یک ردیف» نبود. شناسه‌ها در خط دوم
+      همان سلول کنار هم می‌نشینند.
+    */
     key: `IBAN:${iban}`,
     kind: 'IBAN',
     identifier: iban,
-    secondaryIdentifier: '',
     // عنوان حساب اختیاری است؛ نبودش یعنی حساب به نام خود فروشنده است.
     accountHolder: invoice.accountTitleSnapshot ?? invoice.vendorName,
     bankTitle: invoice.bankTitleSnapshot ?? '',
   };
 }
 
-function billDraft(invoice: BeneficiaryInvoiceInput): Omit<Draft, 'total' | 'shares'> {
+function billDraft(invoice: BeneficiaryInvoiceInput): DraftHead {
   const bill = invoice.billIdentifier ?? '';
   const payment = invoice.paymentIdentifier ?? '';
   return {
@@ -220,13 +270,12 @@ function billDraft(invoice: BeneficiaryInvoiceInput): Omit<Draft, 'total' | 'sha
     key: `BILL:${bill}|${payment}`,
     kind: 'BILL',
     identifier: bill,
-    secondaryIdentifier: payment,
     accountHolder: invoice.vendorName,
     bankTitle: BILL_BANK_LABEL,
   };
 }
 
-function pettyDraft(invoice: BeneficiaryInvoiceInput): Omit<Draft, 'total' | 'shares'> {
+function pettyDraft(invoice: BeneficiaryInvoiceInput): DraftHead {
   const iban = invoice.pettyCashIbanSnapshot ?? '';
   const name = invoice.pettyCashHolderNameSnapshot ?? '';
   return {
@@ -243,8 +292,17 @@ function pettyDraft(invoice: BeneficiaryInvoiceInput): Omit<Draft, 'total' | 'sh
       خواننده نمی‌گوید.
     */
     identifier: iban === '' ? PETTY_CASH_CARD_LABEL : iban,
-    secondaryIdentifier: iban === '' ? '' : PETTY_CASH_CARD_LABEL,
     accountHolder: invoice.pettyCashAccountHolderSnapshot ?? name,
     bankTitle: invoice.pettyCashBankTitleSnapshot ?? '',
   };
+}
+
+/**
+ * خط دوم ردیف تنخواه.
+ *
+ * **شناسهٔ پرداخت اینجا نمی‌آید**: پرداخت تنخواه از کارت کارپرداز انجام می‌شود و
+ * شناسهٔ پرداختی که به حواله بانکی تعلق دارد، در این ردیف معنا ندارد.
+ */
+function pettySecondary(invoice: BeneficiaryInvoiceInput): string {
+  return (invoice.pettyCashIbanSnapshot ?? '') === '' ? '' : PETTY_CASH_CARD_LABEL;
 }

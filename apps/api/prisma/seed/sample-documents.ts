@@ -150,23 +150,27 @@ const PLANS: readonly DocumentPlan[] = [
   {
     title: 'سند نمونه — همه مقصدهای پرداخت',
     invoices: [
+      // دو فاکتور به یک حساب، با دو شناسهٔ پرداخت متفاوت: یک ردیف، دو شناسه.
       {
         description: 'اجاره سالن همایش',
         unitPrice: '4201678000',
         method: 'BENEFICIARY_ACCOUNT',
         vendor: 'مرکز آموزشی رفاهی فرهنگیان',
+        paymentIdentifier: '385031276140',
       },
       {
         description: 'پذیرایی همایش',
         unitPrice: '24330000',
         method: 'BENEFICIARY_ACCOUNT',
         vendor: 'مرکز آموزشی رفاهی فرهنگیان',
+        paymentIdentifier: '145011111400',
       },
       {
         description: 'خدمات نظافت',
         unitPrice: '449750000',
         method: 'BENEFICIARY_ACCOUNT',
         vendor: 'زینب معارف وند',
+        paymentIdentifier: '533794009012',
       },
       {
         description: 'خرید تجهیزات اداری',
@@ -174,6 +178,7 @@ const PLANS: readonly DocumentPlan[] = [
         method: 'SPLIT',
         vendor: 'شرکت زرین اقبال بهارستان',
         beneficiaryShare: '2000000000',
+        paymentIdentifier: '901528103711',
       },
       {
         description: 'ملزومات مصرفی',

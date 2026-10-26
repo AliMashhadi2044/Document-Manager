@@ -166,6 +166,48 @@ describe('تجمیع مقصدهای پرداخت', () => {
     expect(rows[0]?.accountHolder).toBe('زینب معارف وند');
   });
 
+  it('شناسهٔ پرداخت فروشنده، خط دوم همان سلول می‌شود', () => {
+    const { rows } = groupBeneficiaries([
+      invoice({ invoiceId: 'a', ibanSnapshot: 'IR01', paymentIdentifier: '9912' }),
+    ]);
+
+    expect(rows[0]?.identifier).toBe('IR01');
+    expect(rows[0]?.secondaryIdentifier).toBe('9912');
+  });
+
+  it('یک حساب با دو شناسهٔ پرداخت، همچنان یک ردیف است و هر دو شناسه را دارد', () => {
+    /*
+      شناسهٔ پرداخت به **فاکتور** تعلق دارد و نه به شبا (§۱۳.۱).
+
+      اگر در کلید گروه می‌آمد، یک حساب با دو شناسه دو ردیف می‌شد و فرم دیگر «هر
+      مقصد یک ردیف» نبود؛ و اگر فقط اولی نشان داده می‌شد، عددی که روی فرم باید
+      دیده شود پنهان می‌ماند.
+    */
+    const { rows } = groupBeneficiaries([
+      invoice({ invoiceId: 'a', ibanSnapshot: 'IR01', paymentIdentifier: '111' }),
+      invoice({ invoiceId: 'b', ibanSnapshot: 'IR01', paymentIdentifier: '222' }),
+      // شناسهٔ تکراری دوباره نوشته نمی‌شود.
+      invoice({ invoiceId: 'c', ibanSnapshot: 'IR01', paymentIdentifier: '111' }),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.secondaryIdentifier).toBe('111، 222');
+  });
+
+  it('ردیف تنخواه شناسهٔ پرداخت نمی‌گیرد', () => {
+    // پرداخت تنخواه از کارت کارپرداز است؛ شناسهٔ حواله بانکی اینجا معنا ندارد.
+    const { rows } = groupBeneficiaries([
+      invoice({
+        invoiceId: 'a',
+        methodKind: 'PETTY_CASH',
+        pettyCashIbanSnapshot: 'IR99',
+        paymentIdentifier: '9912',
+      }),
+    ]);
+
+    expect(rows[0]?.secondaryIdentifier).toBe(PETTY_CASH_CARD_LABEL);
+  });
+
   it('فاکتور بدون روش پرداخت کنار گذاشته و شمرده می‌شود', () => {
     const { rows, skippedInvoiceIds } = groupBeneficiaries([
       invoice({ invoiceId: 'a', methodKind: null }),
