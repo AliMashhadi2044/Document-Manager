@@ -232,10 +232,18 @@ function pettyDraft(invoice: BeneficiaryInvoiceInput): Omit<Draft, 'total' | 'sh
   return {
     key: `PETTY:${iban}|${name}`,
     kind: 'PETTY_CASH',
-    // تنخواه‌دارِ بدون شبا، با عنوان کارتش می‌آید — همان چیزی که روی فرم نوشته
-    // می‌شود، نه یک خانهٔ خالی.
+    /*
+      شبا **و** عنوان کارت، هر دو.
+
+      روی فرم کاغذی، ردیف کارپرداز با «تنخواه کارت کارپردازی» شناخته می‌شود و نه
+      با یک شبای بیست‌وشش‌رقمی میان بقیهٔ شباها. پس عنوان خط دوم همان سلول می‌شود —
+      همان جایی که سلول‌های دوشناسه‌ای (قبض و پرداخت) هم می‌نشینند.
+
+      تنخواه‌دارِ بدون شبا، فقط همان عنوان را می‌گیرد: خط دومِ تکراری، چیزی به
+      خواننده نمی‌گوید.
+    */
     identifier: iban === '' ? PETTY_CASH_CARD_LABEL : iban,
-    secondaryIdentifier: '',
+    secondaryIdentifier: iban === '' ? '' : PETTY_CASH_CARD_LABEL,
     accountHolder: invoice.pettyCashAccountHolderSnapshot ?? name,
     bankTitle: invoice.pettyCashBankTitleSnapshot ?? '',
   };

@@ -135,7 +135,27 @@ describe('تجمیع مقصدهای پرداخت', () => {
     ]);
 
     expect(rows[0]?.identifier).toBe(PETTY_CASH_CARD_LABEL);
+    // خط دومِ تکراری نمی‌آید؛ یک‌بار گفتنش کافی است.
+    expect(rows[0]?.secondaryIdentifier).toBe('');
     expect(rows[0]?.accountHolder).toBe('محمدصادق محمدی');
+  });
+
+  it('تنخواه‌دار با شبا، عنوان کارت را کنار شبا می‌گیرد', () => {
+    /*
+      روی فرم، ردیف کارپرداز باید از میان بقیهٔ شباها پیدا شود؛ یک شمارهٔ
+      بیست‌وشش‌رقمی به‌تنهایی این کار را نمی‌کند.
+    */
+    const { rows } = groupBeneficiaries([
+      invoice({
+        invoiceId: 'a',
+        methodKind: 'PETTY_CASH',
+        pettyCashIbanSnapshot: 'IR99',
+        pettyCashHolderNameSnapshot: 'محمدصادق محمدی',
+      }),
+    ]);
+
+    expect(rows[0]?.identifier).toBe('IR99');
+    expect(rows[0]?.secondaryIdentifier).toBe(PETTY_CASH_CARD_LABEL);
   });
 
   it('عنوان حسابِ خالی یعنی حساب به نام خود فروشنده', () => {
