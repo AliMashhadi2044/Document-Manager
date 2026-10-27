@@ -134,6 +134,7 @@ function ReportTable({
 }): JSX.Element {
   const actions = table.rows.map((row, index) => renderRowActions?.(index, row) ?? null);
   const hasActions = actions.some((action) => action !== null);
+  const hasSubtitles = table.columns.some((column) => column.subtitleFa !== null);
 
   return (
     <div className="overflow-x-auto">
@@ -157,20 +158,47 @@ function ReportTable({
           {hasActions ? <col className="no-print" style={{ width: '22mm' }} /> : null}
         </colgroup>
 
+        {/*
+          سرستون دوطبقه.
+
+          ستون فصل بالا عنوان دارد و پایین کد؛ ستون‌های بی‌زیرعنوان هر دو طبقه را
+          می‌گیرند. وقتی هیچ ستونی زیرعنوان ندارد، همان سرستون یک‌خطیِ همیشگی
+          می‌ماند و طبقهٔ دومِ خالی ساخته نمی‌شود.
+        */}
         <thead>
           <tr>
             {table.columns.map((column) => (
               <th
                 key={column.key}
+                rowSpan={hasSubtitles && column.subtitleFa === null ? 2 : undefined}
                 className="border border-border px-1.5 py-1 text-center font-bold"
               >
                 {column.titleFa}
               </th>
             ))}
             {hasActions ? (
-              <th className="no-print border border-border px-1.5 py-1 text-center">اقدام</th>
+              <th
+                rowSpan={hasSubtitles ? 2 : undefined}
+                className="no-print border border-border px-1.5 py-1 text-center"
+              >
+                اقدام
+              </th>
             ) : null}
           </tr>
+          {hasSubtitles ? (
+            <tr>
+              {table.columns
+                .filter((column) => column.subtitleFa !== null)
+                .map((column) => (
+                  <th
+                    key={`${column.key}-subtitle`}
+                    className="border border-border px-1.5 py-1 text-center font-bold"
+                  >
+                    {column.subtitleFa}
+                  </th>
+                ))}
+            </tr>
+          ) : null}
         </thead>
 
         <tbody>

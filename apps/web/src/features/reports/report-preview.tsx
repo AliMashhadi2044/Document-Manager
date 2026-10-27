@@ -10,10 +10,13 @@ import { ReportView } from './report-view';
 import { ProductTypeDialog } from './product-type-dialog';
 import { AmountDetailsDialog } from './amount-details-dialog';
 import { BeneficiaryDetailsDialog } from './beneficiary-details-dialog';
+import { LineTitleDialog } from './line-title-dialog';
 import type { CurrentUser } from '../auth/auth.api';
 
 const TAX = 'TAX_REPORT';
 const BENEFICIARY = 'BENEFICIARY_IBAN';
+/** فرم‌های ریزهزینه — هر ردیفشان یک فاکتور است و شرحش ویرایش‌شدنی. */
+const EXPENSE_BREAKDOWNS = ['EXPENSE_BREAKDOWN_CAPITAL', 'EXPENSE_BREAKDOWN_CURRENT'];
 
 /**
  * پیش‌نمایش یک گزارش سند.
@@ -55,6 +58,7 @@ export function ReportPreview({
   );
   const [detailsFor, setDetailsFor] = useState<{ vendorId: string; vendorName: string } | null>(null);
   const [beneficiaryFor, setBeneficiaryFor] = useState<{ key: string; title: string } | null>(null);
+  const [lineTitleFor, setLineTitleFor] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 
@@ -81,6 +85,7 @@ export function ReportPreview({
   const { report, skippedInvoiceCount, skippedPaymentCount, rowCount, rowVendorIds, rowKeys } =
     preview.data;
   const isBeneficiary = reportTypeKey === BENEFICIARY;
+  const isExpenseBreakdown = EXPENSE_BREAKDOWNS.includes(reportTypeKey);
   const canSetProductType = user.permissions.includes('document:update');
   const canExport = user.permissions.includes('report:export');
 
@@ -164,7 +169,7 @@ export function ReportPreview({
         فاکتور بدون فروشنده از گزارش مالیات می‌افتد و فاکتور بدون روش پرداخت از
         گزارش شبا؛ نشان دادن دلیل دیگری، کاربر را دنبال چیزی می‌فرستد که خراب نیست.
       */}
-      {!isBeneficiary && skippedInvoiceCount > 0 ? (
+      {!isBeneficiary && !isExpenseBreakdown && skippedInvoiceCount > 0 ? (
         <p role="status" className="no-print rounded-md bg-warning/10 p-3 text-sm text-warning">
           {toPersianDigits(String(skippedInvoiceCount))} فاکتور بدون فروشنده در این گزارش نیامده
           است. گزارش مالیات بر اساس فروشنده تجمیع می‌شود و فاکتور بدون فروشنده ردیفی ندارد.
@@ -181,15 +186,30 @@ export function ReportPreview({
 
       {rowCount === 0 ? (
         <p className="no-print rounded-md border border-dashed border-border p-5 text-sm text-muted-foreground">
-          {isBeneficiary
-            ? 'هیچ فاکتوری در این سند روش پرداخت ثبت‌شده ندارد، پس گزارش ردیفی ندارد.'
-            : 'هیچ فروشنده‌ای در این سند فاکتور ندارد، پس گزارش ردیفی ندارد.'}
+          {isExpenseBreakdown
+            ? 'هیچ فاکتوری از این گروه بودجه در این سند نیست، پس فرم ردیفی ندارد.'
+            : isBeneficiary
+              ? 'هیچ فاکتوری در این سند روش پرداخت ثبت‌شده ندارد، پس گزارش ردیفی ندارد.'
+              : 'هیچ فروشنده‌ای در این سند فاکتور ندارد، پس گزارش ردیفی ندارد.'}
         </p>
       ) : null}
 
       <ReportView
         report={report}
         renderRowActions={(rowIndex, cells) => {
+          /*
+            فرم ریزهزینه: شرحِ ردیف.
+
+            «جزئیات» ندارد چون ردیفش تجمیع نیست — هر ردیف دقیقاً یک فاکتور است و
+            چیزی برای باز کردن ندارد.
+          */
+          if (isExpenseBreakdown) {
+            if (!canSetProductType) return null;
+            const invoiceId = rowKeys[rowIndex] ?? '';
+            if (invoiceId === '') return null;
+            return <RowButton onClick={() => setLineTitleFor(invoiceId)}>شرح</RowButton>;
+          }
+
           if (isBeneficiary) {
             const key = rowKeys[rowIndex] ?? '';
             if (key === '') return null;
@@ -228,6 +248,15 @@ export function ReportPreview({
           vendorName={productTypeFor.vendorName}
           reportTypeKey={reportTypeKey}
           onClose={() => setProductTypeFor(null)}
+        />
+      ) : null}
+
+      {lineTitleFor ? (
+        <LineTitleDialog
+          documentId={documentId}
+          invoiceId={lineTitleFor}
+          reportTypeKey={reportTypeKey}
+          onClose={() => setLineTitleFor(null)}
         />
       ) : null}
 

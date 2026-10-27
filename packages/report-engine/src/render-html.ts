@@ -112,9 +112,30 @@ function renderTable(table: LaidOutTable): string {
     })
     .join('');
 
-  const head = table.columns
-    .map((column) => `<th class="align-center">${escapeHtml(column.titleFa)}</th>`)
-    .join('');
+  /*
+    سرستون: یک طبقه، یا دو طبقه وقتی ستونی زیرعنوان دارد.
+
+    فرم کاغذی بالای هر ستونِ فصل دو چیز می‌نویسد: عنوان فصل و کدش. ستون‌هایی که
+    زیرعنوان ندارند (ردیف، شرح، جمع) هر دو طبقه را می‌گیرند — همان ادغام عمودیِ
+    خانه در فرم.
+  */
+  const hasSubtitles = table.columns.some((column) => column.subtitleFa !== null);
+
+  const head = hasSubtitles
+    ? `<tr>${table.columns
+        .map((column) =>
+          column.subtitleFa === null
+            ? `<th class="align-center" rowspan="2">${escapeHtml(column.titleFa)}</th>`
+            : `<th class="align-center">${escapeHtml(column.titleFa)}</th>`,
+        )
+        .join('')}</tr>
+<tr>${table.columns
+        .filter((column) => column.subtitleFa !== null)
+        .map((column) => `<th class="align-center">${escapeHtml(column.subtitleFa ?? '')}</th>`)
+        .join('')}</tr>`
+    : `<tr>${table.columns
+        .map((column) => `<th class="align-center">${escapeHtml(column.titleFa)}</th>`)
+        .join('')}</tr>`;
 
   const body = table.rows.map((row) => `<tr>${row.map(renderCell).join('')}</tr>`).join('\n');
 
@@ -166,7 +187,7 @@ function renderTable(table: LaidOutTable): string {
 
   return `<table class="report-table${table.avoidRowBreak ? ' avoid-row-break' : ''}">
 <colgroup>${colgroup}</colgroup>
-<thead><tr>${head}</tr></thead>
+<thead>${head}</thead>
 <tbody>
 ${body}
 ${fillers}

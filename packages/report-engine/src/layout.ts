@@ -30,6 +30,7 @@ import {
   textPlaceholders,
   type Block,
   type TableBlock,
+  type TableColumn,
   type TemplateV1,
 } from './template.js';
 import type { Value } from './types.js';
@@ -68,6 +69,14 @@ export interface LaidOutTable {
   readonly columns: readonly {
     readonly key: string;
     readonly titleFa: string;
+    /**
+     * خط دوم سرستون؛ `null` یعنی سرستون یک‌خطی.
+     *
+     * وقتی **هر** ستونی زیرعنوان داشته باشد، سرستون جدول دو طبقه می‌شود و ستون‌های
+     * بی‌زیرعنوان هر دو طبقه را می‌گیرند — همان کاری که فرم کاغذی با ادغام عمودی
+     * خانه می‌کند.
+     */
+    readonly subtitleFa: string | null;
     readonly width: { unit: 'mm' | 'percent' | 'auto'; value?: number | undefined };
     readonly align: 'start' | 'center' | 'end';
     readonly isNumeric: boolean;
@@ -346,16 +355,17 @@ function layoutTable(
     );
   }
 
-  const columns = block.columns.filter(
-    (column) => !column.visibleWhen || evaluateCondition(column.visibleWhen, scope),
-  );
+  const columns = block.columns
+    .filter((column) => !column.visibleWhen || evaluateCondition(column.visibleWhen, scope))
+    .flatMap((column) => expandColumn(column, dataset));
 
   const ordered = sortRows(source, block.sortBy);
 
   const rows = ordered.map((row, index) => {
     const rowScope = rowScopeFor(scope, row, index);
     return columns.map((column): LaidOutCell => {
-      const raw = evaluateExpression(column.value, rowScope);
+      const cellScope = columnScopeFor(rowScope, column);
+      const raw = evaluateExpression(column.value, cellScope);
       return {
         text: formatValue(raw, column.format),
         raw,
@@ -369,7 +379,7 @@ function layoutTable(
         */
         extraLines: (column.multiline?.lines ?? [])
           .map((line) => ({
-            text: formatValue(evaluateExpression(line.value, rowScope), line.format),
+            text: formatValue(evaluateExpression(line.value, cellScope), line.format),
             muted: line.muted,
           }))
           .filter((line) => line.text !== ''),
@@ -377,21 +387,27 @@ function layoutTable(
     });
   });
 
-  /** جمع خام یک ستون، از **مقادیر همان ستون** و نه از محاسبهٔ دوباره. */
+  /**
+   * جمع خام یک ستون، از **مقادیر همان ستون** و نه از محاسبهٔ دوباره.
+   *
+   * کلید، کلیدِ **قالب** است و نه کلیدِ ستونِ بازشده: یک ستونِ تکرارشونده روی کاغذ
+   * چند ستون است ولی در قالب یکی. پس همهٔ ستون‌هایی که از آن یکی ساخته شده‌اند با
+   * هم جمع می‌شوند — همان «جمع فصل‌ها» که ته فرم می‌آید.
+   */
   const sumOfColumn = (key: string): bigint => {
-    const columnIndex = columns.findIndex((column) => column.key === key);
-    if (columnIndex === -1) return 0n;
-
     let sum = 0n;
-    for (const row of rows) {
-      const cell = row[columnIndex];
-      if (cell && typeof cell.raw === 'bigint') sum += cell.raw;
+    for (const [columnIndex, column] of columns.entries()) {
+      if (column.key !== key) continue;
+      for (const row of rows) {
+        const cell = row[columnIndex];
+        if (cell && typeof cell.raw === 'bigint') sum += cell.raw;
+      }
     }
     return sum;
   };
 
   const totals = block.totalsRow?.enabled
-    ? columns.map((column): LaidOutCell => {
+    ? columns.map((column, columnIndex): LaidOutCell => {
         const aggregate = block.totalsRow?.cells[column.key] ?? 'none';
 
         if (typeof aggregate === 'object') {
@@ -419,9 +435,18 @@ function layoutTable(
           };
         }
 
-        // جمع ستون از **مقادیر خام همان ستون** گرفته می‌شود، نه از محاسبه دوباره:
-        // اگر فردا عبارت ستون عوض شود، جمع هم با آن عوض می‌شود.
-        const sum = sumOfColumn(column.key);
+        /*
+          جمع ستون از **مقادیر خام همان ستون** گرفته می‌شود، نه از محاسبه دوباره:
+          اگر فردا عبارت ستون عوض شود، جمع هم با آن عوض می‌شود.
+
+          اینجا «همان ستون» یعنی همین ستونِ بازشده و نه همهٔ هم‌کلیدهایش: ته ستون
+          «تعمیرات» باید جمعِ تعمیرات بنشیند، نه جمع همهٔ فصل‌ها.
+        */
+        let sum = 0n;
+        for (const row of rows) {
+          const cell = row[columnIndex];
+          if (cell && typeof cell.raw === 'bigint') sum += cell.raw;
+        }
         return {
           text: formatValue(sum, column.format),
           raw: sum,
@@ -500,8 +525,9 @@ function layoutTable(
     kind: 'table',
     id: block.id,
     columns: columns.map((column) => ({
-      key: column.key,
-      titleFa: column.titleFa,
+      key: column.resolvedKey,
+      titleFa: column.resolvedTitle,
+      subtitleFa: column.resolvedSubtitle,
       width: { unit: column.width.unit, value: column.width.value },
       align: column.align,
       isNumeric: column.format.kind === 'currency' || column.format.kind === 'integer',
@@ -514,6 +540,96 @@ function layoutTable(
     totalsLabelSpan,
     repeatHeaderOnNewPage: block.pagination.repeatHeaderOnNewPage,
     avoidRowBreak: block.pagination.avoidRowBreak,
+  };
+}
+
+/**
+ * یک ستونِ قالب، پس از باز شدن.
+ *
+ * ستونِ معمولی یکی می‌ماند و ستونِ تکرارشونده به تعداد ردیف‌های مجموعه‌اش باز
+ * می‌شود. `key` همان کلیدِ قالب می‌ماند — ردیف جمع با آن کار می‌کند — و
+ * `resolvedKey` کلیدِ یکتای همین ستونِ روی کاغذ است.
+ */
+interface ExpandedColumn extends TableColumn {
+  readonly resolvedKey: string;
+  readonly resolvedTitle: string;
+  readonly resolvedSubtitle: string | null;
+  /** ردیفِ مجموعه‌ای که این ستون از آن ساخته شده؛ `null` برای ستون معمولی. */
+  readonly source: Record<string, unknown> | null;
+}
+
+function expandColumn(column: TableColumn, dataset: ReportDataset): ExpandedColumn[] {
+  if (!column.repeatFor) {
+    return [
+      {
+        ...column,
+        resolvedKey: column.key,
+        resolvedTitle: column.titleFa,
+        resolvedSubtitle: column.subtitleFa ?? null,
+        source: null,
+      },
+    ];
+  }
+
+  const items = dataset.collections[column.repeatFor.over];
+  if (!items) {
+    throw new ReportEvaluationError(
+      `منبع داده «${column.repeatFor.over}» در داده گزارش وجود ندارد`,
+      'UNKNOWN_DATA_SOURCE',
+    );
+  }
+
+  const spec = column.repeatFor;
+  const asText = (value: unknown): string => {
+    const resolved = toValue(value);
+    return resolved === null ? '' : String(resolved);
+  };
+
+  /*
+    مجموعهٔ خالی یعنی **هیچ ستونی**، نه یک ستونِ خالی.
+
+    فرمی که هیچ فصلی ندارد، ستون فصل هم ندارد؛ ستونِ بی‌سرستون فقط یک خط عمودی
+    بی‌معنا روی کاغذ است.
+  */
+  if (items.length > spec.maxColumns) {
+    throw new ReportEvaluationError(
+      `ستون «${column.titleFa}» ${items.length} بار تکرار می‌شود ولی سقف قالب ` +
+        `${spec.maxColumns} است؛ ستون‌های آخر از عرض صفحه بیرون می‌زنند`,
+      'TOO_MANY_COLUMNS',
+    );
+  }
+
+  return items.map((item) => ({
+    ...column,
+    resolvedKey: `${column.key}:${asText(item[spec.keyFrom])}`,
+    resolvedTitle: asText(item[spec.titleFrom]),
+    resolvedSubtitle: spec.subtitleFrom === undefined ? null : asText(item[spec.subtitleFrom]),
+    source: item,
+  }));
+}
+
+/**
+ * دامنهٔ یک سلول: ردیف، به‌علاوهٔ ستونی که سلول در آن است.
+ *
+ * `column.*` تنها در ستونِ تکرارشونده معنا دارد و همان است که به عبارت اجازه
+ * می‌دهد بپرسد «آیا فصلِ این ردیف، همین ستون است؟». در ستون معمولی خالی برمی‌گردد
+ * و اعتبارسنجی قالب هم از همان ابتدا جلویش را می‌گیرد.
+ */
+function columnScopeFor(scope: EvaluationScope, column: ExpandedColumn): EvaluationScope {
+  if (!column.repeatFor) return scope;
+  const spec = column.repeatFor;
+  const source = column.source ?? {};
+
+  return {
+    ...scope,
+    read: (path) => {
+      if (path === 'column.key') return source[spec.keyFrom] ?? null;
+      if (path === 'column.title') return source[spec.titleFrom] ?? null;
+      if (path === 'column.code') {
+        return spec.subtitleFrom === undefined ? null : (source[spec.subtitleFrom] ?? null);
+      }
+      return scope.read(path);
+    },
   };
 }
 

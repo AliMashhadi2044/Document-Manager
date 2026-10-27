@@ -152,12 +152,37 @@ export class ReportsService {
         case 'table':
           paths.add(block.dataSource);
           for (const column of block.columns) {
-            walkExpressionPaths(column.value, block.dataSource, add);
+            /*
+              ستون تکرارشونده، مجموعهٔ دومی لمس می‌کند.
+
+              `column.key` در عبارت، در واقع فیلدی از همان مجموعه است. ترجمه‌اش به
+              مسیر کامل یعنی مجوزِ همان فیلد هم سنجیده می‌شود — نه فقط مجوز جدول.
+              مسیرِ `column.*` در ستونی که تکرار نمی‌شود خام می‌ماند و رد می‌شود،
+              ولی پیش از اینجا `validateTemplate` هم جلویش را گرفته است.
+            */
+            const repeat = column.repeatFor;
+            const columnAdd = (path: string, rowSource: string | null): void => {
+              if (!repeat || !path.startsWith('column.')) {
+                add(path, rowSource);
+                return;
+              }
+              const field =
+                path === 'column.key'
+                  ? repeat.keyFrom
+                  : path === 'column.title'
+                    ? repeat.titleFrom
+                    : repeat.subtitleFrom;
+              paths.add(field === undefined ? path : `${repeat.over}.${field}`);
+            };
+
+            if (repeat) paths.add(repeat.over);
+
+            walkExpressionPaths(column.value, block.dataSource, columnAdd);
             for (const line of column.multiline?.lines ?? []) {
-              walkExpressionPaths(line.value, block.dataSource, add);
+              walkExpressionPaths(line.value, block.dataSource, columnAdd);
             }
             if (column.visibleWhen) {
-              walkConditionPaths(column.visibleWhen, block.dataSource, add);
+              walkConditionPaths(column.visibleWhen, block.dataSource, columnAdd);
             }
           }
           break;
@@ -306,7 +331,15 @@ export class ReportsService {
     const aggregateRows = dataset.collections[collectionKey] ?? [];
     const rowCount = aggregateRows.length;
     const rowVendorIds = aggregateRows.map((row) => String(row['vendorId'] ?? ''));
-    const rowKeys = aggregateRows.map((row) => String(row['key'] ?? row['vendorId'] ?? ''));
+    /*
+      شناسهٔ ردیف، به ترتیب اولویت: کلید مقصد پرداخت، شناسهٔ فاکتور، شناسهٔ فروشنده.
+
+      سه گزارش سه واحدِ ردیف دارند — مقصد پرداخت، فاکتور، فروشنده — و اقدام‌های
+      رابط کاربری باید بدانند ردیف به کدام چیز است.
+    */
+    const rowKeys = aggregateRows.map((row) =>
+      String(row['key'] ?? row['invoiceId'] ?? row['vendorId'] ?? ''),
+    );
 
     const run = await this.prisma.reportRun.create({
       data: {

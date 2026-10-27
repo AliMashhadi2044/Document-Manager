@@ -17,6 +17,7 @@ export * from './invoices/invoice-kind.js';
 export * from './invoices/fuel.js';
 export * from './invoices/split-payment.js';
 export * from './payments/beneficiaries.js';
+export * from './payments/beneficiary-share.js';
 export * from './enums/signatory-roles.js';
 export * from './vehicles/plate.js';
 export * from './vehicles/plate-format.js';

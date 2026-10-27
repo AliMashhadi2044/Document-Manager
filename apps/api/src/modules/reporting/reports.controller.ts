@@ -26,10 +26,33 @@ import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { ReportsService } from './reports.service';
 import { DatasetService } from './dataset.service';
 import { ProductTypesService } from './product-types.service';
+import { ReportLinesService } from './report-lines.service';
 import { BeneficiariesService } from './beneficiaries.service';
 import { ExcelExporter, safeSheetName } from './excel.exporter';
 import { PdfRenderer } from './pdf.renderer';
 import { TemplatesService } from './templates.service';
+
+/**
+ * شرح یک ردیفِ فرم ریزهزینه: از فهرست، یا متن آزاد، یا **هیچ‌کدام**.
+ *
+ * برخلاف «نوع کالا»، هیچ‌کدام هم مجاز است و معنایش روشن است: «برگرد به پیش‌فرض»،
+ * یعنی شرح خودِ فاکتور. بدون این حالت، کاربری که یک بار عبارتی نوشته هیچ راهی
+ * برای پس گرفتنش نداشت.
+ */
+const setLineTitleSchema = z
+  .object({
+    productTypeId: z.string().uuid().nullable().default(null),
+    customTitle: z.string().trim().min(1).max(500).nullable().default(null),
+  })
+  .superRefine((value, ctx) => {
+    if (value.productTypeId !== null && value.customTitle !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['productTypeId'],
+        message: 'یا از فهرست انتخاب کنید یا متن بنویسید، نه هر دو',
+      });
+    }
+  });
 
 /**
  * نوع کالا: یا از فهرست، یا متن آزاد — دقیقاً یکی.
@@ -107,6 +130,7 @@ export class ReportsController {
     private readonly reports: ReportsService,
     private readonly datasets: DatasetService,
     private readonly productTypes: ProductTypesService,
+    private readonly reportLines: ReportLinesService,
     private readonly beneficiaries: BeneficiariesService,
     private readonly excel: ExcelExporter,
     private readonly pdf: PdfRenderer,
@@ -338,6 +362,39 @@ export class ReportsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.productTypes.set(documentId, vendorId, body, user);
+  }
+
+  /** گزینه‌های شرح یک ردیفِ فرم ریزهزینه. */
+  @RequirePermission('report:run')
+  @ReadOnlyRoute()
+  @Post('documents/:documentId/invoices/:invoiceId/line-title/suggestions')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'شرح پیش‌فرض و انواع کالا برای یک ردیف فرم ریزهزینه' })
+  async lineTitleSuggestions(
+    @Param('documentId') documentId: string,
+    @Param('invoiceId') invoiceId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.reportLines.suggestions(documentId, invoiceId, user);
+  }
+
+  /**
+   * تعیین شرح یک ردیفِ فرم ریزهزینه.
+   *
+   * مجوزش `document:update` است و نه `report:run`: عوض کردن عبارتی که روی فرم
+   * چاپی می‌نشیند، نوشتن روی سند است و نه گرفتن گزارش — همان مرزی که «نوع کالا»
+   * در گزارش مالیات دارد.
+   */
+  @RequirePermission('document:update')
+  @Post('documents/:documentId/invoices/:invoiceId/line-title')
+  @ApiOperation({ summary: 'تعیین شرح یک ردیف فرم ریزهزینه' })
+  async setLineTitle(
+    @Param('documentId') documentId: string,
+    @Param('invoiceId') invoiceId: string,
+    @Body(new ZodBody(setLineTitleSchema)) body: z.infer<typeof setLineTitleSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.reportLines.set(documentId, invoiceId, body, user);
   }
 
   // ───────────────────────── طراح گزارش (فاز ۷) ─────────────────────────

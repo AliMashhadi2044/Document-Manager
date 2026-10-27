@@ -323,6 +323,9 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       // اعتبارسنجی قالب بدون ذخیره: ورودی‌اش بزرگ است و در URL جا نمی‌شود، ولی چیزی
       // نمی‌نویسد.
       'ReportsController.checkTemplate',
+      // گزینه‌های شرح یک ردیفِ فرم ریزهزینه: شرح پیش‌فرض و انواع کالا را می‌خواند و
+      // چیزی ثبت نمی‌کند؛ نوشتنش مسیر جدا و مجوز `document:update` دارد.
+      'ReportsController.lineTitleSuggestions',
       'ReportsController.productTypeSuggestions',
       'VendorsController.checkDuplicate',
       'VendorsController.validateIbanEndpoint',

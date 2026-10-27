@@ -21,6 +21,8 @@ export interface ReportTableBlock {
   readonly columns: readonly {
     readonly key: string;
     readonly titleFa: string;
+    /** خط دوم سرستون (کد فصل)؛ `null` یعنی سرستون یک‌خطی. */
+    readonly subtitleFa: string | null;
     readonly width: { readonly unit: 'mm' | 'percent' | 'auto'; readonly value?: number };
     readonly align: 'start' | 'center' | 'end';
     readonly isNumeric: boolean;
@@ -212,6 +214,45 @@ export function useProductTypeSuggestions() {
         `/reports/documents/${documentId}/vendors/${vendorId}/product-type/suggestions`,
         { method: 'POST' },
       ),
+  });
+}
+
+/** گزینه‌های شرح یک ردیفِ فرم ریزهزینه. */
+export interface LineTitleSuggestions {
+  readonly current: { readonly id: string | null; readonly title: string } | null;
+  /** پیش‌فرض: شرح خودِ فاکتور. */
+  readonly invoiceDescription: string;
+  readonly allTypes: readonly { readonly id: string; readonly title: string }[];
+}
+
+export function useLineTitleSuggestions() {
+  return useMutation({
+    mutationFn: ({ documentId, invoiceId }: { documentId: string; invoiceId: string }) =>
+      apiFetch<LineTitleSuggestions>(
+        `/reports/documents/${documentId}/invoices/${invoiceId}/line-title/suggestions`,
+        { method: 'POST' },
+      ),
+  });
+}
+
+export function useSetLineTitle(reportTypeKey: string, documentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      invoiceId,
+      ...body
+    }: {
+      invoiceId: string;
+      productTypeId?: string | null;
+      customTitle?: string | null;
+    }) =>
+      apiFetch<{ id: string | null; title: string }>(
+        `/reports/documents/${documentId}/invoices/${invoiceId}/line-title`,
+        { method: 'POST', json: body },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: reportKeys.preview(reportTypeKey, documentId) });
+    },
   });
 }
 

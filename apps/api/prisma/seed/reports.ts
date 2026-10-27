@@ -9,6 +9,8 @@ import { allowedValuePaths, collectionFields } from '../../src/modules/reporting
 // در حالت دوم اصلاً مجاز نیست، و مسیر نسبی به cwd هم در دو حالت یکی نمی‌ماند.
 import taxReportTemplate from './templates/tax-report.json';
 import beneficiaryIbanTemplate from './templates/beneficiary-iban-report.json';
+import capitalExpenseTemplate from './templates/capital-expense-report.json';
+import currentExpenseTemplate from './templates/current-expense-report.json';
 
 /**
  * گزارش مالیات به‌صورت **داده**، نه کد (docs/09 §۹).
@@ -61,6 +63,18 @@ const SYSTEM_TEMPLATES: readonly {
     titleFa: 'شماره شبا ذینفعان سند',
     definitionName: 'شماره شبا ذینفعان سند (سیستمی)',
     raw: beneficiaryIbanTemplate,
+  },
+  {
+    key: 'EXPENSE_BREAKDOWN_CAPITAL',
+    titleFa: 'صورت ریز هزینه‌های عمرانی انجام شده',
+    definitionName: 'صورت ریز هزینه‌های عمرانی انجام شده (سیستمی)',
+    raw: capitalExpenseTemplate,
+  },
+  {
+    key: 'EXPENSE_BREAKDOWN_CURRENT',
+    titleFa: 'صورت ریز هزینه‌های جاری انجام شده',
+    definitionName: 'صورت ریز هزینه‌های جاری انجام شده (سیستمی)',
+    raw: currentExpenseTemplate,
   },
 ];
 
@@ -239,6 +253,12 @@ export async function seedProductTypesAndSignatories(prisma: PrismaClient): Prom
     { roleKey: 'PROCUREMENT_LEAD', fullName: 'محمدصادق محمدی', positionTitle: 'مسئول کارپردازی' },
     // «مسئول رسیدگی» پای فرم شبای ذینفعان را امضا می‌کند.
     { roleKey: 'REVIEW_LEAD', fullName: 'علی مهدوی', positionTitle: 'مسئول رسیدگی' },
+    // فرم ریزهزینه‌های **جاری** سه امضا دارد؛ عمرانی دو تا.
+    {
+      roleKey: 'ADMIN_AFFAIRS_LEAD',
+      fullName: 'علیرضا سیروسیان',
+      positionTitle: 'مسئول امور اداری و رفاه',
+    },
     { roleKey: 'GENERAL_MANAGER', fullName: 'احمدرضا اجتهادی', positionTitle: 'مدیرکل' },
   ];
   for (const [index, signatory] of signatories.entries()) {

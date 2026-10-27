@@ -72,7 +72,17 @@ export class ExcelExporter {
   }
 
   private writeTable(sheet: ExcelJS.Worksheet, table: LaidOutTable, startRow: number): number {
+    /*
+      سرستون دوطبقه، همان‌طور که روی کاغذ است.
+
+      ستون فصل بالا عنوان دارد و پایین کد؛ ستون‌های بی‌زیرعنوان هر دو طبقه را
+      می‌گیرند (ادغام عمودی). ریختن هر دو در یک خانه با newline هم ممکن بود، ولی
+      آن‌وقت فیلتر و جمعِ Excel روی ردیفی می‌نشست که عنوان ستون نیست.
+    */
+    const hasSubtitles = table.columns.some((column) => column.subtitleFa !== null);
     const headerRow = sheet.getRow(startRow);
+    const subtitleRow = hasSubtitles ? sheet.getRow(startRow + 1) : null;
+
     table.columns.forEach((column, index) => {
       const cell = headerRow.getCell(index + 1);
       writeText(cell, column.titleFa);
@@ -82,10 +92,23 @@ export class ExcelExporter {
       // عرض ستون: میلی‌متر تقریباً به «نویسه» تبدیل می‌شود؛ دقیق نیست و لازم هم نیست.
       sheet.getColumn(index + 1).width =
         column.width.unit === 'mm' && column.width.value ? Math.max(8, column.width.value / 2) : 18;
+
+      if (!subtitleRow) return;
+
+      const below = subtitleRow.getCell(index + 1);
+      below.font = { bold: true };
+      below.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      below.border = thinBorder();
+      if (column.subtitleFa === null) {
+        sheet.mergeCells(startRow, index + 1, startRow + 1, index + 1);
+      } else {
+        writeText(below, column.subtitleFa);
+      }
     });
     headerRow.commit();
+    subtitleRow?.commit();
 
-    let cursor = startRow + 1;
+    let cursor = startRow + (hasSubtitles ? 2 : 1);
     const firstDataRow = cursor;
 
     for (const row of table.rows) {

@@ -46,6 +46,7 @@ model User {
   reportVersions       ReportVersion[]               @relation("ReportVersionCreatedBy")
   reportRuns           ReportRun[]                   @relation("ReportRunRequestedBy")
   productTypesSet      DocumentVendorProductType[]   @relation("ProductTypeSetBy")
+  reportTitlesSet      InvoiceReportTitle[]          @relation("ReportTitleSetBy")
   feedbackReplies      ReviewFeedbackReply[]         @relation("FeedbackReplyBy")
   feedbackStatusEvents ReviewFeedbackStatusHistory[] @relation("FeedbackStatusActor")
   notifications        Notification[]                @relation("NotificationRecipient")
@@ -753,6 +754,7 @@ model ProductType {
 
   documentVendors DocumentVendorProductType[]
   suggestions     VendorProductTypeSuggestion[]
+  invoiceReportTitles InvoiceReportTitle[]
 
   @@index([isActive, sortOrder])
   @@map("product_types")
@@ -1103,7 +1105,8 @@ model Invoice {
   utilityDetail InvoiceUtilityDetail?
   fuelDetail    InvoiceFuelDetail?
 
-  feedbacks ReviewFeedback[]
+  feedbacks   ReviewFeedback[]
+  reportTitle InvoiceReportTitle?
 
   /// مرجع FK ترکیبی جدول‌های جزئیات اختصاصی: جزئیات انشعابات فقط به فاکتوری با
   /// `invoice_kind = 'UTILITY'` می‌چسبد و جزئیات سوخت فقط به `'FUEL'`. این قید را
@@ -1702,6 +1705,33 @@ model DocumentVendorProductType {
   @@id([documentId, vendorId])
   @@index([vendorId])
   @@map("document_vendor_product_types")
+}
+
+/// شرحِ یک فاکتور **روی فرم ریزهزینه**.
+///
+/// چرا جدا از `invoices.description` و نه ویرایش خودِ آن: شرح فاکتور حقیقتِ تاریخیِ
+/// سند است — چیزی که موقع ثبت نوشته شده و در بازبینی به آن استناد می‌شود. فرم
+/// ریزهزینه گاهی عبارت دیگری می‌خواهد (کوتاه‌تر، یا یکی از «انواع کالا»)، و آن یک
+/// **تصمیم گزارش** است و نه اصلاح سند.
+///
+/// نبودن ردیف یعنی «پیش‌فرض»: شرح خودِ فاکتور. پس ستون بدون هیچ کاری هم درست است.
+model InvoiceReportTitle {
+  invoiceId String @id @map("invoice_id") @db.Uuid
+
+  /// یکی از این دو پر است، نه هر دو و نه هیچ‌کدام (قید CHECK در migration) —
+  /// همان قاعدهٔ «نوع کالا» در گزارش مالیات.
+  productTypeId String? @map("product_type_id") @db.Uuid
+  customTitle   String? @map("custom_title") @db.VarChar(500)
+
+  setById String   @map("set_by") @db.Uuid
+  setAt   DateTime @default(now()) @map("set_at") @db.Timestamptz(3)
+
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productType ProductType? @relation(fields: [productTypeId], references: [id], onDelete: Restrict)
+  setBy       User         @relation("ReportTitleSetBy", fields: [setById], references: [id], onDelete: Cascade)
+
+  @@index([productTypeId])
+  @@map("invoice_report_titles")
 }
 
 /// پیشنهاد نوع کالا برای یک فروشنده، بر اساس انتخاب‌های قبلی.

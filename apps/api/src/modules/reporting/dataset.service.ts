@@ -5,6 +5,7 @@ import {
   INVOICE_KIND_LABELS,
   PERSON_TYPE_LABELS,
   aggregateByVendor,
+  beneficiaryShareKind,
   groupBeneficiaries,
   type BeneficiaryInvoiceInput,
   isoDateToJalali,
@@ -80,7 +81,7 @@ export class DatasetService {
   > {
     const document = await this.access.assertDocumentVisible(documentId, user);
 
-    const [full, organization, signatories, productTypes] = await Promise.all([
+    const [full, organization, signatories, productTypes, chapters] = await Promise.all([
       this.prisma.financialDocument.findUniqueOrThrow({
         where: { id: documentId },
         include: {
@@ -99,6 +100,8 @@ export class DatasetService {
               vendorSnapshot: true,
               invoiceType: { select: { titleFa: true } },
               payment: true,
+              chapter: { select: { id: true, category: { select: { key: true } } } },
+              reportTitle: { include: { productType: { select: { title: true } } } },
             },
           },
         },
@@ -111,6 +114,18 @@ export class DatasetService {
       this.prisma.documentVendorProductType.findMany({
         where: { documentId },
         include: { productType: { select: { title: true } } },
+      }),
+      /*
+        فصل‌های **فعال**، به ترتیب خودشان.
+
+        ستون‌های فرم ریزهزینه از همین می‌آیند. فصلِ غیرفعال ستون نمی‌گیرد — ولی
+        فاکتوری که قبلاً به آن ثبت شده، در ردیف‌ها می‌ماند و جمعش هم از ستون «جمع»
+        می‌آید. گم شدنِ خاموشِ مبلغ، بدترین چیزی است که یک فرم مالی می‌تواند بکند.
+      */
+      this.prisma.budgetChapter.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+        select: { id: true, title: true, code: true, category: { select: { key: true } } },
       }),
     ]);
 
@@ -242,6 +257,42 @@ export class DatasetService {
       total: moneyToString(row.total),
     }));
 
+    /*
+      فرم ریزهزینه — یک جفت مجموعه برای هر گروه بودجه.
+
+      ستون‌ها از فصل‌های همان گروه می‌آیند و ردیف‌ها از فاکتورهای همان گروه، به
+      ترتیب قطعی گزارش. شرح هر ردیف سه منبع دارد، به ترتیب: عنوانی که کاربر برای
+      همین فاکتور روی فرم ثبت کرده، بعد شرح خودِ فاکتور، و در آخر خالی — همان
+      قاعدهٔ «نوع کالا» در گزارش مالیات.
+    */
+    const chapterRows = (category: 'CAPITAL' | 'CURRENT') =>
+      chapters
+        .filter((chapter) => chapter.category.key === category)
+        .map((chapter) => ({
+          key: chapter.id,
+          title: chapter.title,
+          code: chapter.code ?? '',
+        }));
+
+    const expenseRows = (category: 'CAPITAL' | 'CURRENT') =>
+      full.invoices
+        .filter((invoice) => invoice.chapter.category.key === category)
+        .map((invoice, index) => ({
+          index: index + 1,
+          invoiceId: invoice.id,
+          description:
+            invoice.reportTitle?.productType?.title ??
+            invoice.reportTitle?.customTitle ??
+            invoice.description ??
+            '',
+          chapterKey: invoice.chapterId,
+          chapterTitle: invoice.chapterTitleSnapshot,
+          chapterCode: invoice.chapterCodeSnapshot ?? '',
+          vendorName: invoice.vendorSnapshot?.name ?? '',
+          beneficiaryShare: beneficiaryShareKind(invoice.payment?.methodKind ?? null),
+          total: invoice.totalAmount.toString(),
+        }));
+
     const documentDate = full.documentDate?.toISOString().slice(0, 10) ?? '';
 
     return {
@@ -275,6 +326,10 @@ export class DatasetService {
         'document.vendorAggregates': vendorAggregates,
         'document.beneficiaries': beneficiaryRows,
         'document.invoices': invoiceRows,
+        'document.capitalChapters': chapterRows('CAPITAL'),
+        'document.capitalExpenses': expenseRows('CAPITAL'),
+        'document.currentChapters': chapterRows('CURRENT'),
+        'document.currentExpenses': expenseRows('CURRENT'),
       },
       signatories: signatories.map(
         (item): SignatorySnapshot => ({

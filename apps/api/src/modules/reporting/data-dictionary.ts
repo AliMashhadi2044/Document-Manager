@@ -39,6 +39,59 @@ const calcDetail = (field: FieldDefinition): FieldDefinition => ({
   requiredPermissions: ['invoice:read_calc_details'],
 });
 
+/**
+ * منابع دادهٔ فرم ریزهزینهٔ یک گروه بودجه.
+ *
+ * دو تا: فصل‌های آن گروه (ستون‌های فرم) و فاکتورهای آن گروه (ردیف‌های فرم).
+ * ساخته می‌شوند و کپی نمی‌شوند، چون هر فیلدی که به یکی اضافه شود باید به دیگری هم
+ * اضافه شود — و دو فهرستِ دستی دیر یا زود واگرا می‌شوند.
+ */
+function expenseSources(
+  category: 'CAPITAL' | 'CURRENT',
+  categoryTitle: string,
+): DataSourceDefinition[] {
+  const slug = category === 'CAPITAL' ? 'capital' : 'current';
+
+  return [
+    {
+      key: `document.${slug}Chapters`,
+      titleFa: `فصل‌های بودجه ${categoryTitle} (ستون‌های فرم ریزهزینه)`,
+      cardinality: 'list',
+      requiredPermissions: ['base_data:read', 'report:run'],
+      fields: [
+        text('key', 'کلید فصل'),
+        text('title', 'عنوان فصل'),
+        text('code', 'کد فصل'),
+      ],
+    },
+    {
+      key: `document.${slug}Expenses`,
+      titleFa: `ریزهزینه‌های ${categoryTitle} سند`,
+      cardinality: 'list',
+      requiredPermissions: ['document:read', 'report:run'],
+      /*
+        فقط **جمع** هر فاکتور، نه ریز محاسبه‌اش.
+
+        مرز `invoice:read_calc_details` دربارهٔ تجزیهٔ مبلغ است — کالا، تخفیف،
+        مالیات — و نه دربارهٔ رقمی که روی فرمِ چاپی می‌نشیند. بایگانی همین فرم را
+        چاپ می‌کند و آن مجوز را ندارد؛ آوردن ستون‌های محاسبه اینجا یعنی فرمی که
+        نقشِ صاحبش نمی‌تواند بگیرد.
+      */
+      fields: [
+        { key: 'index', titleFa: 'ردیف', type: 'integer' },
+        text('invoiceId', 'شناسه فاکتور'),
+        text('description', 'شرح'),
+        text('chapterKey', 'کلید فصل'),
+        text('chapterTitle', 'عنوان فصل'),
+        text('chapterCode', 'کد فصل'),
+        text('vendorName', 'فروشنده'),
+        text('beneficiaryShare', 'سهم ذی‌نفع (FULL/PARTIAL/NONE)'),
+        money('total', 'جمع'),
+      ],
+    },
+  ];
+}
+
 export const DATA_SOURCES: readonly DataSourceDefinition[] = [
   {
     key: 'organization',
@@ -121,6 +174,19 @@ export const DATA_SOURCES: readonly DataSourceDefinition[] = [
       money('total', 'جمع'),
     ],
   },
+  /*
+    فرم ریزهزینه: دو جفت منبع داده، یکی برای عمرانی و یکی برای جاری.
+
+    چرا جفت و نه یک منبع با ستون «گروه»: قالب هیچ زبانِ فیلتری ندارد — و نباید
+    داشته باشد. اگر یک منبع می‌داشتیم، فرمِ عمرانی ناچار بود ردیف‌های جاری را هم
+    بگیرد و خودش کنار بگذارد؛ یعنی یک قاعدهٔ مالی داخل قالب، جایی که نه تست دارد
+    نه بازبینی.
+
+    هر گروه دو منبع دارد: **فصل‌ها** که ستون‌های فرم از آن ساخته می‌شوند، و
+    **ردیف‌ها** که هر کدام یک فاکتورند.
+  */
+  ...expenseSources('CAPITAL', 'عمرانی'),
+  ...expenseSources('CURRENT', 'جاری'),
   {
     key: 'document.invoices',
     titleFa: 'فاکتورهای سند',

@@ -665,3 +665,215 @@ describe('جا شدن ستون‌ها در عرض صفحه', () => {
     expect(problems.map((item) => item.message).join(' ')).toContain('بریده می‌شوند');
   });
 });
+
+/**
+ * ستون تکرارشونده — چیزی که فرم ریزهزینه لازمش داشت.
+ *
+ * ستون‌های فصل از **داده مرجع** می‌آیند و نه از قالب: کاربر فصل اضافه و کم می‌کند و
+ * قالب نباید با هر بار، عوض شود.
+ */
+describe('ستون تکرارشونده', () => {
+  const CHAPTERS = [
+    { key: 'ch-1', title: 'تعمیرات', code: 'فصل ۱' },
+    { key: 'ch-2', title: 'تجهیزات', code: 'فصل ۲' },
+  ];
+
+  const EXPENSES = [
+    { index: 1, description: 'رنگ‌آمیزی', chapterKey: 'ch-1', total: '14094800' },
+    { index: 2, description: 'میز و نیمکت', chapterKey: 'ch-2', total: '2114220' },
+    { index: 3, description: 'تعمیر در', chapterKey: 'ch-1', total: '1000000' },
+  ];
+
+  const TEMPLATE: TemplateV1 = templateV1Schema.parse({
+    schemaVersion: 1,
+    reportTypeKey: 'EXPENSE',
+    titleFa: 'ریزهزینه',
+    page: {
+      size: 'A4',
+      orientation: 'landscape',
+      margins: { top: 10, bottom: 10, inlineStart: 10, inlineEnd: 10 },
+      direction: 'rtl',
+    },
+    styles: {
+      fontFamily: 'Vazirmatn',
+      baseFontSizePt: 9,
+      headingFontSizePt: 12,
+      tableFontSizePt: 8,
+      borderWidthPx: 1,
+      borderColor: '#333333',
+      textColor: '#000000',
+      mutedTextColor: '#555555',
+    },
+    header: { repeatOnEveryPage: true, blocks: [] },
+    footer: { repeatOnEveryPage: false, blocks: [] },
+    body: [
+      {
+        id: 'table',
+        type: 'table',
+        dataSource: 'document.capitalExpenses',
+        minRows: 0,
+        pagination: { repeatHeaderOnNewPage: true, avoidRowBreak: true },
+        totalsRow: { enabled: true, labelFa: 'جمع کل', cells: { chapter: 'sum', total: 'sum' } },
+        columns: [
+          {
+            key: 'description',
+            titleFa: 'شرح',
+            width: { unit: 'mm', value: 60 },
+            align: 'start',
+            value: { k: 'var', path: 'row.description' },
+            format: { kind: 'text', persianDigits: false, emptyText: '' },
+          },
+          {
+            key: 'chapter',
+            titleFa: 'فصل',
+            repeatFor: {
+              over: 'document.capitalChapters',
+              keyFrom: 'key',
+              titleFrom: 'title',
+              subtitleFrom: 'code',
+              maxColumns: 8,
+            },
+            width: { unit: 'mm', value: 25 },
+            align: 'end',
+            value: {
+              k: 'if',
+              cond: {
+                k: 'cmp',
+                op: 'eq',
+                args: [
+                  { k: 'var', path: 'row.chapterKey' },
+                  { k: 'var', path: 'column.key' },
+                ],
+              },
+              then: { k: 'var', path: 'row.total' },
+              else: { k: 'const', type: 'text', v: '' },
+            },
+            format: { kind: 'currency', emptyText: '' },
+          },
+          {
+            key: 'total',
+            titleFa: 'جمع',
+            width: { unit: 'mm', value: 30 },
+            align: 'end',
+            value: { k: 'var', path: 'row.total' },
+            format: { kind: 'currency', emptyText: '' },
+          },
+        ],
+      },
+    ],
+  });
+
+  const dataset = (chapters: Record<string, unknown>[] = CHAPTERS): ReportDataset => ({
+    values: {},
+    collections: {
+      'document.capitalChapters': chapters,
+      'document.capitalExpenses': EXPENSES,
+    },
+    signatories: [],
+    roundingMode: 'HALF_UP',
+    generatedAt: '2026-10-27',
+  });
+
+  const tableOf = (chapters?: Record<string, unknown>[]) => {
+    const block = layoutReport(TEMPLATE, dataset(chapters)).body[0];
+    if (block?.kind !== 'table') throw new Error('جدول ساخته نشد');
+    return block;
+  };
+
+  it('یک ستونِ قالب به تعداد فصل‌ها باز می‌شود', () => {
+    const table = tableOf();
+    expect(table.columns.map((column) => column.titleFa)).toEqual([
+      'شرح',
+      'تعمیرات',
+      'تجهیزات',
+      'جمع',
+    ]);
+  });
+
+  it('سرستونِ هر فصل دو طبقه است: عنوان بالا، کد پایین', () => {
+    const table = tableOf();
+    expect(table.columns.map((column) => column.subtitleFa)).toEqual([
+      null,
+      'فصل ۱',
+      'فصل ۲',
+      null,
+    ]);
+  });
+
+  /*
+    مهم‌ترین ادعای این ستون.
+
+    مبلغ فقط زیر فصلِ خودش می‌نشیند و بقیهٔ خانه‌ها **خالی** می‌مانند و نه صفر: در
+    یک فرم مالی، نبودنِ عدد با صفر بودنش یکی نیست.
+  */
+  it('مبلغ هر ردیف فقط زیر فصل خودش می‌نشیند', () => {
+    const table = tableOf();
+    expect(table.rows[0]?.[1]?.raw).toBe(14_094_800n);
+    expect(table.rows[0]?.[2]?.text).toBe('');
+    expect(table.rows[1]?.[1]?.text).toBe('');
+    expect(table.rows[1]?.[2]?.raw).toBe(2_114_220n);
+  });
+
+  it('ته هر ستون، جمعِ همان فصل می‌نشیند و نه جمع همه', () => {
+    const table = tableOf();
+    // تعمیرات: ۱۴٬۰۹۴٬۸۰۰ + ۱٬۰۰۰٬۰۰۰
+    expect(table.totals?.[1]?.raw).toBe(15_094_800n);
+    expect(table.totals?.[2]?.raw).toBe(2_114_220n);
+    expect(table.totals?.[3]?.raw).toBe(17_209_020n);
+  });
+
+  it('فصلی که ردیفی ندارد ستونش می‌ماند، با جمع صفر', () => {
+    const table = tableOf([...CHAPTERS, { key: 'ch-9', title: 'ورزشی', code: 'فصل ۹' }]);
+    expect(table.columns).toHaveLength(5);
+    expect(table.totals?.[3]?.raw).toBe(0n);
+  });
+
+  // مجموعهٔ خالی یعنی هیچ ستونی، نه یک ستونِ بی‌سرستون.
+  it('بدون فصل، هیچ ستون فصلی ساخته نمی‌شود', () => {
+    const table = tableOf([]);
+    expect(table.columns.map((column) => column.key)).toEqual(['description', 'total']);
+  });
+
+  /*
+    سقف تکرار، بررسیِ «ستون‌ها از عرض صفحه بیرون نمی‌زنند» را معنادار نگه می‌دارد.
+
+    خطا دادن از بریدنِ خاموشِ دو ستونِ آخر روی کاغذ بهتر است: کاربر می‌فهمد و
+    می‌تواند کاری بکند.
+  */
+  it('بیشتر از سقف قالب، خطا می‌دهد و ستون نمی‌برد', () => {
+    const many = Array.from({ length: 9 }, (_unused, index) => ({
+      key: `ch-${index}`,
+      title: `فصل ${index}`,
+      code: '',
+    }));
+    expect(() => tableOf(many)).toThrow(/سقف قالب/u);
+  });
+
+  it('رندر HTML سرستون را دو ردیفه می‌کند و بی‌زیرعنوان‌ها را عمودی ادغام', () => {
+    const html = renderReportHtml(layoutReport(TEMPLATE, dataset()));
+    expect(html).toContain('<th class="align-center" rowspan="2">شرح</th>');
+    expect(html).toContain('<th class="align-center">تعمیرات</th>');
+    expect(html).toContain('<th class="align-center">فصل ۱</th>');
+  });
+
+  it('اعتبارسنجی، `column.*` را بیرون از ستون تکرارشونده رد می‌کند', () => {
+    const broken = structuredClone(TEMPLATE) as TemplateV1;
+    const table = broken.body[0];
+    if (table?.type !== 'table') throw new Error('جدول نیست');
+    const column = table.columns[2];
+    if (!column) throw new Error('ستون نیست');
+    (column as { value: Expression }).value = { k: 'var', path: 'column.key' };
+
+    const problems = validateTemplate(broken, {
+      allowedValuePaths: new Set<string>(),
+      collections: new Map([
+        ['document.capitalChapters', new Set(['key', 'title', 'code'])],
+        ['document.capitalExpenses', new Set(['index', 'description', 'chapterKey', 'total'])],
+      ]),
+    });
+
+    expect(problems.map((problem) => problem.message)).toContain(
+      'مسیر «column.key» فقط در ستون تکرارشونده معنا دارد',
+    );
+  });
+});

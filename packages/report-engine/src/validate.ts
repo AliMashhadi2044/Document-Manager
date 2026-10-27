@@ -25,6 +25,9 @@ export interface TemplateProblem {
   readonly message: string;
 }
 
+/** مسیرهایی که یک ستونِ تکرارشونده دربارهٔ **خودش** می‌تواند بخواند. */
+const COLUMN_PATHS: ReadonlySet<string> = new Set(['column.key', 'column.title', 'column.code']);
+
 /** عرض و ارتفاع کاغذ بر حسب میلی‌متر، در حالت عمودی. */
 const A4_MM = { width: 210, height: 297 };
 
@@ -50,7 +53,9 @@ export function printableWidthMm(page: TemplateV1['page']): number {
 export function tableWidthMm(block: TableBlock): number {
   return block.columns.reduce((total, column) => {
     if (column.width.unit !== 'mm' || column.width.value === undefined) return total;
-    return total + column.width.value;
+    // ستونِ تکرارشونده در **بدترین حالتش** شمرده می‌شود؛ عرضِ اعلام‌شده، عرض یکی
+    // از ستون‌هایی است که می‌سازد.
+    return total + column.width.value * (column.repeatFor?.maxColumns ?? 1);
   }, 0);
 }
 
@@ -133,12 +138,46 @@ export function validateTemplate(
           }
           keys.add(column.key);
 
+          /*
+            ستونِ تکرارشونده: مجموعه‌اش و نام فیلدهایش باید وجود داشته باشند.
+
+            فیلدِ ناموجود اینجا به سرستونِ **خالی** تبدیل می‌شد — ستونی روی فرم مالی
+            که معلوم نیست چیست.
+          */
+          const repeat = column.repeatFor;
+          if (repeat) {
+            const fields = dictionary.collections.get(repeat.over);
+            if (!fields) {
+              problems.push({
+                path: `${at}.columns.${column.key}.repeatFor`,
+                message: `منبع داده «${repeat.over}» در فهرست داده نیست`,
+              });
+            } else {
+              const used: [string, string][] = [
+                ['keyFrom', repeat.keyFrom],
+                ['titleFrom', repeat.titleFrom],
+              ];
+              if (repeat.subtitleFrom !== undefined) {
+                used.push(['subtitleFrom', repeat.subtitleFrom]);
+              }
+              for (const [role, field] of used) {
+                if (!fields.has(field)) {
+                  problems.push({
+                    path: `${at}.columns.${column.key}.repeatFor.${role}`,
+                    message: `ستون «${field}» در منبع داده «${repeat.over}» وجود ندارد`,
+                  });
+                }
+              }
+            }
+          }
+
           checkExpression(
             column.value,
             `${at}.columns.${column.key}`,
             dictionary,
             rowSource,
             problems,
+            repeat !== undefined,
           );
           for (const line of column.multiline?.lines ?? []) {
             checkExpression(
@@ -147,6 +186,7 @@ export function validateTemplate(
               dictionary,
               rowSource,
               problems,
+              repeat !== undefined,
             );
           }
           if (column.visibleWhen) {
@@ -156,6 +196,7 @@ export function validateTemplate(
               dictionary,
               rowSource,
               problems,
+              repeat !== undefined,
             );
           }
         }
@@ -214,12 +255,13 @@ function checkExpression(
   dictionary: TemplateValidationInput,
   rowSource: string | null,
   problems: TemplateProblem[],
+  inRepeatedColumn = false,
 ): void {
   if (expressionDepth(expression) > MAX_EXPRESSION_DEPTH) {
     problems.push({ path: at, message: `عمق عبارت از ${MAX_EXPRESSION_DEPTH} بیشتر است` });
   }
   walkExpressionPaths(expression, rowSource, (path, scope) =>
-    checkPath(path, scope, at, dictionary, problems),
+    checkPath(path, scope, at, dictionary, problems, inRepeatedColumn),
   );
 }
 
@@ -229,12 +271,13 @@ function checkCondition(
   dictionary: TemplateValidationInput,
   rowSource: string | null,
   problems: TemplateProblem[],
+  inRepeatedColumn = false,
 ): void {
   if (conditionDepth(condition) > MAX_EXPRESSION_DEPTH) {
     problems.push({ path: at, message: `عمق شرط از ${MAX_EXPRESSION_DEPTH} بیشتر است` });
   }
   walkConditionPaths(condition, rowSource, (path, scope) =>
-    checkPath(path, scope, at, dictionary, problems),
+    checkPath(path, scope, at, dictionary, problems, inRepeatedColumn),
   );
 }
 
@@ -251,7 +294,28 @@ function checkPath(
   at: string,
   dictionary: TemplateValidationInput,
   problems: TemplateProblem[],
+  inRepeatedColumn = false,
 ): void {
+  /*
+    `column.*` فقط در ستونِ تکرارشونده.
+
+    بیرون از آن هیچ ستونی در دامنه نیست و مقدارش همیشه خالی درمی‌آمد — یعنی یک
+    سلولِ خالی به‌جای یک خطا، همان چیزی که این اعتبارسنجی برای جلوگیری از آن هست.
+  */
+  if (path.startsWith('column.')) {
+    if (!inRepeatedColumn) {
+      problems.push({
+        path: at,
+        message: `مسیر «${path}» فقط در ستون تکرارشونده معنا دارد`,
+      });
+      return;
+    }
+    if (!COLUMN_PATHS.has(path)) {
+      problems.push({ path: at, message: `مسیر «${path}» در ستون تکرارشونده وجود ندارد` });
+    }
+    return;
+  }
+
   if (path.startsWith('row.')) {
     if (rowSource === null) {
       problems.push({

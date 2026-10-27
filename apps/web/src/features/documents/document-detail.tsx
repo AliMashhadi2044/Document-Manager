@@ -101,6 +101,9 @@ export function DocumentDetailView({
     permissions.includes('feedback:create') &&
     (data.status === 'FINALIZED' || data.status === 'PENDING_ARCHIVE' || data.status === 'ARCHIVED');
 
+  /** گروه بودجهٔ سند — با فاکتور اولش تعیین شده است. */
+  const budgetGroup = data.invoices[0]?.chapter.category.key ?? null;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -120,12 +123,34 @@ export function DocumentDetailView({
                 گزارش مالیات
               </Button>
               {/*
-                گزارش دوم کنار اولی، نه در منویی تودرتو: هر دو خروجیِ همین سندند و
-                بایگان معمولاً هر دو را پشت سر هم می‌گیرد.
+                گزارش‌های بعدی کنار اولی، نه در منویی تودرتو: همه خروجیِ همین سندند و
+                بایگان معمولاً پشت سر هم می‌گیردشان.
               */}
               <Button variant="secondary" onClick={() => setShowReport('BENEFICIARY_IBAN')}>
                 شبای ذینفعان
               </Button>
+              {/*
+                فرم ریزهزینه، **یکی** است و نه دو تا.
+
+                یک سند فقط فاکتورهای یک گروه بودجه را می‌پذیرد، پس فرمِ گروه دیگر
+                همیشه خالی درمی‌آمد؛ دکمه‌ای که به صفحهٔ خالی می‌رسد، دکمه نیست.
+              */}
+              {budgetGroup === 'CAPITAL' ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowReport('EXPENSE_BREAKDOWN_CAPITAL')}
+                >
+                  ریزهزینه عمرانی
+                </Button>
+              ) : null}
+              {budgetGroup === 'CURRENT' ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowReport('EXPENSE_BREAKDOWN_CURRENT')}
+                >
+                  ریزهزینه جاری
+                </Button>
+              ) : null}
             </>
           ) : null}
           {canSendToArchive ? (
