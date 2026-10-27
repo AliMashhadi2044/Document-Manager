@@ -74,6 +74,14 @@ export const invoicePaymentSchema = z.object({
   vendorBankAccountId: z.string().uuid().nullable().default(null),
   paymentIdentifier: z.string().trim().max(100).nullable().default(null),
   billIdentifier: z.string().trim().max(100).nullable().default(null),
+  /** نام صاحب حساب قبض؛ رشتهٔ خالی یعنی ثبت‌نشده، نه مقدار خالی. */
+  payeeName: z
+    .string()
+    .trim()
+    .max(200)
+    .nullable()
+    .default(null)
+    .transform((value) => (value === null || value === '' ? null : value)),
   pettyCashHolderId: z.string().uuid().nullable().default(null),
   /**
    * سهم هر مقصد در پرداخت ترکیبی.

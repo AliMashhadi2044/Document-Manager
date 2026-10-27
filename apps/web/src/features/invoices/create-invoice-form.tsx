@@ -110,6 +110,8 @@ export function CreateInvoiceForm({
   const [payment, setPayment] = useState<PaymentDraft>(EMPTY_PAYMENT);
   /** تا وقتی کاربر روش پرداخت را دست نزده، پیش‌فرض **نوع فعلی** فاکتور حاکم است. */
   const [paymentTouched, setPaymentTouched] = useState(false);
+  /** تا وقتی کاربر نام صاحب حساب را خودش ننوشته، نام مدرسه در آن می‌نشیند. */
+  const [payeeTouched, setPayeeTouched] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   /** گفت‌وگوی ساخت فروشنده، از داخل همین فرم. */
   const [newVendor, setNewVendor] = useState(false);
@@ -151,6 +153,7 @@ export function CreateInvoiceForm({
     if (details.kind === 'UTILITY') {
       setUtilityDraft({
         schoolId: String(details.schoolId),
+        schoolTitle: String(details.schoolTitle ?? ''),
         districtTitle: String(details.districtTitle ?? ''),
         utilityTypeId: String(details.utilityTypeId),
         baseAmount: String(details.baseAmount),
@@ -203,12 +206,20 @@ export function CreateInvoiceForm({
 
     if (data.payment) {
       setPaymentTouched(true);
+      /*
+        در ویرایش، **مقدار ذخیره‌شده** حرف آخر را می‌زند.
+
+        بدون این، پیش‌فرضِ نام مدرسه روی چیزی می‌نشست که کاربر قبلاً خودش نوشته
+        بود — و فرم ویرایش، مقداری را نشان می‌داد که در سند نیست.
+      */
+      setPayeeTouched(true);
       setPayment({
         paymentMethodId: data.payment.paymentMethodId,
         vendorBankAccountId: data.payment.vendorBankAccountId ?? '',
         pettyCashHolderId: data.payment.pettyCashHolderId ?? '',
         paymentIdentifier: data.payment.paymentIdentifier ?? '',
         billIdentifier: data.payment.billIdentifier ?? '',
+        payeeName: data.payment.payeeName ?? '',
         beneficiaryAmount: data.payment.beneficiaryAmount ?? '',
         pettyCashAmount: data.payment.pettyCashAmount ?? '',
         notes: data.payment.notes ?? '',
@@ -337,6 +348,22 @@ export function CreateInvoiceForm({
 
   const reference = bootstrap.data;
   const isoInvoiceDate = safeIso(invoiceDate);
+
+  /*
+    نام صاحب حساب قبض، از نام مدرسه.
+
+    قبضِ انشعاب به نام همان مدرسه است و دوباره پرسیدنش کار اضافه. تا وقتی کاربر
+    خودش چیزی ننوشته، با عوض شدن مدرسه هم به‌روز می‌شود؛ از لحظه‌ای که دست بزند،
+    نوشتهٔ خودش می‌ماند.
+  */
+  useEffect(() => {
+    if (payeeTouched) return;
+    setPayment((current) =>
+      current.payeeName === utilityDraft.schoolTitle
+        ? current
+        : { ...current, payeeName: utilityDraft.schoolTitle },
+    );
+  }, [payeeTouched, utilityDraft.schoolTitle]);
 
   /*
     مبلغ کل فاکتور، همان‌طور که سرور حسابش می‌کند.
@@ -565,6 +592,8 @@ export function CreateInvoiceForm({
               draft={payment}
               onChange={(next) => {
                 setPaymentTouched(true);
+                // نوشتن در نام صاحب حساب، پیش‌فرضِ نام مدرسه را کنار می‌گذارد.
+                if (next.payeeName !== payment.payeeName) setPayeeTouched(true);
                 setPayment(next);
               }}
               methods={allowedMethods}

@@ -87,7 +87,7 @@
         "enabled": true,
         "labelFa": "جمع کل",
         "cells": {
-          "accountHolder": { "kind": "sumInWords", "of": "total" },
+          "accountHolder": { "kind": "sumInWords", "of": "total", "suffix": "ریال" },
           "total": "sum"
         }
       },

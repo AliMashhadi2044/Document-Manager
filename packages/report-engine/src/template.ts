@@ -114,7 +114,18 @@ export type TableColumn = z.infer<typeof tableColumnSchema>;
  */
 export const aggregateSchema = z.union([
   z.enum(['sum', 'count', 'none']),
-  z.object({ kind: z.literal('sumInWords'), of: z.string().min(1).max(60) }),
+  z.object({
+    kind: z.literal('sumInWords'),
+    of: z.string().min(1).max(60),
+    /**
+     * واحدی که پس از حروف می‌آید («ریال»).
+     *
+     * در قالب است و نه در موتور: واحد پول یک **تصمیم گزارش** است و نه قاعدهٔ
+     * تبدیل عدد به حروف. سفت کردنش در موتور یعنی اولین گزارشی که واحد دیگری
+     * بخواهد، باید موتور را عوض کند.
+     */
+    suffix: z.string().max(20).default(''),
+  }),
 ]);
 export type AggregateSpec = z.infer<typeof aggregateSchema>;
 

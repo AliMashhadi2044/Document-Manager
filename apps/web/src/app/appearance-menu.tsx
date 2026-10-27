@@ -21,7 +21,9 @@ import {
   useRemoveLogo,
   useUpdateOrganization,
   useUploadLogo,
+  type OrganizationDto,
 } from '../features/organization/organization.api';
+import { Input } from '../shared/ui/input';
 import { YearInput } from '../shared/ui/year-input';
 
 const MODE_ICONS: Record<ThemeMode, 'sun' | 'moon' | 'monitor'> = {
@@ -183,6 +185,27 @@ function BrandingDialog({ onClose }: { onClose: () => void }): JSX.Element {
         </p>
       ) : null}
 
+      {/*
+        هویت سازمان.
+
+        نام سازمان سربرگ **هر گزارشی** است که چاپ می‌شود؛ تا امروز فقط از داده
+        مرجع می‌آمد و راهی برای عوض کردنش نبود، پس روی فرم‌ها «سازمان» چاپ می‌شد.
+      */}
+      <OrganizationIdentity
+        organization={organization.data ?? null}
+        saving={save.isPending}
+        onSave={(input) => {
+          setMessage(null);
+          save.mutate(input, {
+            onSuccess: () => setMessage('مشخصات سازمان ذخیره شد.'),
+            onError: (error) =>
+              setMessage(
+                error instanceof ApiError ? formatServerMessage(error.message) : 'ذخیره ناموفق بود',
+              ),
+          });
+        }}
+      />
+
       <DefaultYears
         fiscal={organization.data?.defaultFiscalYear ?? null}
         jalali={organization.data?.defaultJalaliYear ?? null}
@@ -237,6 +260,107 @@ function BrandingDialog({ onClose }: { onClose: () => void }): JSX.Element {
  * نه در مرورگرِ هر کاربر — عمدی است: سال جاری یک واقعیت سازمانی است، نه سلیقهٔ شخصی، و
  * نباید بین دو کاربر فرق کند.
  */
+/**
+ * نام و مشخصات سازمان.
+ *
+ * نام **الزامی** است و بقیه اختیاری: سربرگِ بی‌نام، فرمی می‌سازد که معلوم نیست از
+ * کجاست، ولی سازمانی که نمابر ندارد هم وجود دارد.
+ *
+ * فرم با `key` از روی مقدار سرور ساخته می‌شود تا پس از ذخیره، همان چیزی را نشان
+ * دهد که ذخیره شده — نه نوشتهٔ نیمه‌کارهٔ قبلی.
+ */
+function OrganizationIdentity({
+  organization,
+  saving,
+  onSave,
+}: {
+  organization: OrganizationDto | null;
+  saving: boolean;
+  onSave: (input: {
+    name: string;
+    addressLine: string | null;
+    postalCode: string | null;
+    phone: string | null;
+    fax: string | null;
+  }) => void;
+}): JSX.Element {
+  const [name, setName] = useState(organization?.name ?? '');
+  const [addressLine, setAddressLine] = useState(organization?.addressLine ?? '');
+  const [postalCode, setPostalCode] = useState(organization?.postalCode ?? '');
+  const [phone, setPhone] = useState(organization?.phone ?? '');
+  const [fax, setFax] = useState(organization?.fax ?? '');
+
+  return (
+    <section className="mt-5 border-t border-border pt-5">
+      <h3 className="text-sm font-semibold">مشخصات سازمان</h3>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        نام سازمان در سربرگ همهٔ گزارش‌های چاپی می‌آید. بقیهٔ فیلدها اختیاری‌اند و در
+        قالب‌هایی که به آن‌ها اشاره کنند استفاده می‌شوند.
+      </p>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <Input
+            label="نام سازمان"
+            required
+            maxLength={300}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <Input
+            label="نشانی"
+            maxLength={1000}
+            value={addressLine}
+            onChange={(event) => setAddressLine(event.target.value)}
+            hint="اختیاری"
+          />
+        </div>
+        <Input
+          label="تلفن"
+          maxLength={30}
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          hint="اختیاری"
+        />
+        <Input
+          label="کد پستی"
+          maxLength={10}
+          value={postalCode}
+          onChange={(event) => setPostalCode(event.target.value)}
+          hint="اختیاری"
+        />
+        <Input
+          label="نمابر"
+          maxLength={30}
+          value={fax}
+          onChange={(event) => setFax(event.target.value)}
+          hint="اختیاری"
+        />
+      </div>
+
+      <Button
+        className="mt-4"
+        size="sm"
+        loading={saving}
+        disabled={name.trim() === ''}
+        onClick={() =>
+          onSave({
+            name: name.trim(),
+            addressLine: addressLine.trim() || null,
+            postalCode: postalCode.trim() || null,
+            phone: phone.trim() || null,
+            fax: fax.trim() || null,
+          })
+        }
+      >
+        ذخیرهٔ مشخصات
+      </Button>
+    </section>
+  );
+}
+
 function DefaultYears({
   fiscal,
   jalali,

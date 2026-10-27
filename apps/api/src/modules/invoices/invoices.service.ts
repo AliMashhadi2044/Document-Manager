@@ -33,6 +33,8 @@ export interface CreateInvoiceInput {
     readonly vendorBankAccountId: string | null;
     readonly paymentIdentifier: string | null;
     readonly billIdentifier: string | null;
+    /** نام صاحب حساب قبض؛ فقط در روش «قبض» معنا دارد. */
+    readonly payeeName: string | null;
     readonly pettyCashHolderId: string | null;
     /** سهم هر مقصد در پرداخت ترکیبی؛ در بقیهٔ روش‌ها `null`. */
     readonly beneficiaryAmount: string | null;
@@ -349,6 +351,7 @@ export class InvoicesService {
             pettyCashHolderId: invoice.payment.pettyCashHolderId,
             paymentIdentifier: invoice.payment.paymentIdentifier,
             billIdentifier: invoice.payment.billIdentifier,
+            payeeName: invoice.payment.payeeName,
             // مبلغ‌ها رشته‌اند، مثل هر مبلغ دیگری در مرز API (ADR-0003).
             beneficiaryAmount: invoice.payment.beneficiaryAmount?.toString() ?? null,
             pettyCashAmount: invoice.payment.pettyCashAmount?.toString() ?? null,
@@ -677,6 +680,9 @@ export class InvoicesService {
         ...base,
         billIdentifier: input.payment.billIdentifier,
         paymentIdentifier: input.payment.paymentIdentifier,
+        // قبض به نام مدرسه است و نه به نام فروشندهٔ فاکتور؛ گزارش شبا همین را
+        // در ستون «نام صاحب حساب» می‌نشاند.
+        payeeName: input.payment.payeeName,
       };
     }
 

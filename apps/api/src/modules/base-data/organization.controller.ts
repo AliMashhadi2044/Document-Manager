@@ -37,7 +37,28 @@ const jalaliYear = z.coerce
   .min(1300, 'سال معتبر نیست')
   .max(1500, 'سال معتبر نیست');
 
+/** متنِ اختیاری؛ رشتهٔ خالی یعنی «ثبت‌نشده» و نه مقدارِ خالی. */
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === '' ? null : value));
+
 const settingsSchema = z.object({
+  /**
+   * نام سازمان — سربرگ هر گزارش از همین خوانده می‌شود.
+   *
+   * برخلاف بقیه، خالی بودنش مجاز نیست: سربرگِ بی‌نام، فرمی می‌سازد که معلوم نیست
+   * از کجاست.
+   */
+  name: z.string().trim().min(1, 'نام سازمان الزامی است').max(300).optional(),
+  addressLine: optionalText(1000),
+  postalCode: optionalText(10),
+  phone: optionalText(30),
+  fax: optionalText(30),
   defaultFiscalYear: jalaliYear.nullable().optional(),
   defaultJalaliYear: jalaliYear.nullable().optional(),
 });
@@ -76,13 +97,13 @@ export class OrganizationController {
   ) {}
 
   /**
-   * تنظیمات سازمان — فعلاً سال‌های پیش‌فرض.
+   * تنظیمات سازمان: هویت سازمان و سال‌های پیش‌فرض.
    *
    * خواندنشان در `bootstrap` هم هست؛ این مسیر فقط برای نوشتن است.
    */
   @RequirePermission('base_data:write')
   @Patch()
-  @ApiOperation({ summary: 'ذخیرهٔ سال مالی و سال شمسی پیش‌فرض' })
+  @ApiOperation({ summary: 'ذخیرهٔ نام و مشخصات سازمان و سال‌های پیش‌فرض' })
   async updateSettings(
     @Body(new ZodBody(settingsSchema)) body: z.infer<typeof settingsSchema>,
     @CurrentUser() user: AuthenticatedUser,
@@ -92,7 +113,20 @@ export class OrganizationController {
 
     // فقط کلیدهایی که واقعاً آمده‌اند نوشته می‌شوند؛ `undefined` در شیء داده پریزما
     // جای `null` را نمی‌گیرد و با exactOptionalPropertyTypes اصلاً تایپ نمی‌شود.
-    const data: { defaultFiscalYear?: number | null; defaultJalaliYear?: number | null } = {};
+    const data: {
+      name?: string;
+      addressLine?: string | null;
+      postalCode?: string | null;
+      phone?: string | null;
+      fax?: string | null;
+      defaultFiscalYear?: number | null;
+      defaultJalaliYear?: number | null;
+    } = {};
+    if (body.name !== undefined) data.name = body.name;
+    if (body.addressLine !== undefined) data.addressLine = body.addressLine;
+    if (body.postalCode !== undefined) data.postalCode = body.postalCode;
+    if (body.phone !== undefined) data.phone = body.phone;
+    if (body.fax !== undefined) data.fax = body.fax;
     if (body.defaultFiscalYear !== undefined) data.defaultFiscalYear = body.defaultFiscalYear;
     if (body.defaultJalaliYear !== undefined) data.defaultJalaliYear = body.defaultJalaliYear;
 
@@ -102,7 +136,16 @@ export class OrganizationController {
       actorId: user.id,
       action: 'BASE_DATA_UPDATE',
       entityType: 'organizationSettings',
-      entityId: '1',
+      /*
+        شناسهٔ موجودیت خالی می‌ماند و این عمدی است.
+
+        `audit_logs.entity_id` ستونی از نوع UUID است و کلید این جدول یک عدد
+        (همیشه ۱). فرستادن `'1'` باعث می‌شد نوشتن در رد حسابرسی **خاموشانه شکست
+        بخورد** — خطا بیرون از تراکنش فقط لاگ می‌شد — یعنی تغییر مشخصات سازمان
+        هیچ ردی نمی‌گذاشت. جدول تک‌ردیفی است، پس `entityType` به‌تنهایی می‌گوید
+        چه چیزی عوض شده.
+      */
+      entityId: null,
       before,
       after: updated,
     });
@@ -189,7 +232,16 @@ export class OrganizationController {
       actorId: user.id,
       action: 'ORGANIZATION_LOGO_SET',
       entityType: 'OrganizationSettings',
-      entityId: '1',
+      /*
+        شناسهٔ موجودیت خالی می‌ماند و این عمدی است.
+
+        `audit_logs.entity_id` ستونی از نوع UUID است و کلید این جدول یک عدد
+        (همیشه ۱). فرستادن `'1'` باعث می‌شد نوشتن در رد حسابرسی **خاموشانه شکست
+        بخورد** — خطا بیرون از تراکنش فقط لاگ می‌شد — یعنی تغییر مشخصات سازمان
+        هیچ ردی نمی‌گذاشت. جدول تک‌ردیفی است، پس `entityType` به‌تنهایی می‌گوید
+        چه چیزی عوض شده.
+      */
+      entityId: null,
       before: { logoPath: previous?.logoPath ?? null },
       after: { logoPath: key },
     });
@@ -211,7 +263,16 @@ export class OrganizationController {
       actorId: user.id,
       action: 'ORGANIZATION_LOGO_REMOVED',
       entityType: 'OrganizationSettings',
-      entityId: '1',
+      /*
+        شناسهٔ موجودیت خالی می‌ماند و این عمدی است.
+
+        `audit_logs.entity_id` ستونی از نوع UUID است و کلید این جدول یک عدد
+        (همیشه ۱). فرستادن `'1'` باعث می‌شد نوشتن در رد حسابرسی **خاموشانه شکست
+        بخورد** — خطا بیرون از تراکنش فقط لاگ می‌شد — یعنی تغییر مشخصات سازمان
+        هیچ ردی نمی‌گذاشت. جدول تک‌ردیفی است، پس `entityType` به‌تنهایی می‌گوید
+        چه چیزی عوض شده.
+      */
+      entityId: null,
       before: { logoPath: settings.logoPath },
       after: { logoPath: null },
     });

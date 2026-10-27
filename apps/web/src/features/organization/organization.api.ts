@@ -74,6 +74,11 @@ export function useUpdateOrganization() {
 
   return useMutation({
     mutationFn: (input: {
+      name?: string;
+      addressLine?: string | null;
+      postalCode?: string | null;
+      phone?: string | null;
+      fax?: string | null;
       defaultFiscalYear?: number | null;
       defaultJalaliYear?: number | null;
     }) => apiFetch<OrganizationDto>('/base-data/organization', { method: 'PATCH', json: input }),

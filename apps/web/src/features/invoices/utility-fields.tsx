@@ -13,6 +13,12 @@ import { safePreview, type RoundingPolicyRef } from './invoice-preview';
 
 export interface UtilityDraft {
   readonly schoolId: string;
+  /**
+   * نام مدرسه — فقط برای **نمایش و پیش‌فرض‌ها**؛ به سرور فرستاده نمی‌شود.
+   *
+   * قبضِ انشعاب به نام همان مدرسه است، پس فرم پرداخت از همین پر می‌شود.
+   */
+  readonly schoolTitle: string;
   /** ناحیه فقط برای **نمایش** است؛ به سرور فرستاده نمی‌شود و سرور خودش مشتقش می‌کند. */
   readonly districtTitle: string;
   readonly utilityTypeId: string;
@@ -25,6 +31,7 @@ export interface UtilityDraft {
 
 export const EMPTY_UTILITY: UtilityDraft = {
   schoolId: '',
+  schoolTitle: '',
   districtTitle: '',
   utilityTypeId: '',
   baseAmount: '',
@@ -101,6 +108,7 @@ export function UtilityFields({
             onChange({
               ...draft,
               schoolId,
+              schoolTitle: school?.title ?? '',
               districtTitle: school?.district.title ?? '',
             });
           }}

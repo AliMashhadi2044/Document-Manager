@@ -416,6 +416,8 @@ async function buildDocument(
               : null,
           paymentIdentifier: item.paymentIdentifier ?? null,
           billIdentifier: item.billIdentifier ?? null,
+          // قبض به نام مدرسه است و نه به نام فروشندهٔ فاکتور.
+          payeeName: item.method === 'BILL' ? (item.billVendor ?? null) : null,
           pettyCashHolderId:
             item.method === 'PETTY_CASH' || item.method === 'SPLIT' ? base.pettyCashHolderId : null,
           beneficiaryAmount: beneficiary === null ? null : beneficiary.toString(),

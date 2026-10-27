@@ -261,6 +261,7 @@ erDiagram
       text bank_title_snapshot
       text payment_identifier
       text bill_identifier
+      text payee_name
       uuid petty_cash_holder_id FK }
 ```
 

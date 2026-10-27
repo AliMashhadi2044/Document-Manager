@@ -50,6 +50,8 @@ export interface BeneficiaryInvoiceInput {
   readonly accountTitleSnapshot: string | null;
   readonly paymentIdentifier: string | null;
   readonly billIdentifier: string | null;
+  /** نام صاحب حساب قبض؛ در بقیهٔ روش‌ها `null`. */
+  readonly payeeName: string | null;
 
   readonly pettyCashHolderNameSnapshot: string | null;
   readonly pettyCashAccountHolderSnapshot: string | null;
@@ -270,7 +272,14 @@ function billDraft(invoice: BeneficiaryInvoiceInput): DraftHead {
     key: `BILL:${bill}|${payment}`,
     kind: 'BILL',
     identifier: bill,
-    accountHolder: invoice.vendorName,
+    /*
+      نام صاحب حساب، از خودِ قبض.
+
+      قبضِ یک مدرسه به نام همان مدرسه است و نه به نام فروشندهٔ فاکتور. نبودش به
+      نام فروشنده برمی‌گردد — رفتار قبلی، برای فاکتورهایی که پیش از این فیلد ثبت
+      شده‌اند.
+    */
+    accountHolder: invoice.payeeName ?? invoice.vendorName,
     bankTitle: BILL_BANK_LABEL,
   };
 }

@@ -1169,6 +1169,13 @@ model InvoicePayment {
   paymentIdentifier              String? @map("payment_identifier") @db.VarChar(100)
   /// قبض
   billIdentifier                 String? @map("bill_identifier") @db.VarChar(100)
+
+  /// نام صاحب حساب قبض — فقط در روش «قبض».
+  ///
+  /// قبضِ یک مدرسه به نام همان مدرسه است و نه به نام فروشندهٔ فاکتور؛ در گزارش
+  /// شبای ذینفعان همین نام در ستون «نام صاحب حساب» می‌نشیند. در فاکتور انشعابات
+  /// پیش‌فرضش نام مدرسه است و کاربر می‌تواند عوضش کند.
+  payeeName                      String? @map("payee_name") @db.VarChar(200)
   /// تنخواه (تصمیم Q9)
   pettyCashHolderId              String? @map("petty_cash_holder_id") @db.Uuid
   /// نام و اطلاعات حساب در لحظه ثبت snapshot می‌شوند (ADR-0005): اصلاح بعدی

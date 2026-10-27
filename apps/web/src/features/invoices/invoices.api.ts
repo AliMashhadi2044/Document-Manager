@@ -182,6 +182,8 @@ export interface CreateInvoicePayload {
     readonly vendorBankAccountId: string | null;
     readonly paymentIdentifier: string | null;
     readonly billIdentifier: string | null;
+    /** نام صاحب حساب قبض؛ در بقیهٔ روش‌ها `null`. */
+    readonly payeeName: string | null;
     readonly pettyCashHolderId: string | null;
     /** سهم هر مقصد در پرداخت ترکیبی؛ در بقیهٔ روش‌ها `null`. */
     readonly beneficiaryAmount: string | null;
@@ -216,6 +218,7 @@ export interface InvoiceDraft {
     readonly pettyCashHolderId: string | null;
     readonly paymentIdentifier: string | null;
     readonly billIdentifier: string | null;
+    readonly payeeName: string | null;
     readonly beneficiaryAmount: string | null;
     readonly pettyCashAmount: string | null;
     readonly notes: string | null;

@@ -397,8 +397,9 @@ function layoutTable(
         if (typeof aggregate === 'object') {
           // جمع از ستونی می‌آید که `of` می‌گوید؛ ستونِ خودِ حروف متنی است و جمعش صفر.
           const sum = sumOfColumn(aggregate.of);
+          const words = numberToPersianWords(sum);
           return {
-            text: numberToPersianWords(sum),
+            text: aggregate.suffix === '' ? words : `${words} ${aggregate.suffix}`,
             raw: sum,
             align: 'center',
             extraLines: [],

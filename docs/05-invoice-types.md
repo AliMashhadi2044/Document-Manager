@@ -178,10 +178,11 @@ UI مرجع نیست.
 
 ```
 CHECK (
-  (method_kind = 'BENEFICIARY_ACCOUNT' AND bill_identifier IS NULL)
+  (method_kind = 'BENEFICIARY_ACCOUNT' AND bill_identifier IS NULL AND payee_name IS NULL)
   OR (method_kind = 'BILL' AND vendor_bank_account_id IS NULL AND iban_snapshot IS NULL)
-  OR (method_kind = 'PETTY_CASH' AND vendor_bank_account_id IS NULL AND bill_identifier IS NULL)
-  OR (method_kind = 'SPLIT' AND bill_identifier IS NULL
+  OR (method_kind = 'PETTY_CASH' AND vendor_bank_account_id IS NULL AND bill_identifier IS NULL
+      AND payee_name IS NULL)
+  OR (method_kind = 'SPLIT' AND bill_identifier IS NULL AND payee_name IS NULL
       AND vendor_bank_account_id IS NOT NULL AND petty_cash_holder_id IS NOT NULL
       AND beneficiary_amount > 0 AND petty_cash_amount > 0)
 )

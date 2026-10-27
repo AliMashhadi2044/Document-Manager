@@ -24,6 +24,8 @@ export interface PaymentDraft {
   readonly pettyCashHolderId: string;
   readonly paymentIdentifier: string;
   readonly billIdentifier: string;
+  /** نام صاحب حساب قبض؛ فقط در روش «قبض» دیده و فرستاده می‌شود. */
+  readonly payeeName: string;
   /** سهم هر مقصد در پرداخت ترکیبی — رشتهٔ رقمی ریالی (ADR-0003). */
   readonly beneficiaryAmount: string;
   readonly pettyCashAmount: string;
@@ -36,6 +38,7 @@ export const EMPTY_PAYMENT: PaymentDraft = {
   pettyCashHolderId: '',
   paymentIdentifier: '',
   billIdentifier: '',
+  payeeName: '',
   beneficiaryAmount: '',
   pettyCashAmount: '',
   notes: '',
@@ -191,12 +194,28 @@ export function PaymentFields({
         ) : null}
 
         {selected?.kind === 'BILL' ? (
-          <Input
-            label="شناسه قبض"
-            required={selected.requiresBillIdentifier}
-            value={draft.billIdentifier}
-            onChange={(event) => onChange({ ...draft, billIdentifier: event.target.value })}
-          />
+          <>
+            <Input
+              label="شناسه قبض"
+              required={selected.requiresBillIdentifier}
+              value={draft.billIdentifier}
+              onChange={(event) => onChange({ ...draft, billIdentifier: event.target.value })}
+            />
+            {/*
+              نام صاحب حساب قبض.
+
+              قبضِ یک مدرسه به نام همان مدرسه است و نه به نام فروشندهٔ فاکتور؛ در
+              گزارش شبای ذینفعان همین نام در ستون «نام صاحب حساب» می‌نشیند. در
+              فاکتور انشعابات از نام مدرسه پر می‌شود و قابل ویرایش می‌ماند.
+            */}
+            <Input
+              label="نام صاحب حساب"
+              maxLength={200}
+              value={draft.payeeName}
+              onChange={(event) => onChange({ ...draft, payeeName: event.target.value })}
+              hint="در گزارش شبای ذینفعان، همین نام چاپ می‌شود."
+            />
+          </>
         ) : null}
 
         {selected ? (
@@ -314,6 +333,7 @@ export function paymentToPayload(draft: PaymentDraft): {
   vendorBankAccountId: string | null;
   paymentIdentifier: string | null;
   billIdentifier: string | null;
+  payeeName: string | null;
   pettyCashHolderId: string | null;
   beneficiaryAmount: string | null;
   pettyCashAmount: string | null;
@@ -326,6 +346,7 @@ export function paymentToPayload(draft: PaymentDraft): {
     vendorBankAccountId: draft.vendorBankAccountId || null,
     paymentIdentifier: draft.paymentIdentifier.trim() || null,
     billIdentifier: draft.billIdentifier.trim() || null,
+    payeeName: draft.payeeName.trim() || null,
     pettyCashHolderId: draft.pettyCashHolderId || null,
     beneficiaryAmount: draft.beneficiaryAmount || null,
     pettyCashAmount: draft.pettyCashAmount || null,

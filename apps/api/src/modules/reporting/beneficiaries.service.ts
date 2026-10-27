@@ -51,6 +51,7 @@ export class BeneficiariesService {
       accountTitleSnapshot: invoice.payment?.accountTitleSnapshot ?? null,
       paymentIdentifier: invoice.payment?.paymentIdentifier ?? null,
       billIdentifier: invoice.payment?.billIdentifier ?? null,
+      payeeName: invoice.payment?.payeeName ?? null,
       pettyCashHolderNameSnapshot: invoice.payment?.pettyCashHolderNameSnapshot ?? null,
       pettyCashAccountHolderSnapshot: invoice.payment?.pettyCashAccountHolderSnapshot ?? null,
       pettyCashBankTitleSnapshot: invoice.payment?.pettyCashBankTitleSnapshot ?? null,
