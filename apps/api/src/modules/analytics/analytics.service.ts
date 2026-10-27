@@ -513,6 +513,27 @@ export function flatten(
         value = null;
         break;
       }
+      /*
+        رابطهٔ یک‌به‌چند: مقدار اینجا یک آرایه است.
+
+        هر عضو همان کلید را می‌دهد و نتیجه با «، » کنار هم می‌نشیند — یک سلول
+        خوانا به‌جای `[object Object]`. ردیف‌های بی‌مقدار کنار گذاشته می‌شوند تا
+        جداکننده‌های پشت‌سرهم نسازند.
+      */
+      if (Array.isArray(value)) {
+        const joined = value
+          .map((item) =>
+            item !== null && typeof item === 'object'
+              ? (item as Record<string, unknown>)[segment]
+              : null,
+          )
+          .filter((item) => item !== null && item !== undefined && item !== '')
+          .join('، ');
+        // هیچ ردیفی، یعنی **خالی** و نه رشتهٔ خالی: بقیهٔ ستون‌ها هم نبودِ مقدار را
+        // همین‌طور می‌گویند و جدول و خروجی Excel روی همین حساب می‌کنند.
+        value = joined === '' ? null : joined;
+        break;
+      }
       value = (value as Record<string, unknown>)[segment];
     }
 

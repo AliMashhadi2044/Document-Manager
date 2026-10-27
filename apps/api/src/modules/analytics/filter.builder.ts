@@ -107,7 +107,24 @@ function conditionToWhere(
     throw AppError.validation(`برای «${field.titleFa}» دست‌کم یک مقدار لازم است`);
   }
 
-  return nest(field.path, leafCondition(field, condition));
+  return nestField(field, leafCondition(field, condition));
+}
+
+/**
+ * شرط را زیر مسیر فیلد می‌نشاند.
+ *
+ * برای رابطهٔ یک‌به‌چند، یک `some` وسط می‌آید: «فاکتوری که **دست‌کم یکی** از
+ * ردیف‌هایش این شرح را دارد». بدون آن، Prisma شرط را نمی‌شناسد و کوئری می‌شکند.
+ */
+function nestField(field: ReportFieldDefinition, leaf: unknown): Record<string, unknown> {
+  if (!field.many) return nest(field.path, leaf);
+
+  const segments = field.path.split('.');
+  const value = segments[segments.length - 1] as string;
+  const relation = segments.slice(0, -1);
+  if (relation.length === 0) return nest(field.path, leaf);
+
+  return nest(relation.join('.'), { some: { [value]: leaf } });
 }
 
 /** شرط برگ — همان چیزی که زیر مسیر فیلد می‌نشیند. */
@@ -233,7 +250,7 @@ export function buildOrderBy(
     if (!definition) {
       throw AppError.validation(`فیلد «${entry.field}» در این گزارش وجود ندارد`);
     }
-    if (definition.sortable === false) {
+    if (definition.sortable === false || definition.many) {
       throw AppError.validation(`روی فیلد «${definition.titleFa}» نمی‌شود مرتب‌سازی کرد`);
     }
     for (const required of definition.requiredPermissions ?? []) {

@@ -17,7 +17,7 @@ import {
 const TOTAL = 10_000_000n;
 
 describe('مبالغ وضعیت پرداخت', () => {
-  it('پرداخت کامل: کل مبلغ سند و نیازمندی صفر', () => {
+  it('پرداخت کامل: کل مبلغ سند و شناسایی صفر', () => {
     expect(checkSettlement('FULLY_PAID', TOTAL, 0n, TOTAL)).toBeNull();
   });
 
@@ -29,11 +29,11 @@ describe('مبالغ وضعیت پرداخت', () => {
     });
   });
 
-  it('نیازمندی درست، مشکلی ندارد', () => {
+  it('شناسایی درست، مشکلی ندارد', () => {
     expect(checkSettlement('OUTSTANDING', 6_000_000n, 4_000_000n, TOTAL)).toBeNull();
   });
 
-  it('نیازمندی با پرداختِ صفر هم معتبر است', () => {
+  it('شناسایی با پرداختِ صفر هم معتبر است', () => {
     // «هنوز چیزی پرداخت نشده» یک حالت واقعی است و نباید با «وارد نشده» قاطی شود.
     expect(checkSettlement('OUTSTANDING', 0n, TOTAL, TOTAL)).toBeNull();
   });
@@ -43,7 +43,7 @@ describe('مبالغ وضعیت پرداخت', () => {
     expect(checkSettlement('OUTSTANDING', TOTAL, null, TOTAL)).toEqual({ code: 'MISSING' });
   });
 
-  it('نیازمندیِ صفر یعنی پرداخت کامل، نه نیازمندی', () => {
+  it('شناساییِ صفر یعنی پرداخت کامل، نه شناسایی', () => {
     expect(checkSettlement('OUTSTANDING', TOTAL, 0n, TOTAL)).toEqual({ code: 'NOT_OUTSTANDING' });
   });
 
@@ -73,11 +73,11 @@ describe('مبالغ وضعیت پرداخت', () => {
   });
 });
 
-describe('ساعت پیگیری نیازمندی', () => {
+describe('ساعت پیگیری شناسایی', () => {
   const at = (days: number): Date => new Date(Date.UTC(2026, 0, 1 + days, 12));
   const start = at(0);
 
-  it('نیازمندی تازه، آبی است', () => {
+  it('شناسایی تازه، آبی است', () => {
     expect(outstandingAge(start, at(0))).toMatchObject({ days: 0, level: 'fresh' });
     expect(outstandingAge(start, at(4)).level).toBe('fresh');
   });

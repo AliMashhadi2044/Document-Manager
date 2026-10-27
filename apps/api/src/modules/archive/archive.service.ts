@@ -24,7 +24,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 /**
  * وضعیت پرداخت، همان‌طور که بایگان ثبتش می‌کند.
  *
- * مبالغ فقط در «نیازمندی» می‌آیند؛ در «پرداخت کامل» مشتق‌اند و پرسیدنشان فقط راهی
+ * مبالغ فقط در «شناسایی» می‌آیند؛ در «پرداخت کامل» مشتق‌اند و پرسیدنشان فقط راهی
  * می‌شد برای ثبت تناقض.
  */
 export interface PaymentStatusInput {
@@ -249,14 +249,14 @@ export class ArchiveService {
    *
    * سه تصمیم که ارزش نوشتن دارند:
    *
-   *  ۱. **پس از بایگانی هم قابل تغییر است.** نیازمندی اصلاً برای همین وجود دارد:
+   *  ۱. **پس از بایگانی هم قابل تغییر است.** شناسایی اصلاً برای همین وجود دارد:
    *     سند بایگانی شده و پول هنوز نرفته. قفل کردنش روی `ARCHIVED` یعنی بستن تنها
    *     جایی که می‌شد پیگیری را به پایان رساند.
    *
    *  ۲. **تاریخ پرداخت ورودی نیست.** همان لحظه‌ای است که وضعیت «پرداخت کامل» ثبت
    *     می‌شود؛ یک فیلد تاریخِ دستی، یعنی دو روایت از یک رویداد.
    *
-   *  ۳. **اعلان فقط روی تغییر وضعیت.** ذخیرهٔ دوبارهٔ همان نیازمندی (مثلاً اصلاح
+   *  ۳. **اعلان فقط روی تغییر وضعیت.** ذخیرهٔ دوبارهٔ همان شناسایی (مثلاً اصلاح
    *     مبلغ) نباید کارتابل کارپرداز را پر کند.
    */
   async paymentStatus(
@@ -308,7 +308,7 @@ export class ArchiveService {
           paidAmount,
           outstandingAmount,
           // ساعت پیگیری فقط با **تغییر وضعیت** از نو شروع می‌شود؛ اصلاح مبلغِ همان
-          // نیازمندی، مهلت ده‌روزه را عقب نمی‌اندازد.
+          // شناسایی، مهلت ده‌روزه را عقب نمی‌اندازد.
           ...(changed ? { paymentStatusAt: now } : {}),
           paymentStatusById: user.id,
           paymentDate: fullyPaid ? (document.paymentDate ?? now) : null,
@@ -362,7 +362,7 @@ export class ArchiveService {
     const input = outstanding
       ? {
           kind: 'DOCUMENT_PAYMENT_OUTSTANDING' as const,
-          title: `نیازمندی پرداخت: «${after.title}»`,
+          title: `شناسایی پرداخت: «${after.title}»`,
           body:
             `مبلغ باقی‌مانده ${(after.outstandingAmount ?? 0n).toString()} ریال از ` +
             `${after.totalAmount.toString()} ریال. لطفاً پیگیری کنید.`,
@@ -373,7 +373,7 @@ export class ArchiveService {
           title: `پرداخت سند «${after.title}» کامل شد`,
           body:
             before.paymentStatus === 'OUTSTANDING'
-              ? 'نیازمندی این سند بسته شد.'
+              ? 'شناسایی این سند بسته شد.'
               : `وضعیت پرداخت: ${PAYMENT_SETTLEMENT_LABELS.FULLY_PAID}`,
           documentId: after.id,
         };
@@ -390,9 +390,9 @@ export class ArchiveService {
     totalAmount: bigint,
   ): AppError {
     if (problem.code === 'MISSING') {
-      return AppError.validation('مبلغ پرداخت‌شده و مبلغ نیازمندی باید وارد شوند', [
+      return AppError.validation('مبلغ پرداخت‌شده و مبلغ شناسایی باید وارد شوند', [
         { path: 'paidAmount', message: 'مبلغ پرداخت‌شده وارد نشده است' },
-        { path: 'outstandingAmount', message: 'مبلغ نیازمندی وارد نشده است' },
+        { path: 'outstandingAmount', message: 'مبلغ شناسایی وارد نشده است' },
       ]);
     }
 
@@ -403,7 +403,7 @@ export class ArchiveService {
     }
 
     if (problem.code === 'NOT_OUTSTANDING') {
-      return AppError.validation('نیازمندیِ صفر یعنی پرداخت کامل', [
+      return AppError.validation('شناساییِ صفر یعنی پرداخت کامل', [
         {
           path: 'outstandingAmount',
           message: 'اگر چیزی باقی نمانده، وضعیت «پرداخت کامل» را انتخاب کنید',
@@ -412,7 +412,7 @@ export class ArchiveService {
     }
 
     return AppError.validation(
-      `جمع مبلغ پرداخت‌شده و نیازمندی باید برابر مبلغ کل سند (${totalAmount.toString()} ریال) باشد`,
+      `جمع مبلغ پرداخت‌شده و شناسایی باید برابر مبلغ کل سند (${totalAmount.toString()} ریال) باشد`,
       [
         {
           path: 'outstandingAmount',

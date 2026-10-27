@@ -7,7 +7,7 @@ import { gotoSection, login, logout, pickOption, toAsciiDigits, unique } from '.
  *
  * پنج ادعا، همه با اندازه‌گیری:
  *
- *  ۱. بایگان «نیازمندی» را با دو مبلغ ثبت می‌کند، و نوشتن یکی دیگری را کامل می‌کند.
+ *  ۱. بایگان «شناسایی» را با دو مبلغ ثبت می‌کند، و نوشتن یکی دیگری را کامل می‌کند.
  *  ۲. نشان وضعیت، **فوریت** را هم می‌گوید (مهلت ده‌روزه).
  *  ۳. داشبورد همان سند را می‌شمارد و مبلغ باقی‌مانده را **دقیقاً** اضافه می‌کند.
  *  ۴. هر کاشی داشبورد علامت راهنما دارد و دامنه‌اش را می‌گوید.
@@ -107,11 +107,11 @@ async function settlementSummary(
 }
 
 test.describe('وضعیت پرداخت سند', () => {
-  test('نیازمندی ثبت می‌شود، در داشبورد شمرده می‌شود و کارپردازی خبر می‌شود', async ({
+  test('شناسایی ثبت می‌شود، در داشبورد شمرده می‌شود و کارپردازی خبر می‌شود', async ({
     page,
     request,
   }) => {
-    const title = unique('سند نیازمندی');
+    const title = unique('سند شناسایی');
 
     // ───── کارپردازی سند را می‌سازد و به بایگانی می‌دهد ─────
     await login(page, 'procurement');
@@ -133,8 +133,8 @@ test.describe('وضعیت پرداخت سند', () => {
     await expect(panel).toBeVisible();
 
     // رادیوی کلید چندحالته sr-only است و کاربر روی برچسب کلیک می‌کند؛ آزمون هم.
-    await panel.locator('label').filter({ hasText: 'نیازمندی' }).first().click();
-    await expect(panel.getByRole('radio', { name: /نیازمندی/ })).toBeChecked();
+    await panel.locator('label').filter({ hasText: 'شناسایی' }).first().click();
+    await expect(panel.getByRole('radio', { name: /شناسایی/ })).toBeChecked();
 
     /*
       نوشتن یک مبلغ، دیگری را کامل می‌کند.
@@ -144,18 +144,18 @@ test.describe('وضعیت پرداخت سند', () => {
       بی‌آنکه چیزی خراب شده باشد.
     */
     await panel.getByLabel('مبلغ پرداخت‌شده').fill('1000000');
-    const remaining = BigInt(await panel.getByLabel('مبلغ نیازمندی').inputValue());
-    expect(remaining, 'مبلغ نیازمندی خودکار پر نشد').toBeGreaterThan(0n);
+    const remaining = BigInt(await panel.getByLabel('مبلغ شناسایی').inputValue());
+    expect(remaining, 'مبلغ شناسایی خودکار پر نشد').toBeGreaterThan(0n);
 
     await panel.getByRole('button', { name: 'ثبت وضعیت پرداخت' }).click();
     await expect(page.getByText('وضعیت پرداخت ثبت شد.')).toBeVisible();
 
-    // نشان وضعیت، فوریت را هم می‌گوید — نیازمندیِ امروز، ده روز تا مهلت دارد.
+    // نشان وضعیت، فوریت را هم می‌گوید — شناساییِ امروز، ده روز تا مهلت دارد.
     await expect(panel.getByText('روز تا مهلت')).toBeVisible();
 
     // ───── داشبورد: یک سند بیشتر، و دقیقاً همان مبلغ باقی‌مانده ─────
     const after = await settlementSummary(page, request);
-    expect(after.count, 'تعداد نیازمندی‌ها یکی زیاد نشد').toBe(before.count + 1n);
+    expect(after.count, 'تعداد شناسایی‌ها یکی زیاد نشد').toBe(before.count + 1n);
     expect(after.remaining, 'مبلغ باقی‌مانده درست جمع نشد').toBe(before.remaining + remaining);
 
     /*
@@ -167,8 +167,8 @@ test.describe('وضعیت پرداخت سند', () => {
     */
     await gotoSection(page, 'داشبورد');
     await expect
-      .poll(async () => (await tileNumbers(page, 'نیازمندی')).count, {
-        message: 'کاشی نیازمندی، سند تازه را نشان نمی‌دهد',
+      .poll(async () => (await tileNumbers(page, 'شناسایی')).count, {
+        message: 'کاشی شناسایی، سند تازه را نشان نمی‌دهد',
       })
       .toBeGreaterThan(0n);
 
@@ -178,7 +178,7 @@ test.describe('وضعیت پرداخت سند', () => {
       .filter({ has: page.getByText('پیش‌نویس', { exact: true }) })
       .first();
     await expect(pipeline.getByText('پرداخت کامل', { exact: true })).toBeVisible();
-    await expect(pipeline.getByText('نیازمندی', { exact: true })).toBeVisible();
+    await expect(pipeline.getByText('شناسایی', { exact: true })).toBeVisible();
 
     // ───── راهنما: کاشی باید بگوید چه چیزی را می‌شمارد ─────
     const help = page.getByRole('button', { name: 'راهنمای جمع کل' });
@@ -233,7 +233,7 @@ test.describe('وضعیت پرداخت سند', () => {
     await paymentTab.click();
 
     // عنوان در نشان سربرگ هم تکرار می‌شود؛ اینجا فهرست صفحه مقصود است.
-    await expect(page.getByText(`نیازمندی پرداخت: «${title}»`).first()).toBeVisible();
+    await expect(page.getByText(`شناسایی پرداخت: «${title}»`).first()).toBeVisible();
 
     /*
       دستهٔ جدا یعنی **جدا**.
@@ -245,7 +245,7 @@ test.describe('وضعیت پرداخت سند', () => {
     await expect(page.getByText('بایگانی نهایی')).toHaveCount(0);
   });
 
-  test('پرداخت کامل، تاریخ پرداخت می‌سازد و نیازمندی را می‌بندد', async ({ page }) => {
+  test('پرداخت کامل، تاریخ پرداخت می‌سازد و شناسایی را می‌بندد', async ({ page }) => {
     const title = unique('سند پرداخت کامل');
 
     await login(page, 'procurement');

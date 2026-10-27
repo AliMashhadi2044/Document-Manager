@@ -9,7 +9,7 @@ export interface SettlementFields {
   readonly paymentStatus: PaymentSettlementStatus | null;
   readonly paidAmount: string | null;
   readonly outstandingAmount: string | null;
-  /** لحظهٔ ثبت وضعیت فعلی — مبنای مهلت ده‌روزهٔ نیازمندی. */
+  /** لحظهٔ ثبت وضعیت فعلی — مبنای مهلت ده‌روزهٔ شناسایی. */
   readonly paymentStatusAt: string | null;
   readonly paymentDate: string | null;
 }
@@ -106,7 +106,7 @@ export function useSaveArchiveInfo(documentId: string) {
 /**
  * ثبت وضعیت پرداخت.
  *
- * مبالغ فقط در «نیازمندی» فرستاده می‌شوند؛ در «پرداخت کامل» سرور از مبلغ خود سند
+ * مبالغ فقط در «شناسایی» فرستاده می‌شوند؛ در «پرداخت کامل» سرور از مبلغ خود سند
  * مشتقشان می‌کند و فرستادنشان از اینجا فقط راهی می‌شد برای ثبت تناقض.
  *
  * داشبورد و فهرست اسناد هم بی‌اعتبار می‌شوند: وضعیت پرداخت در هر دو دیده می‌شود.

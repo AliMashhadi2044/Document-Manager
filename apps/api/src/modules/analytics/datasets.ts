@@ -47,6 +47,16 @@ export interface ReportFieldDefinition {
    * «تعداد فاکتور» فروشنده، فاکتورهای سندهای **در سطل زباله** را هم می‌شمرد.
    */
   readonly countWhere?: Record<string, unknown>;
+  /**
+   * آخرین پرشِ مسیر، یک رابطهٔ **یک‌به‌چند** است.
+   *
+   * شرح ردیف‌های یک فاکتور چند تاست، نه یکی. بدون این نشان، فیلتر به شرط نامعتبر
+   * Prisma تبدیل می‌شد و ستون، به‌جای متن، یک شیء چاپ می‌کرد.
+   *
+   * فیلتر چنین فیلدی یعنی «**دست‌کم یکی** از ردیف‌ها»، و ستونش همهٔ مقدارها را با
+   * «، » کنار هم می‌گذارد. مرتب‌سازی رویش معنا ندارد و بسته است.
+   */
+  readonly many?: boolean;
 }
 
 export type DatasetKind = 'rows' | 'grouped';
@@ -210,7 +220,7 @@ const DOCUMENTS: DatasetDefinition = {
       enumValues: PAYMENT_SETTLEMENT_VALUES,
     },
     { key: 'paidAmount', titleFa: 'مبلغ پرداخت‌شده', type: 'money', path: 'paidAmount' },
-    { key: 'outstandingAmount', titleFa: 'مبلغ نیازمندی', type: 'money', path: 'outstandingAmount' },
+    { key: 'outstandingAmount', titleFa: 'مبلغ شناسایی', type: 'money', path: 'outstandingAmount' },
     { key: 'paymentDate', titleFa: 'تاریخ پرداخت', type: 'jalaliDate', path: 'paymentDate' },
     {
       key: 'paymentStatusAt',
@@ -310,6 +320,68 @@ const INVOICES: DatasetDefinition = {
       requiredPermissions: ['invoice:read_calc_details'],
     },
     { key: 'totalAmount', titleFa: 'جمع کل', type: 'money', path: 'totalAmount' },
+    /*
+      شرح ردیف‌ها.
+
+      «شرح فاکتور» اختیاری است و اغلب خالی می‌ماند؛ چیزی که کاربر واقعاً نوشته،
+      شرح تک‌تک ردیف‌هاست. جست‌وجو روی ستونی که معمولاً خالی است، جست‌وجویی است که
+      کار نمی‌کند — و دقیقاً همین شکایت را ساخت.
+    */
+    {
+      key: 'itemDescriptions',
+      titleFa: 'شرح ردیف‌ها',
+      type: 'text',
+      path: 'items.description',
+      many: true,
+      sortable: false,
+      width: 45,
+    },
+
+    /*
+      جزئیات اختصاصی: انشعابات و سوخت.
+
+      هر فاکتور حداکثر یکی از این دو را دارد، پس بقیهٔ ستون‌ها برایش خالی‌اند —
+      همان‌طور که باید. مقدارها از **snapshot** خوانده می‌شوند و نه از اطلاعات
+      پایهٔ امروز: گزارشِ یک سند ثبت‌شده باید همان نامی را بدهد که روز ثبت داشت.
+    */
+    {
+      key: 'schoolTitle',
+      titleFa: 'مدرسه (انشعابات)',
+      type: 'text',
+      path: 'utilityDetail.schoolTitleSnapshot',
+      width: 30,
+    },
+    {
+      key: 'districtTitle',
+      titleFa: 'ناحیه (انشعابات)',
+      type: 'text',
+      path: 'utilityDetail.districtTitleSnapshot',
+    },
+    {
+      key: 'utilityTypeTitle',
+      titleFa: 'نوع انشعاب',
+      type: 'text',
+      path: 'utilityDetail.utilityTypeTitleSnapshot',
+    },
+    {
+      key: 'vehiclePlate',
+      titleFa: 'پلاک خودرو (سوخت)',
+      type: 'text',
+      path: 'fuelDetail.plateNumberSnapshot',
+    },
+    {
+      key: 'vehicleTypeTitle',
+      titleFa: 'نوع خودرو (سوخت)',
+      type: 'text',
+      path: 'fuelDetail.vehicleTypeTitleSnapshot',
+    },
+    {
+      key: 'fuelTypeTitle',
+      titleFa: 'نوع سوخت',
+      type: 'text',
+      path: 'fuelDetail.fuelTypeTitleSnapshot',
+    },
+
     { key: 'createdAt', titleFa: 'تاریخ ثبت', type: 'jalaliDate', path: 'createdAt' },
   ],
 };
@@ -628,5 +700,15 @@ export function visibleFields(
 }
 
 export function allowedOperators(field: ReportFieldDefinition): readonly FilterOperator[] {
-  return OPERATORS_BY_TYPE[field.type];
+  const operators = OPERATORS_BY_TYPE[field.type];
+  if (!field.many) return operators;
+
+  /*
+    «خالی است» روی یک رابطهٔ یک‌به‌چند، دو معنای متفاوت دارد — «هیچ ردیفی ندارد» و
+    «ردیفی با مقدار خالی دارد» — و هرکدام جواب دیگری می‌دهد. به‌جای انتخاب یکی و
+    پنهان کردن دیگری، هر دو بسته‌اند.
+  */
+  return operators.filter(
+    (operator) => operator !== 'isEmpty' && operator !== 'isNotEmpty',
+  );
 }

@@ -26,7 +26,7 @@ export const KIND_LABELS: Record<NotificationKind, string> = {
   FEEDBACK_CREATED: 'بازخورد تازه',
   FEEDBACK_REPLIED: 'پاسخ بازخورد',
   FEEDBACK_RESOLVED: 'رسیدگی بازخورد',
-  DOCUMENT_PAYMENT_OUTSTANDING: 'نیازمندی پرداخت',
+  DOCUMENT_PAYMENT_OUTSTANDING: 'شناسایی پرداخت',
   DOCUMENT_PAYMENT_SETTLED: 'پرداخت کامل شد',
 };
 

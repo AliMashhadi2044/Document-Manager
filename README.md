@@ -22,7 +22,7 @@
 
 | سند | موضوع |
 |---|---|
-| [docs/00-requirements-summary.md](docs/00-requirements-summary.md) | خلاصه نیازمندی‌ها و تصمیم‌های قطعی |
+| [docs/00-requirements-summary.md](docs/00-requirements-summary.md) | خلاصه شناسایی‌ها و تصمیم‌های قطعی |
 | [docs/01-architecture.md](docs/01-architecture.md) | معماری Frontend و Backend |
 | [docs/02-repo-structure.md](docs/02-repo-structure.md) | ساختار پیشنهادی مخزن |
 | [docs/03-erd.md](docs/03-erd.md) | مدل داده و ERD |

@@ -7,7 +7,7 @@
 
 | # | سند | توضیح |
 |---|---|---|
-| 00 | [requirements-summary](00-requirements-summary.md) | خلاصه نیازمندی‌ها، تصمیم‌های قطعی، دامنه خارج از کار |
+| 00 | [requirements-summary](00-requirements-summary.md) | خلاصه شناسایی‌ها، تصمیم‌های قطعی، دامنه خارج از کار |
 | 01 | [architecture](01-architecture.md) | معماری سیستم، ماژول‌ها، مرزها، جریان درخواست |
 | 02 | [repo-structure](02-repo-structure.md) | ساختار مخزن، workspaceها، وابستگی‌ها |
 | 03 | [erd](03-erd.md) | ERD، موجودیت‌ها، constraintها، ایندکس‌ها |

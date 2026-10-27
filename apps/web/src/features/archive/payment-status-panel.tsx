@@ -25,10 +25,10 @@ import { useSavePaymentStatus, type ArchiveDetail } from './archive.api';
  * سه چیز که از دل کار درآمدند:
  *
  *  ۱. **در «پرداخت کامل» هیچ عددی پرسیده نمی‌شود.** پرداخت‌شده همان مبلغ سند است
- *     و نیازمندی صفر؛ پرسیدنشان فقط راهی می‌شد برای ثبت تناقض.
+ *     و شناسایی صفر؛ پرسیدنشان فقط راهی می‌شد برای ثبت تناقض.
  *  ۲. **نوشتن یک مبلغ، دیگری را کامل می‌کند** — مثل تقسیم پرداخت ترکیبی. تقسیم یک
  *     عدد به دو، در عمل یعنی وارد کردن یک عدد.
- *  ۳. **پس از بایگانی هم باز است.** نیازمندی اصلاً برای همین وجود دارد: سند
+ *  ۳. **پس از بایگانی هم باز است.** شناسایی اصلاً برای همین وجود دارد: سند
  *     بایگانی شده و پول هنوز نرفته.
  */
 export function PaymentStatusPanel({
@@ -114,7 +114,7 @@ export function PaymentStatusPanel({
           {detail.paymentStatus === 'FULLY_PAID' && detail.paymentDate
             ? `تاریخ پرداخت: ${formatIsoAsJalali(detail.paymentDate)}`
             : detail.paymentStatusAt
-              ? `ثبت نیازمندی: ${formatIsoAsJalali(detail.paymentStatusAt)}`
+              ? `ثبت شناسایی: ${formatIsoAsJalali(detail.paymentStatusAt)}`
               : ''}
           {detail.paymentStatusBy ? ` · توسط ${detail.paymentStatusBy.fullName}` : ''}
         </p>
@@ -157,7 +157,7 @@ export function PaymentStatusPanel({
                 onChange={(value) => setPart('paid', value)}
               />
               <MoneyInput
-                label="مبلغ نیازمندی"
+                label="مبلغ شناسایی"
                 required
                 disabled={!canWrite}
                 value={outstanding}
@@ -200,7 +200,7 @@ export function PaymentStatusPanel({
 }
 
 /**
- * نشان وضعیت پرداخت، با **فوریت** نیازمندی.
+ * نشان وضعیت پرداخت، با **فوریت** شناسایی.
  *
  * رنگ از آبی تا قرمز، تابعی از فاصلهٔ امروز تا مهلت ده‌روزه است و همین‌جا حساب
  * می‌شود؛ ذخیره‌اش یعنی یک کار شبانه که هر بار نچرخد، سامانه دروغ بگوید.

@@ -21,6 +21,7 @@ import {
   useSavedViews,
   type DatasetDto,
   type ReportRequest,
+  type SavedViewDto,
 } from './analytics.api';
 import { ExportJobs } from './export-jobs';
 import { FilterBuilder } from './filter-builder';
@@ -116,6 +117,13 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
     setPanel((current) => (current === next ? null : next));
   const [viewName, setViewName] = useState('');
   const [shareView, setShareView] = useState(false);
+  /**
+   * نمایی که همین حالا اعمال شده — فقط برای برجسته کردن تراشه‌اش.
+   *
+   * با اولین تغییر در پیش‌نویس پاک می‌شود: تراشه‌ای که روشن مانده ولی تنظیمات دیگر
+   * آن نما نیست، دروغ می‌گوید.
+   */
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -158,6 +166,25 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
     setPage(1);
   }
 
+  /**
+   * اعمال یک نمای ذخیره‌شده.
+   *
+   * نما خودش اجرا می‌شود و منتظر دکمه نمی‌ماند: کاربر با انتخابش همان را خواسته
+   * است. گروه‌بندی در نما ذخیره نمی‌شود، پس همان گروه‌بندی فعلی می‌ماند.
+   */
+  function applyView(view: SavedViewDto): void {
+    setColumns(view.columns);
+    setFilter(view.filter);
+    setSort(view.sort);
+    setPageSize(view.pageSize);
+    setPage(1);
+    setApplied({ columns: view.columns, filter: view.filter, groupBy });
+    setViewName(view.name);
+    setShareView(view.isShared);
+    setActiveViewId(view.id);
+    setMessage(`نمای «${view.name}» اعمال شد.`);
+  }
+
   const result = useReportQuery(dataset.key, request);
   const views = useSavedViews(dataset.key);
   const saveView = useSaveView();
@@ -191,6 +218,8 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
   function changeFilter(next: FilterGroup): void {
     setFilter(next);
     setPage(1);
+    // تنظیمات دیگر آنِ نما نیست؛ تراشهٔ روشن از اینجا به بعد دروغ می‌گفت.
+    setActiveViewId(null);
   }
 
   async function runExport(): Promise<void> {
@@ -317,6 +346,43 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
           </div>
         </div>
 
+        {/*
+          نماهای ذخیره‌شده، **بیرون** از تابلو.
+
+          پیش از این برای رسیدن به یک نما باید تابلوی «نماها» باز می‌شد — یعنی
+          چیزی که روزی ده بار لازم است، پشت یک کلیک اضافه بود و تابلوی باز هم
+          جدول را به ته صفحه می‌برد. حالا خودِ نماها بالا کنار دکمه‌شان‌اند و تابلو
+          برای ذخیره و حذف می‌ماند.
+        */}
+        {views.data && views.data.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+            <span className="text-[11px] text-muted-foreground">نماها:</span>
+            {views.data.map((view) => (
+              <button
+                key={view.id}
+                type="button"
+                title={
+                  view.isShared
+                    ? `اشتراکی — سازنده: ${view.owner?.fullName ?? '—'}`
+                    : 'نمای شخصی شما'
+                }
+                aria-pressed={view.id === activeViewId}
+                onClick={() => applyView(view)}
+                className={
+                  view.id === activeViewId
+                    ? 'rounded-full border border-primary bg-primary/10 px-3 py-1 text-xs text-primary'
+                    : 'rounded-full border border-border px-3 py-1 text-xs hover:bg-muted'
+                }
+              >
+                {view.name}
+                {view.isShared ? (
+                  <Icon name="users" size={12} className="ms-1 inline align-[-2px]" />
+                ) : null}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         {panel === 'filter' ? (
           <FilterBuilder fields={dataset.fields} value={filter} onChange={changeFilter} />
         ) : null}
@@ -328,6 +394,7 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
             onChange={(next) => {
               setColumns(next);
               setPage(1);
+              setActiveViewId(null);
             }}
           />
         ) : null}
@@ -340,19 +407,7 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
             shareView={shareView}
             onViewNameChange={setViewName}
             onShareChange={setShareView}
-            onApply={(view) => {
-              setColumns(view.columns);
-              setFilter(view.filter);
-              setSort(view.sort);
-              setPageSize(view.pageSize);
-              setPage(1);
-              // نما خودش اجرا می‌شود: کاربر با انتخابش همان را خواسته است. نما
-              // گروه‌بندی را نگه نمی‌دارد، پس همان گروه‌بندی فعلی می‌ماند.
-              setApplied({ columns: view.columns, filter: view.filter, groupBy });
-              setViewName(view.name);
-              setShareView(view.isShared);
-              setMessage(`نمای «${view.name}» اعمال شد.`);
-            }}
+            onApply={applyView}
             onSave={() => {
               setError(null);
               setMessage(null);
@@ -516,12 +571,12 @@ function SavedViews({
   saving,
 }: {
   datasetKey: string;
-  views: readonly import('./analytics.api').SavedViewDto[];
+  views: readonly SavedViewDto[];
   viewName: string;
   shareView: boolean;
   onViewNameChange: (name: string) => void;
   onShareChange: (shared: boolean) => void;
-  onApply: (view: import('./analytics.api').SavedViewDto) => void;
+  onApply: (view: SavedViewDto) => void;
   onSave: () => void;
   onDelete: (viewId: string) => void;
   saving: boolean;

@@ -88,7 +88,7 @@ export class ArchiveController {
 
   @RequirePermission('archive:write')
   @Put('documents/:documentId/payment')
-  @ApiOperation({ summary: 'ثبت وضعیت پرداخت سند: پرداخت کامل یا نیازمندی' })
+  @ApiOperation({ summary: 'ثبت وضعیت پرداخت سند: پرداخت کامل یا شناسایی' })
   async paymentStatus(
     @Param('documentId') documentId: string,
     @Body(new ZodBody(paymentStatusSchema)) body: z.infer<typeof paymentStatusSchema>,

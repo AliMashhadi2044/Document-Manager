@@ -129,7 +129,7 @@ export interface DashboardDto {
   /**
    * وضعیت پرداخت — همیشه روی **همهٔ** اسناد همان سال، بدون فیلتر وضعیت پرداخت.
    *
-   * اگر این هم فیلتر می‌شد، انتخاب «نیازمندی» بقیهٔ وضعیت‌ها را از نمودار پاک
+   * اگر این هم فیلتر می‌شد، انتخاب «شناسایی» بقیهٔ وضعیت‌ها را از نمودار پاک
    * می‌کرد و دایره همیشه ۱۰۰٪ می‌شد: عددی درست که چیز غلطی می‌گوید.
    */
   readonly settlementSummary: {
@@ -149,14 +149,14 @@ export interface DashboardDto {
    *
    * «مسیر سند» از این می‌خواند و نه از `settlementSummary`: آن ردیف یک داستان
    * است و اگر چهار کارت اولش فیلتر را می‌خورد و دو کارت پرداختش نه، جمع‌هایش با
-   * هم نمی‌خواند. مبلغِ نیازمندی اینجا **باقی‌مانده** است، نه مبلغ سند.
+   * هم نمی‌خواند. مبلغِ شناسایی اینجا **باقی‌مانده** است، نه مبلغ سند.
    */
   readonly settlementInScope: {
     readonly fullyPaid: { readonly count: number; readonly total: string };
     readonly outstanding: { readonly count: number; readonly total: string };
     readonly unset: { readonly count: number; readonly total: string };
   };
-  /** قدیمی‌ترین نیازمندی‌ها؛ فوریتشان در رابط از `since` حساب می‌شود. */
+  /** قدیمی‌ترین شناسایی‌ها؛ فوریتشان در رابط از `since` حساب می‌شود. */
   readonly outstandingFollowUps: readonly {
     readonly id: string;
     readonly title: string;

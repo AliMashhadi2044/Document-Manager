@@ -359,3 +359,98 @@ describe('ابزار مسیر', () => {
     expect(nest('a', 1)).toEqual({ a: 1 });
   });
 });
+
+/**
+ * فیلدهای یک‌به‌چند — «شرح ردیف‌ها».
+ *
+ * «شرح فاکتور» اختیاری است و اغلب خالی می‌ماند؛ چیزی که کاربر واقعاً نوشته، شرح
+ * تک‌تک ردیف‌هاست. ستونی که معمولاً خالی است، جست‌وجویی می‌سازد که کار نمی‌کند.
+ */
+describe('فیلد یک‌به‌چند', () => {
+  it('فیلتر به «دست‌کم یکی از ردیف‌ها» تبدیل می‌شود', () => {
+    const where = buildWhere(
+      INVOICES,
+      group([{ field: 'itemDescriptions', op: 'contains', values: ['کاغذ'] }]),
+      ALL,
+    );
+
+    expect(where).toEqual({
+      items: { some: { description: { contains: 'کاغذ', mode: 'insensitive' } } },
+    });
+  });
+
+  /*
+    بدون `some`، Prisma شرط را نمی‌شناخت و کوئری می‌شکست — نه اینکه نتیجهٔ خالی
+    بدهد. پس ادعا دربارهٔ **نبودِ** شکل تودرتوی ساده هم هست.
+  */
+  it('شرط ساده‌ی تودرتو نمی‌سازد', () => {
+    const where = buildWhere(
+      INVOICES,
+      group([{ field: 'itemDescriptions', op: 'contains', values: ['کاغذ'] }]),
+      ALL,
+    );
+    expect(where).not.toEqual({ items: { description: { contains: 'کاغذ', mode: 'insensitive' } } });
+  });
+
+  // «خالی است» روی یک رابطهٔ یک‌به‌چند دو معنای متفاوت دارد؛ هر دو بسته‌اند.
+  it('عملگر «خالی است» روی آن پذیرفته نمی‌شود', () => {
+    expect(() =>
+      buildWhere(INVOICES, group([{ field: 'itemDescriptions', op: 'isEmpty', values: [] }]), ALL),
+    ).toThrow(AppError);
+  });
+
+  it('مرتب‌سازی روی آن پذیرفته نمی‌شود', () => {
+    expect(() =>
+      buildOrderBy(INVOICES, [{ field: 'itemDescriptions', dir: 'asc' }], ALL),
+    ).toThrow(AppError);
+  });
+
+  it('ستونش همهٔ شرح‌ها را در یک سلول کنار هم می‌گذارد', () => {
+    const column = INVOICES.fields.find((field) => field.key === 'itemDescriptions')!;
+
+    expect(buildSelect([column])).toEqual({ items: { select: { description: true } } });
+
+    const row = {
+      items: [{ description: 'کاغذ A4' }, { description: 'خودکار' }, { description: '' }],
+    };
+    // ردیفِ بی‌شرح جداکنندهٔ اضافه نمی‌سازد.
+    expect(flatten(row, [column])).toEqual({ itemDescriptions: 'کاغذ A4، خودکار' });
+  });
+
+  it('فاکتور بدون ردیف، سلول خالی می‌دهد و نه خطا', () => {
+    const column = INVOICES.fields.find((field) => field.key === 'itemDescriptions')!;
+    expect(flatten({ items: [] }, [column])).toEqual({ itemDescriptions: null });
+  });
+});
+
+/**
+ * جزئیات اختصاصی فاکتور در فهرست فیلترها.
+ *
+ * فاکتور انشعابات مدرسه دارد و فاکتور سوخت پلاک؛ بدون این فیلدها، کاربری که روی
+ * «نوع فاکتور: انشعابات» فیلتر گذاشته هیچ راهی نداشت بگوید «کدام مدرسه».
+ */
+describe('فیلدهای انشعابات و سوخت', () => {
+  it('مدرسه از snapshot خوانده می‌شود، نه از رکورد امروز', () => {
+    const where = buildWhere(
+      INVOICES,
+      group([{ field: 'schoolTitle', op: 'contains', values: ['سرای ایرانی'] }]),
+      ALL,
+    );
+
+    expect(where).toEqual({
+      utilityDetail: { schoolTitleSnapshot: { contains: 'سرای ایرانی', mode: 'insensitive' } },
+    });
+  });
+
+  it('پلاک خودرو هم فیلترشدنی است', () => {
+    const where = buildWhere(
+      INVOICES,
+      group([{ field: 'vehiclePlate', op: 'contains', values: ['۱۲'] }]),
+      ALL,
+    );
+
+    expect(where).toEqual({
+      fuelDetail: { plateNumberSnapshot: { contains: '۱۲', mode: 'insensitive' } },
+    });
+  });
+});
