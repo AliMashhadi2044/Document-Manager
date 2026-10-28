@@ -26,10 +26,18 @@ import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { AnalyticsService } from './analytics.service';
 import { DashboardService, type SettlementView } from './dashboard.service';
 import { ExportService } from './export.service';
+import { SharedReportsService } from './shared-reports.service';
 import { ViewsService } from './views.service';
 
 /** نماهای مجاز وضعیت پرداخت؛ ورودی ناشناخته به «همه» می‌افتد، نه خطا. */
 const SETTLEMENT_VIEWS: readonly SettlementView[] = ['all', 'FULLY_PAID', 'OUTSTANDING', 'UNSET'];
+
+const shareReportSchema = z.object({
+  datasetKey: z.string().trim().min(1).max(40),
+  title: z.string().trim().min(1, 'عنوان گزارش الزامی است').max(200),
+  description: z.string().trim().max(4000).optional(),
+  query: z.unknown(),
+});
 
 const saveViewSchema = z.object({
   id: z.string().uuid().optional(),
@@ -57,7 +65,41 @@ export class AnalyticsController {
     private readonly views: ViewsService,
     private readonly exports: ExportService,
     private readonly dashboard: DashboardService,
+    private readonly shared: SharedReportsService,
   ) {}
+
+  // ───────────────────────── گزارش‌های ارسالی ─────────────────────────
+
+  /*
+    مسیرهای «گزارش‌های ارسالی» **پیش از** مسیرهای `:datasetKey` می‌آیند.
+
+    وگرنه `GET /analytics/shared-reports` با `GET /analytics/:datasetKey/views`
+    اشتباه نمی‌شد ولی `shared-reports` به‌عنوان نام یک مجموعه‌داده خوانده می‌شد و
+    کاربر «این گزارش وجود ندارد» می‌گرفت.
+  */
+  @RequirePermission('report:share')
+  @Post('shared-reports')
+  @ApiOperation({ summary: 'ارسال گزارش با عنوان و شرح برای بررسی' })
+  async shareReport(
+    @Body(new ZodBody(shareReportSchema)) body: z.infer<typeof shareReportSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.shared.send(body, user);
+  }
+
+  @RequirePermission('report:run')
+  @Get('shared-reports')
+  @ApiOperation({ summary: 'گزارش‌های ارسالی که این کاربر می‌بیند' })
+  async listSharedReports(@CurrentUser() user: AuthenticatedUser) {
+    return this.shared.list(user);
+  }
+
+  @RequirePermission('report:run')
+  @Get('shared-reports/:id')
+  @ApiOperation({ summary: 'تعریف کامل یک گزارش ارسالی' })
+  async getSharedReport(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.shared.get(id, user);
+  }
 
   @RequirePermission('report:run')
   @Get('datasets')

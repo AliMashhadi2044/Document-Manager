@@ -18,16 +18,18 @@ export const NOTIFICATION_KINDS = [
   'FEEDBACK_RESOLVED',
   'DOCUMENT_PAYMENT_OUTSTANDING',
   'DOCUMENT_PAYMENT_SETTLED',
+  'REPORT_SHARED',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
-export const NOTIFICATION_CATEGORIES = ['PAYMENT', 'WORKFLOW', 'FEEDBACK'] as const;
+export const NOTIFICATION_CATEGORIES = ['PAYMENT', 'WORKFLOW', 'FEEDBACK', 'REPORT'] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategory, string> = {
   PAYMENT: 'پیگیری پرداخت',
   WORKFLOW: 'گردش سند',
   FEEDBACK: 'بازخوردها',
+  REPORT: 'گزارش‌ها',
 };
 
 /**
@@ -45,6 +47,7 @@ export const NOTIFICATION_KIND_CATEGORY: Record<NotificationKind, NotificationCa
   FEEDBACK_RESOLVED: 'FEEDBACK',
   DOCUMENT_PAYMENT_OUTSTANDING: 'PAYMENT',
   DOCUMENT_PAYMENT_SETTLED: 'PAYMENT',
+  REPORT_SHARED: 'REPORT',
 };
 
 /** نوع‌های یک دسته — ورودی فیلتر `kind in (…)` سمت سرور. */

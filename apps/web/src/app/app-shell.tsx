@@ -230,6 +230,9 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
   });
   /** سندی که از اعلان باز می‌شود؛ تا پیش از مسیر‌یابی واقعی، همین کافی است. */
   const [documentFromNotification, setDocumentFromNotification] = useState<string | null>(null);
+  const [sharedReportFromNotification, setSharedReportFromNotification] = useState<string | null>(
+    null,
+  );
   /** درخواست «سند تازه» از داشبورد: بخش اسناد با فرم باز، نه فقط فهرست. */
   const [createDocumentRequested, setCreateDocumentRequested] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -380,6 +383,10 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
                   setDocumentFromNotification(documentId);
                   go('documents');
                 }}
+                onOpenSharedReport={(sharedReportId) => {
+                  setSharedReportFromNotification(sharedReportId);
+                  go('reports');
+                }}
                 onOpenAll={() => go('notifications')}
               />
               <AppearanceMenu canManageBranding={user.permissions.includes('base_data:write')} />
@@ -419,7 +426,13 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
               />
             ) : null}
             {section === 'archive' ? <ArchivePage user={user} /> : null}
-            {section === 'reports' ? <ReportsPage user={user} /> : null}
+            {section === 'reports' ? (
+              <ReportsPage
+                user={user}
+                openSharedReportId={sharedReportFromNotification}
+                onOpenedSharedReport={() => setSharedReportFromNotification(null)}
+              />
+            ) : null}
             {section === 'report-templates' ? <ReportTemplatesPage user={user} /> : null}
             {section === 'dashboard' ? (
               <DashboardPage
@@ -439,6 +452,10 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
                 onOpenDocument={(documentId) => {
                   setDocumentFromNotification(documentId);
                   go('documents');
+                }}
+                onOpenSharedReport={(sharedReportId) => {
+                  setSharedReportFromNotification(sharedReportId);
+                  go('reports');
                 }}
               />
             ) : null}

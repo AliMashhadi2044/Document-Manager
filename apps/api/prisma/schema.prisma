@@ -42,6 +42,7 @@ model User {
   uploadedAttachments  Attachment[]                  @relation("AttachmentUploadedBy")
   deletedAttachments   Attachment[]                  @relation("AttachmentDeletedBy")
   rotatedPages         AttachmentPageRotation[]      @relation("AttachmentRotationUpdatedBy")
+  sharedReports        SharedReport[]                @relation("SharedReportSender")
   createdFeedbacks     ReviewFeedback[]              @relation("FeedbackCreatedBy")
   reportDefinitions    ReportDefinition[]            @relation("ReportDefinitionCreatedBy")
   reportVersions       ReportVersion[]               @relation("ReportVersionCreatedBy")
@@ -1378,6 +1379,7 @@ enum NotificationKind {
   FEEDBACK_RESOLVED
   DOCUMENT_PAYMENT_OUTSTANDING // نیازمندی ثبت شد — کارپردازی باید پیگیری کند
   DOCUMENT_PAYMENT_SETTLED // نیازمندی بسته شد
+  REPORT_SHARED // گزارشی برای بررسی فرستاده شد
 }
 
 /// اطلاعات فرایند بایگانی یک سند — یک ردیف به‌ازای هر سند، از لحظه ارجاع.
@@ -1548,11 +1550,15 @@ model Notification {
   documentId String? @map("document_id") @db.Uuid
   feedbackId String? @map("feedback_id") @db.Uuid
 
+  /// اعلان «گزارش تازه»: کلیک روی آن باید همان گزارش را باز کند.
+  sharedReportId String? @map("shared_report_id") @db.Uuid
+
   readAt    DateTime? @map("read_at") @db.Timestamptz(3)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user     User               @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
-  document FinancialDocument? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document     FinancialDocument? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  sharedReport SharedReport?      @relation(fields: [sharedReportId], references: [id], onDelete: Cascade)
 
   /// کارتابل اعلان: خوانده‌نشده‌های همان کاربر، جدیدترین اول.
   @@index([userId, readAt, createdAt])
@@ -1821,6 +1827,35 @@ model ReportView {
   @@unique([ownerId, datasetKey, name])
   @@index([datasetKey, isShared])
   @@map("report_views")
+}
+
+/// گزارشی که کارپردازی با عنوان و شرح برای بررسی فرستاده است.
+///
+/// آنچه ذخیره می‌شود **تعریف** گزارش است و نه ردیف‌هایش: ستون‌ها، فیلتر و ترتیب.
+/// وقتی گیرنده بازش می‌کند، اجرا با مجوزها و دامنهٔ دسترسی **خودِ او** انجام
+/// می‌شود — همان قاعده‌ای که نمای اشتراکی و قالب گزارش دارند. اگر ردیف‌ها
+/// snapshot می‌شدند، فرستادن یک گزارش راهی برای دور زدن دامنهٔ نقش می‌شد.
+model SharedReport {
+  id         String @id @default(uuid()) @db.Uuid
+  senderId   String @map("sender_id") @db.Uuid
+  datasetKey String @map("dataset_key") @db.VarChar(40)
+
+  title       String  @db.VarChar(200)
+  description String? @db.Text
+
+  columns  Json
+  filter   Json
+  sort     Json
+  pageSize Int  @default(25) @map("page_size")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sender        User           @relation("SharedReportSender", fields: [senderId], references: [id], onDelete: Restrict)
+  notifications Notification[]
+
+  @@index([senderId, createdAt])
+  @@index([createdAt])
+  @@map("shared_reports")
 }
 
 /// کار خروجی‌گیری حجیم.

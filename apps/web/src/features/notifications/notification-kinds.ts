@@ -28,6 +28,7 @@ export const KIND_LABELS: Record<NotificationKind, string> = {
   FEEDBACK_RESOLVED: 'رسیدگی بازخورد',
   DOCUMENT_PAYMENT_OUTSTANDING: 'شناسایی پرداخت',
   DOCUMENT_PAYMENT_SETTLED: 'پرداخت کامل شد',
+  REPORT_SHARED: 'گزارش تازه',
 };
 
 export const KIND_ICONS: Record<NotificationKind, IconName> = {
@@ -39,6 +40,7 @@ export const KIND_ICONS: Record<NotificationKind, IconName> = {
   FEEDBACK_RESOLVED: 'check',
   DOCUMENT_PAYMENT_OUTSTANDING: 'money',
   DOCUMENT_PAYMENT_SETTLED: 'check',
+  REPORT_SHARED: 'trend-up',
 };
 
 export const KIND_TONES: Record<NotificationKind, BadgeTone> = {
@@ -50,12 +52,14 @@ export const KIND_TONES: Record<NotificationKind, BadgeTone> = {
   FEEDBACK_RESOLVED: 'success',
   DOCUMENT_PAYMENT_OUTSTANDING: 'danger',
   DOCUMENT_PAYMENT_SETTLED: 'success',
+  REPORT_SHARED: 'info',
 };
 
 export const CATEGORY_ICONS: Record<NotificationCategory, IconName> = {
   PAYMENT: 'money',
   WORKFLOW: 'archive',
   FEEDBACK: 'info',
+  REPORT: 'trend-up',
 };
 
 export {

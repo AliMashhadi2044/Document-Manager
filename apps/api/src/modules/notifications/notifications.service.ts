@@ -23,6 +23,7 @@ export interface NotifyInput {
   readonly body?: string | null;
   readonly documentId?: string | null;
   readonly feedbackId?: string | null;
+  readonly sharedReportId?: string | null;
 }
 
 /**
@@ -156,6 +157,7 @@ export class NotificationsService {
           body: input.body ?? null,
           documentId: input.documentId ?? null,
           feedbackId: input.feedbackId ?? null,
+          sharedReportId: input.sharedReportId ?? null,
         })),
       });
     } catch (error) {

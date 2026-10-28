@@ -14,6 +14,7 @@ export interface NotificationRow {
   readonly title: string;
   readonly body: string | null;
   readonly documentId: string | null;
+  readonly sharedReportId: string | null;
   readonly feedbackId: string | null;
   readonly readAt: string | null;
   readonly createdAt: string;

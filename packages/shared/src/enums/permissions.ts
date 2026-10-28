@@ -51,6 +51,8 @@ export const PERMISSIONS = [
   'report:run',
   'report:export',
   'report:read_history',
+  'report:share',
+  'report:share_read',
   'report_template:read',
   'report_template:write',
   'report_template:publish',
@@ -109,6 +111,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'report:run': 'اجرای گزارش',
   'report:export': 'دانلود خروجی',
   'report:read_history': 'تاریخچه تولید خروجی‌ها',
+  'report:share': 'ارسال گزارش برای بررسی',
+  'report:share_read': 'دیدن گزارش‌های ارسال‌شده',
   'report_template:read': 'مشاهده قالب‌های گزارش',
   'report_template:write': 'ویرایش قالب‌های گزارش',
   'report_template:publish': 'انتشار قالب گزارش',
@@ -183,6 +187,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'report:run',
     'report:export',
     'report:read_history',
+    /*
+      کارپردازی گزارش می‌سازد و برای بررسی می‌فرستد؛ `report:share_read` را هم
+      دارد تا بتواند آنچه فرستاده را ببیند — ولی گیرندهٔ اعلان نیست.
+    */
+    'report:share',
+    'report:share_read',
     'report_template:read',
     'report_template:write',
     'report_template:publish',
@@ -215,6 +225,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'feedback:reopen',
     'report:run',
     'report:export',
+    // ناظر گیرندهٔ گزارش‌های ارسالی است؛ ارسال نمی‌کند.
+    'report:share_read',
   ],
   /*
     حذف دائمی نزد مدیر سامانه است، نه کارپردازی.

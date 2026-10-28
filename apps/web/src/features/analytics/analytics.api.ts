@@ -187,7 +187,74 @@ export const analyticsKeys = {
   dashboard: (basis: YearBasis, year: number | null, settlement: SettlementView) =>
     ['analytics', 'dashboard', basis, year, settlement] as const,
   years: ['analytics', 'years'] as const,
+  sharedReports: ['analytics', 'shared-reports'] as const,
+  sharedReport: (id: string) => ['analytics', 'shared-reports', id] as const,
 };
+
+/**
+ * گزارشی که کسی با عنوان و شرح برای بررسی فرستاده است.
+ *
+ * آنچه می‌آید **تعریف** گزارش است و نه ردیف‌هایش؛ اجرا با مجوزهای خودِ بیننده
+ * انجام می‌شود، همان‌طور که سرور می‌گوید.
+ */
+export interface SharedReportDto {
+  readonly id: string;
+  readonly datasetKey: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly sender: { readonly id: string; readonly fullName: string } | null;
+  readonly isMine: boolean;
+  readonly createdAt: string;
+}
+
+export interface SharedReportDetailDto extends SharedReportDto {
+  readonly query: {
+    readonly columns: readonly string[];
+    readonly filter: FilterGroup;
+    readonly sort: readonly ReportSort[];
+    readonly pageSize: number;
+  };
+}
+
+export function useSharedReports(enabled = true) {
+  return useQuery({
+    queryKey: analyticsKeys.sharedReports,
+    queryFn: () => apiFetch<readonly SharedReportDto[]>('/analytics/shared-reports'),
+    enabled,
+  });
+}
+
+export function useSharedReport(id: string | null) {
+  return useQuery({
+    queryKey: analyticsKeys.sharedReport(id ?? ''),
+    queryFn: () => apiFetch<SharedReportDetailDto>(`/analytics/shared-reports/${id as string}`),
+    enabled: id !== null,
+  });
+}
+
+export function useShareReport() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      datasetKey: string;
+      title: string;
+      description: string;
+      request: ReportRequest;
+    }) =>
+      apiFetch<{ id: string; title: string }>('/analytics/shared-reports', {
+        method: 'POST',
+        json: {
+          datasetKey: input.datasetKey,
+          title: input.title,
+          description: input.description === '' ? undefined : input.description,
+          query: input.request,
+        },
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: analyticsKeys.sharedReports });
+    },
+  });
+}
 
 export function useDatasets() {
   return useQuery({

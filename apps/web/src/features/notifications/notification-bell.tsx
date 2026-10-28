@@ -25,9 +25,11 @@ import { KIND_LABELS } from './notification-kinds';
  */
 export function NotificationBell({
   onOpenDocument,
+  onOpenSharedReport,
   onOpenAll,
 }: {
   onOpenDocument?: (documentId: string) => void;
+  onOpenSharedReport?: (sharedReportId: string) => void;
   /** رفتن به صفحهٔ کامل اعلان‌ها. */
   onOpenAll?: (() => void) | undefined;
 }): JSX.Element {
@@ -227,6 +229,18 @@ export function NotificationBell({
                             onClick={() => markRead.mutate(item.id)}
                           >
                             خواندم
+                          </Button>
+                        ) : null}
+                        {item.sharedReportId && onOpenSharedReport ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              onOpenSharedReport(item.sharedReportId as string);
+                              setOpen(false);
+                            }}
+                          >
+                            نمایش گزارش
                           </Button>
                         ) : null}
                         {item.documentId && onOpenDocument ? (

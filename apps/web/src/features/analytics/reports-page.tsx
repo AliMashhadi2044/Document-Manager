@@ -19,9 +19,13 @@ import {
   useReportQuery,
   useSaveView,
   useSavedViews,
+  useShareReport,
+  useSharedReport,
+  useSharedReports,
   type DatasetDto,
   type ReportRequest,
   type SavedViewDto,
+  type SharedReportDetailDto,
 } from './analytics.api';
 import { ExportJobs } from './export-jobs';
 import { FilterBuilder } from './filter-builder';
@@ -35,15 +39,41 @@ import { ReportTable } from './report-table';
  * ذخیره‌شده می‌نشیند. پس خروجی نمی‌تواند با جدول اختلاف پیدا کند — نه به‌خاطر
  * انضباط، بلکه چون چیز دیگری برای فرستادن وجود ندارد.
  */
-export function ReportsPage({ user }: { user: CurrentUser }): JSX.Element {
+export function ReportsPage({
+  user,
+  openSharedReportId,
+  onOpenedSharedReport,
+}: {
+  user: CurrentUser;
+  /** گزارشی که کاربر از روی اعلان بازش کرده است. */
+  openSharedReportId?: string | null;
+  onOpenedSharedReport?: (() => void) | undefined;
+}): JSX.Element {
   const datasets = useDatasets();
   const [datasetKey, setDatasetKey] = useState<string | null>(null);
+  const [sharedId, setSharedId] = useState<string | null>(openSharedReportId ?? null);
+
+  const sharedReports = useSharedReports();
+  const shared = useSharedReport(sharedId);
 
   useEffect(() => {
     if (datasetKey === null && datasets.data && datasets.data.length > 0) {
       setDatasetKey(datasets.data[0]?.key ?? null);
     }
   }, [datasets.data, datasetKey]);
+
+  // اعلان، گزارش را باز می‌کند؛ پس از آن مصرف‌شده است و نباید با هر رندر برگردد.
+  useEffect(() => {
+    if (openSharedReportId) {
+      setSharedId(openSharedReportId);
+      onOpenedSharedReport?.();
+    }
+  }, [openSharedReportId, onOpenedSharedReport]);
+
+  // گزارش ارسالی، مجموعه‌دادهٔ خودش را می‌آورد.
+  useEffect(() => {
+    if (shared.data) setDatasetKey(shared.data.datasetKey);
+  }, [shared.data]);
 
   if (datasets.isPending) return <LoadingState label="در حال خواندن گزارش‌ها…" />;
   if (datasets.isError) {
@@ -91,17 +121,78 @@ export function ReportsPage({ user }: { user: CurrentUser }): JSX.Element {
         </nav>
       </section>
 
-      {dataset ? <DatasetReport key={dataset.key} dataset={dataset} user={user} /> : null}
+      {(sharedReports.data?.length ?? 0) > 0 ? (
+        <section className="rounded-lg border border-border bg-card p-4">
+          <h3 className="text-sm font-semibold">گزارش‌های ارسال‌شده</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            با یک کلیک همان فیلترها اعمال می‌شوند. ردیف‌ها با دسترسی **خودِ شما** خوانده
+            می‌شوند، نه با دسترسی فرستنده.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {sharedReports.data?.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={item.id === sharedId}
+                onClick={() => setSharedId(item.id)}
+                title={item.description ?? undefined}
+                className={
+                  item.id === sharedId
+                    ? 'rounded-md border border-primary bg-primary/10 px-3 py-1.5 text-xs text-primary'
+                    : 'rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted'
+                }
+              >
+                {item.title}
+                <span className="ms-2 text-muted-foreground">
+                  {item.isMine ? 'ارسالی شما' : (item.sender?.fullName ?? '')}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {dataset ? (
+        <DatasetReport
+          key={`${dataset.key}:${shared.data?.id ?? ''}`}
+          dataset={dataset}
+          user={user}
+          shared={shared.data?.datasetKey === dataset.key ? (shared.data ?? null) : null}
+          onCloseShared={() => setSharedId(null)}
+        />
+      ) : null}
     </div>
   );
 }
 
-function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUser }): JSX.Element {
-  const [columns, setColumns] = useState<readonly string[]>(dataset.defaultColumns);
-  const [filter, setFilter] = useState<FilterGroup>(EMPTY_FILTER);
-  const [sort, setSort] = useState<readonly ReportSort[]>(dataset.defaultSort);
+function DatasetReport({
+  dataset,
+  user,
+  shared,
+  onCloseShared,
+}: {
+  dataset: DatasetDto;
+  user: CurrentUser;
+  /** گزارشی که از روی اعلان یا فهرست ارسالی‌ها باز شده است. */
+  shared: SharedReportDetailDto | null;
+  onCloseShared: () => void;
+}): JSX.Element {
+  /*
+    گزارش ارسالی، **حالت اولیه** است و نه یک حالت جدا.
+
+    کلید این مؤلفه شناسهٔ گزارش ارسالی را هم دارد، پس با باز کردن گزارشِ دیگری از
+    نو ساخته می‌شود؛ و از همان لحظه، کاربر می‌تواند آزادانه فیلترها را عوض کند —
+    چیزی قفل نیست.
+  */
+  const [columns, setColumns] = useState<readonly string[]>(
+    shared?.query.columns ?? dataset.defaultColumns,
+  );
+  const [filter, setFilter] = useState<FilterGroup>(shared?.query.filter ?? EMPTY_FILTER);
+  const [sort, setSort] = useState<readonly ReportSort[]>(
+    shared?.query.sort ?? dataset.defaultSort,
+  );
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(shared?.query.pageSize ?? 25);
   const [groupBy, setGroupBy] = useState<string | undefined>(
     dataset.groupBy?.[0]?.key ?? undefined,
   );
@@ -112,8 +203,8 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
     همیشه باز بود؛ با باز بودن دو تا، جدول به ته صفحه می‌رفت. حالا بازکردن یکی،
     بقیه را می‌بندد.
   */
-  const [panel, setPanel] = useState<'filter' | 'columns' | 'views' | null>(null);
-  const toggle = (next: 'filter' | 'columns' | 'views'): void =>
+  const [panel, setPanel] = useState<'filter' | 'columns' | 'views' | 'share' | null>(null);
+  const toggle = (next: 'filter' | 'columns' | 'views' | 'share'): void =>
     setPanel((current) => (current === next ? null : next));
   const [viewName, setViewName] = useState('');
   const [shareView, setShareView] = useState(false);
@@ -191,6 +282,10 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
   const deleteView = useDeleteView(dataset.key);
   const plan = useExportPlan();
   const queueExport = useQueueExport();
+  const shareReport = useShareReport();
+  const [shareTitle, setShareTitle] = useState('');
+  const [shareDescription, setShareDescription] = useState('');
+  const canShare = user.permissions.includes('report:share');
   const canExport = user.permissions.includes('report:export');
   const exports = useMyExports(canExport);
 
@@ -252,6 +347,25 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
 
   return (
     <div className="space-y-4">
+      {shared ? (
+        <section className="rounded-lg border border-primary/40 bg-primary/5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-primary">{shared.title}</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {shared.isMine ? 'ارسالی شما' : `از ${shared.sender?.fullName ?? 'نامشخص'}`}
+              </p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={onCloseShared}>
+              بستن
+            </Button>
+          </div>
+          {shared.description ? (
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{shared.description}</p>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="space-y-3 rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -279,6 +393,15 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
               ? ` (${toPersianDigits(String(views.data.length))})`
               : ''}
           </Button>
+          {canShare ? (
+            <Button
+              size="sm"
+              variant={panel === 'share' ? 'primary' : 'secondary'}
+              onClick={() => toggle('share')}
+            >
+              ارسال برای بررسی
+            </Button>
+          ) : null}
 
           {dataset.groupBy ? (
             <div className="w-48">
@@ -397,6 +520,71 @@ function DatasetReport({ dataset, user }: { dataset: DatasetDto; user: CurrentUs
               setActiveViewId(null);
             }}
           />
+        ) : null}
+
+        {panel === 'share' ? (
+          <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+            <h3 className="text-xs font-medium">ارسال این گزارش برای بررسی</h3>
+            <p className="text-[11px] leading-5 text-muted-foreground">
+              آنچه فرستاده می‌شود **تنظیمات** گزارش است — ستون‌ها، فیلترها و ترتیب — نه
+              ردیف‌ها. گیرنده همان جدول را با دسترسی خودش می‌بیند.
+            </p>
+            <Input
+              aria-label="عنوان گزارش"
+              placeholder="عنوان گزارش"
+              value={shareTitle}
+              onChange={(event) => setShareTitle(event.target.value)}
+            />
+            <textarea
+              aria-label="شرح گزارش"
+              placeholder="شرح — چه چیزی را باید ببیند و چرا"
+              rows={3}
+              value={shareDescription}
+              onChange={(event) => setShareDescription(event.target.value)}
+              className="w-full rounded-lg border border-border bg-background p-2 text-sm"
+            />
+            <Button
+              size="sm"
+              loading={shareReport.isPending}
+              disabled={shareTitle.trim() === ''}
+              onClick={() => {
+                setError(null);
+                setMessage(null);
+                shareReport.mutate(
+                  {
+                    datasetKey: dataset.key,
+                    title: shareTitle.trim(),
+                    description: shareDescription.trim(),
+                    // همان **پیش‌نویس**، نه آخرین اجرا: کاربر همان چیزی را می‌فرستد که تنظیم کرده.
+                    request: {
+                      columns: [...draft.columns],
+                      filter: draft.filter,
+                      sort: [...sort],
+                      pageSize,
+                      page: 1,
+                      groupBy: draft.groupBy,
+                    },
+                  },
+                  {
+                    onSuccess: (created) => {
+                      setMessage(`گزارش «${created.title}» فرستاده شد.`);
+                      setShareTitle('');
+                      setShareDescription('');
+                      setPanel(null);
+                    },
+                    onError: (caught) =>
+                      setError(
+                        caught instanceof ApiError
+                          ? formatServerMessage(caught.message)
+                          : 'ارسال گزارش ناموفق بود',
+                      ),
+                  },
+                );
+              }}
+            >
+              ارسال گزارش
+            </Button>
+          </div>
         ) : null}
 
         {panel === 'views' ? (

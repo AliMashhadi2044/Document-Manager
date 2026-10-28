@@ -57,6 +57,8 @@
 | `report:export` | دانلود Excel و PDF |
 | `report_template:read` / `report_template:write` / `report_template:publish` | طراح قالب |
 | `report:read_history` | تاریخچه تولید خروجی‌ها |
+| `report:share` | ارسال گزارش با عنوان و شرح برای بررسی |
+| `report:share_read` | دیدن گزارش‌های ارسال‌شده |
 | `user:read` / `user:write` / `role:write` | مدیریت کاربران و نقش‌ها |
 | `audit:read` | مشاهده audit log سیستمی |
 
@@ -100,6 +102,8 @@
 | `report:export` | ● | ◐ | ◐ | همان محدودیت بالا |
 | `report_template:*` | ● | ○ | ○ | |
 | `report:read_history` | ● | ○ | ○ | |
+| `report:share` | ● | ○ | ○ | ناظر نمی‌فرستد: کسی که کارش بررسی است، برای خودش کار نمی‌سازد |
+| `report:share_read` | ● | ○ | ● | گیرندهٔ اعلان «گزارش تازه»؛ کارپردازی فرستاده‌های خودش را می‌بیند |
 | `user:*` / `role:write` | ◐ | ○ | ○ | پیش‌فرض خاموش؛ نقش «مدیر سامانه» جدا پیشنهاد می‌شود |
 | `audit:read` | ● | ○ | ○ | |
 

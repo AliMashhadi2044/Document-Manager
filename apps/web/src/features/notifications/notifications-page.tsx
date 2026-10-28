@@ -37,8 +37,10 @@ import {
  */
 export function NotificationsPage({
   onOpenDocument,
+  onOpenSharedReport,
 }: {
   onOpenDocument?: ((documentId: string) => void) | undefined;
+  onOpenSharedReport?: ((sharedReportId: string) => void) | undefined;
 }): JSX.Element {
   const [page, setPage] = useState(1);
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -142,6 +144,7 @@ export function NotificationsPage({
               item={item}
               onMarkRead={() => markRead.mutate(item.id)}
               onOpenDocument={onOpenDocument}
+              onOpenSharedReport={onOpenSharedReport}
             />
           ))}
         </ul>
@@ -218,10 +221,12 @@ function NotificationCard({
   item,
   onMarkRead,
   onOpenDocument,
+  onOpenSharedReport,
 }: {
   item: NotificationRow;
   onMarkRead: () => void;
   onOpenDocument?: ((documentId: string) => void) | undefined;
+  onOpenSharedReport?: ((sharedReportId: string) => void) | undefined;
 }): JSX.Element {
   const isUnread = item.readAt === null;
 
@@ -270,6 +275,15 @@ function NotificationCard({
           {isUnread ? (
             <Button size="sm" variant="ghost" onClick={onMarkRead}>
               خواندم
+            </Button>
+          ) : null}
+          {item.sharedReportId && onOpenSharedReport ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => onOpenSharedReport(item.sharedReportId as string)}
+            >
+              نمایش گزارش
             </Button>
           ) : null}
           {item.documentId && onOpenDocument ? (
