@@ -58,11 +58,64 @@ export class AnalyticsService {
     private readonly access: DocumentAccessService,
   ) {}
 
+  /**
+   * فهرست گزینه‌های یک فیلد، از **مقدارهای یکتایی که واقعاً در داده هست**.
+   *
+   * دامنهٔ دسترسی سند همین‌جا هم اعمال می‌شود: فهرست مدرسه‌ها خودش اطلاعات است و
+   * کاربری که سند آن مدرسه را نمی‌بیند، نباید نامش را در فیلتر ببیند.
+   *
+   * سقف دارد چون این فهرست به یک `select` در مرورگر می‌رود؛ اگر پر شد، گزینه‌ها
+   * حذف می‌شوند و فیلد به جعبهٔ متن آزاد برمی‌گردد — نصفِ یک فهرست، بدتر از نداشتنش
+   * است، چون کاربر فکر می‌کند همهٔ گزینه‌ها را می‌بیند.
+   */
+  private static readonly OPTION_LIMIT = 300;
+
+  private async fieldOptions(
+    field: ReportFieldDefinition,
+    user: AuthenticatedUser,
+  ): Promise<readonly { value: string; label: string }[] | null> {
+    const source = field.optionsFrom;
+    if (!source) return null;
+
+    const scope = this.access.scope(user) as Record<string, unknown>;
+    const where = Object.keys(scope).length === 0 ? {} : nest(source.documentPath, scope);
+
+    const rows = (await (
+      this.prisma[source.model] as unknown as {
+        findMany: (args: unknown) => Promise<Record<string, unknown>[]>;
+      }
+    ).findMany({
+      where,
+      select: { [source.column]: true },
+      distinct: [source.column],
+      orderBy: { [source.column]: 'asc' },
+      take: AnalyticsService.OPTION_LIMIT + 1,
+    })) as Record<string, unknown>[];
+
+    if (rows.length === 0 || rows.length > AnalyticsService.OPTION_LIMIT) return null;
+
+    return rows
+      .map((row) => String(row[source.column] ?? ''))
+      .filter((value) => value !== '')
+      .map((value) => ({ value, label: value }));
+  }
+
   /** مجموعه‌داده‌هایی که این کاربر می‌تواند ببیند، با فیلدهای مجازش. */
-  describeDatasets(user: AuthenticatedUser) {
-    return DATASETS.filter((dataset) =>
+  async describeDatasets(user: AuthenticatedUser) {
+    const visible = DATASETS.filter((dataset) =>
       dataset.requiredPermissions.every((permission) => user.permissions.includes(permission)),
-    ).map((dataset) => ({
+    );
+
+    const options = new Map<string, readonly { value: string; label: string }[]>();
+    for (const dataset of visible) {
+      for (const field of visibleFields(dataset, user.permissions)) {
+        if (!field.optionsFrom) continue;
+        const resolved = await this.fieldOptions(field, user);
+        if (resolved) options.set(`${dataset.key}.${field.key}`, resolved);
+      }
+    }
+
+    return visible.map((dataset) => ({
       key: dataset.key,
       titleFa: dataset.titleFa,
       description: dataset.description,
@@ -77,7 +130,7 @@ export class AnalyticsService {
         filterable: field.filterable !== false,
         sortable: field.sortable !== false,
         operators: field.filterable === false ? [] : allowedOperators(field),
-        enumValues: field.enumValues ?? null,
+        enumValues: field.enumValues ?? options.get(`${dataset.key}.${field.key}`) ?? null,
       })),
     }));
   }
@@ -131,11 +184,13 @@ export class AnalyticsService {
     user: AuthenticatedUser,
   ): Record<string, unknown> {
     const userWhere = buildWhere(dataset, query.filter, user.permissions);
-    const scope = this.scopeWhere(dataset, user);
+    const parts = [this.scopeWhere(dataset, user), dataset.baseWhere ?? {}, userWhere].filter(
+      (part) => Object.keys(part).length > 0,
+    );
 
-    if (Object.keys(scope).length === 0) return userWhere;
-    if (Object.keys(userWhere).length === 0) return scope;
-    return { AND: [scope, userWhere] };
+    if (parts.length === 0) return {};
+    if (parts.length === 1) return parts[0] as Record<string, unknown>;
+    return { AND: parts };
   }
 
   private scopeWhere(

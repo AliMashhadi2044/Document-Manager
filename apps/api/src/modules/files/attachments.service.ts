@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import type { Attachment, Prisma } from '@prisma/client';
 import {
   DEFAULT_UPLOAD_LIMITS,
@@ -17,6 +17,7 @@ import { AppError } from '../../common/errors/app-error';
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
 import { StorageService } from './storage.service';
 import { DocumentAccessService } from '../documents/document-access.service';
+import { rotatePdf } from './pdf-rotation';
 
 export interface UploadedFile {
   readonly originalname: string;
@@ -34,6 +35,8 @@ export interface UploadedFile {
  */
 @Injectable()
 export class AttachmentsService {
+  private readonly logger = new Logger(AttachmentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -187,7 +190,7 @@ export class AttachmentsService {
     attachmentId: string,
     user: AuthenticatedUser,
     reason: 'DOWNLOAD' | 'PREVIEW',
-  ): Promise<{ attachment: Attachment; stream: Readable }> {
+  ): Promise<{ attachment: Attachment; stream: Readable; byteLength: bigint }> {
     const attachment = await this.prisma.attachment.findFirst({
       where: { id: attachmentId, deletedAt: null, status: 'READY' },
     });
@@ -195,8 +198,6 @@ export class AttachmentsService {
 
     // همان دامنه دسترسی سند؛ بدون این، شناسه فایل یک راه دور زدن محدودیت نقش بود.
     await this.access.assertDocumentVisible(attachment.documentId, user);
-
-    const stream = await this.storage.getStream(attachment.storageKey);
 
     await this.audit.record({
       actorId: user.id,
@@ -206,7 +207,145 @@ export class AttachmentsService {
       documentId: attachment.documentId,
     });
 
-    return { attachment, stream };
+    /*
+      پیش‌نمایش همیشه بایت‌های اصلی است و چرخش را خودِ نمایشگر اعمال می‌کند — زنده،
+      همان لحظه که کاربر دکمه را می‌زند. دانلود اما یک فایل است که از سامانه بیرون
+      می‌رود و کسی نمی‌تواند رویش چیزی اعمال کند؛ پس چرخش باید **در خودِ فایل**
+      باشد، وگرنه کاربر برگهٔ کجی را می‌گیرد که در سامانه صاف دیده بود.
+    */
+    const rotations =
+      reason === 'DOWNLOAD' && attachment.detectedMime === 'application/pdf'
+        ? await this.prisma.attachmentPageRotation.findMany({
+            where: { attachmentId },
+            select: { pageNumber: true, rotation: true },
+          })
+        : [];
+
+    if (rotations.length === 0) {
+      return {
+        attachment,
+        stream: await this.storage.getStream(attachment.storageKey),
+        byteLength: attachment.sizeBytes,
+      };
+    }
+
+    /*
+      فقط این مسیر فایل را کامل در حافظه می‌آورد، چون بازنویسی PDF جز با کل فایل
+      ممکن نیست. وقتی چرخشی ثبت نشده باشد — یعنی تقریباً همیشه — همان stream قبلی
+      برمی‌گردد و چیزی عوض نمی‌شود.
+
+      شکست بازنویسی، دانلود را از بین نمی‌برد: کاربر فایل اصلی را می‌گیرد، که بدتر
+      از نگرفتنِ هیچ فایلی نیست.
+    */
+    const original = await this.storage.getBuffer(attachment.storageKey);
+    try {
+      const rotated = await rotatePdf(
+        original,
+        new Map(rotations.map((row) => [row.pageNumber, row.rotation])),
+      );
+      return { attachment, stream: Readable.from(rotated), byteLength: BigInt(rotated.length) };
+    } catch (error) {
+      this.logger.error({ err: error, attachmentId }, 'اعمال چرخش روی فایل دانلودی ناموفق بود');
+      return {
+        attachment,
+        stream: Readable.from(original),
+        byteLength: BigInt(original.length),
+      };
+    }
+  }
+
+  /**
+   * چرخش برگه‌های یک اسکن.
+   *
+   * چرخش روی **فایل** ذخیره می‌شود و نه در مرورگر: کاربر بعدی باید همان برگهٔ صاف
+   * را ببیند، نه اینکه هر کسی دوباره بچرخاند. و چون فایل دانلودی هم از همین‌جا
+   * می‌خواند، «آنچه دیدم» و «آنچه گرفتم» یکی می‌مانند.
+   */
+  async readRotations(
+    attachmentId: string,
+    user: AuthenticatedUser,
+  ): Promise<{ page: number; rotation: number }[]> {
+    const attachment = await this.prisma.attachment.findFirst({
+      where: { id: attachmentId, deletedAt: null },
+      select: { id: true, documentId: true },
+    });
+    if (!attachment) throw AppError.notFound('فایل یافت نشد');
+
+    await this.access.assertDocumentVisible(attachment.documentId, user);
+
+    const rows = await this.prisma.attachmentPageRotation.findMany({
+      where: { attachmentId },
+      select: { pageNumber: true, rotation: true },
+      orderBy: { pageNumber: 'asc' },
+    });
+
+    return rows.map((row) => ({ page: row.pageNumber, rotation: row.rotation }));
+  }
+
+  /**
+   * جایگزینی کامل چرخش‌ها.
+   *
+   * ورودی **تمام** حالت است و نه یک تغییر: برگه‌ای که در فهرست نیست یعنی «بدون
+   * چرخش». این انتخاب عمدی است — با تغییرِ تکی، یک درخواست گم‌شده حالتی می‌ساخت که
+   * نه مرورگر و نه سرور نمی‌توانستند بگویند درست است یا نه.
+   *
+   * سند بایگانی‌شده هم چرخش می‌پذیرد: فایل و checksum آن دست‌نخورده می‌مانند و
+   * صاف کردن یک اسکن کج، همان کاری است که بایگانی بعد از بایگانی هم لازم دارد.
+   */
+  async saveRotations(
+    attachmentId: string,
+    user: AuthenticatedUser,
+    rotations: readonly { page: number; rotation: number }[],
+  ): Promise<{ page: number; rotation: number }[]> {
+    const attachment = await this.prisma.attachment.findFirst({
+      where: { id: attachmentId, deletedAt: null, status: 'READY' },
+      select: { id: true, documentId: true, detectedMime: true },
+    });
+    if (!attachment) throw AppError.notFound('فایل یافت نشد');
+
+    await this.access.assertDocumentVisible(attachment.documentId, user);
+
+    if (attachment.detectedMime !== 'application/pdf') {
+      throw AppError.validation('چرخش برگه فقط برای فایل PDF معنا دارد');
+    }
+
+    // یک برگه، یک چرخش؛ دو مقدار برای یک برگه یعنی درخواست بدشکل است.
+    const seen = new Set<number>();
+    for (const entry of rotations) {
+      if (seen.has(entry.page)) {
+        throw AppError.validation(`برای برگهٔ ${entry.page} دو چرخش فرستاده شده است`);
+      }
+      seen.add(entry.page);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.attachmentPageRotation.deleteMany({ where: { attachmentId } });
+      if (rotations.length > 0) {
+        await tx.attachmentPageRotation.createMany({
+          data: rotations.map((entry) => ({
+            attachmentId,
+            pageNumber: entry.page,
+            rotation: entry.rotation,
+            updatedById: user.id,
+          })),
+        });
+      }
+
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'ATTACHMENT_ROTATE',
+          entityType: 'attachment',
+          entityId: attachmentId,
+          documentId: attachment.documentId,
+          // شمارهٔ برگه و زاویه داده‌اند و نه محتوا؛ چیزی که اینجا بنشیند حساس نیست.
+          after: { rotations },
+        },
+        tx,
+      );
+    });
+
+    return rotations.map((entry) => ({ page: entry.page, rotation: entry.rotation }));
   }
 
   /** حذف نرم؛ شیء ذخیره‌سازی طبق سیاست retention بعداً پاک می‌شود. */

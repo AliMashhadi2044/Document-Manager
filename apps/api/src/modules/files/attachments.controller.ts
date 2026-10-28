@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -6,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
   Query,
   Res,
   UploadedFiles,
@@ -17,7 +19,9 @@ import {
   DEFAULT_UPLOAD_LIMITS,
   UPLOAD_TYPES,
   decodeMultipartFilename,
+  pageRotationsSchema,
   safeDownloadFilename,
+  type PageRotationsInput,
   type UploadTypeKey,
 } from '@dm/shared';
 import type { Response } from 'express';
@@ -28,6 +32,7 @@ import {
   type AuthenticatedUser,
 } from '../../common/auth/auth.decorators';
 import { AppError } from '../../common/errors/app-error';
+import { ZodBody } from '../../common/validation/zod.pipe';
 import { AttachmentsService, type UploadedFile } from './attachments.service';
 
 /**
@@ -126,7 +131,7 @@ export class AttachmentsController {
     @Res() response: Response,
   ): Promise<void> {
     const inline = disposition === 'inline';
-    const { attachment, stream } = await this.attachments.readContent(
+    const { attachment, stream, byteLength } = await this.attachments.readContent(
       id,
       user,
       inline ? 'PREVIEW' : 'DOWNLOAD',
@@ -137,7 +142,7 @@ export class AttachmentsController {
     response.setHeader('Content-Type', attachment.detectedMime);
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Cache-Control', 'private, no-store');
-    response.setHeader('Content-Length', attachment.sizeBytes.toString());
+    response.setHeader('Content-Length', byteLength.toString());
     response.setHeader(
       'Content-Disposition',
       `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(filename)}`,
@@ -151,6 +156,32 @@ export class AttachmentsController {
   @ApiOperation({ summary: 'تاریخچه عملیات روی فایل' })
   async history(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.attachments.history(id, user);
+  }
+
+  @RequirePermission('attachment:read')
+  @Get('attachments/:id/rotations')
+  @ApiOperation({ summary: 'چرخش ثبت‌شدهٔ برگه‌های یک فایل PDF' })
+  async rotations(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return { rotations: await this.attachments.readRotations(id, user) };
+  }
+
+  /*
+    چرخش، مجوز `attachment:upload` می‌خواهد و نه `attachment:read`.
+
+    آنچه کاربر می‌چرخاند، فقط دید خودش نیست: فایلی که **همه** دانلود می‌کنند عوض
+    می‌شود. ناظر که سند را فقط می‌خواند، نباید بتواند آن را تغییر دهد؛ کارپردازی و
+    بایگانی که اسکن در دستشان است، می‌توانند.
+  */
+  @RequirePermission('attachment:upload')
+  @Put('attachments/:id/rotations')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'ثبت چرخش برگه‌ها — روی نمایش و روی فایل دانلودی' })
+  async setRotations(
+    @Param('id') id: string,
+    @Body(new ZodBody(pageRotationsSchema)) body: PageRotationsInput,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return { rotations: await this.attachments.saveRotations(id, user, body.rotations) };
   }
 
   @RequirePermission('attachment:delete')

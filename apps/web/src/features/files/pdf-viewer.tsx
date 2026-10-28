@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -80,17 +80,55 @@ export interface PdfViewerHandle {
 export function PdfViewer({
   data,
   scale,
+  rotations,
   onState,
 }: {
   /** بایت‌های فایل. مالکیتش با فراخواننده است. */
   data: ArrayBuffer;
   scale: number;
+  /**
+   * چرخش کاربر برای هر برگه، **افزوده** بر چرخش ذاتی خودِ برگه در فایل.
+   *
+   * جمع شدن عمدی است و نه جایگزینی: خیلی از اسکنرها خودشان `/Rotate` می‌گذارند و
+   * اگر مقدار کاربر جایش را می‌گرفت، یک کلیک روی برگه‌ای که از قبل چرخیده بود آن
+   * را به جای ۹۰ درجه، به صفر می‌برد. سرور هم هنگام ساختن فایل دانلودی همین کار
+   * را می‌کند، پس «آنچه دیدم» و «آنچه گرفتم» یکی می‌مانند.
+   */
+  rotations: ReadonlyMap<number, number>;
   onState: (state: PdfViewerHandle) => void;
 }): JSX.Element {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [sizes, setSizes] = useState<readonly { width: number; height: number }[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  /*
+    «برگهٔ جاری» یعنی برگه‌ای که **بیشتر** در دید است، نه هر برگه‌ای که آخرین بار
+    رویداد داد.
+
+    نسخهٔ اول هر برگهٔ دیده‌شده را برگهٔ جاری اعلام می‌کرد و ترتیب رویدادها تعیین
+    می‌کرد کدام برنده شود؛ نتیجه‌اش این بود که کاربر دکمهٔ چرخش را می‌زد و برگهٔ
+    **بعدی** می‌چرخید. آزمون E2E همین را گرفت.
+  */
+  const ratios = useRef(new Map<number, number>());
+  const report = useCallback(
+    (pageNumber: number, ratio: number, pageCount: number) => {
+      ratios.current.set(pageNumber, ratio);
+
+      let best = 1;
+      let bestRatio = -1;
+      for (const [page, value] of ratios.current) {
+        // برابری‌ها به برگهٔ بالاتر می‌رسند؛ همان چیزی که چشم «جاری» می‌خواند.
+        if (value > bestRatio + 0.01 || (Math.abs(value - bestRatio) <= 0.01 && page < best)) {
+          best = page;
+          bestRatio = value;
+        }
+      }
+
+      onState({ pageCount, currentPage: best });
+    },
+    [onState],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -180,8 +218,9 @@ export function PdfViewer({
           pageNumber={index + 1}
           size={size}
           scale={scale}
+          rotation={rotations.get(index + 1) ?? 0}
           root={containerRef}
-          onVisible={() => onState({ pageCount: doc.numPages, currentPage: index + 1 })}
+          onVisible={report}
         />
       ))}
     </div>
@@ -199,6 +238,7 @@ function PdfPage({
   pageNumber,
   size,
   scale,
+  rotation,
   root,
   onVisible,
 }: {
@@ -206,33 +246,62 @@ function PdfPage({
   pageNumber: number;
   size: { width: number; height: number };
   scale: number;
+  rotation: number;
   root: React.RefObject<HTMLDivElement>;
-  onVisible: () => void;
+  onVisible: (pageNumber: number, ratio: number, pageCount: number) => void;
 }): JSX.Element {
   const holderRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [near, setNear] = useState(pageNumber <= 2);
 
-  const width = Math.round(size.width * scale);
-  const height = Math.round(size.height * scale);
+  /*
+    جای برگه هم با چرخش عوض می‌شود: یک A4 عمودی که ۹۰ درجه چرخیده، افقی است. اگر
+    فقط بوم می‌چرخید و جایش نه، برگه از کادرش بیرون می‌زد و نوار اسکرول می‌پرید.
+  */
+  const quarterTurn = rotation === 90 || rotation === 270;
+  const width = Math.round((quarterTurn ? size.height : size.width) * scale);
+  const height = Math.round((quarterTurn ? size.width : size.height) * scale);
 
   useEffect(() => {
     const element = holderRef.current;
     if (!element) return undefined;
 
-    const observer = new IntersectionObserver(
+    const box = root.current?.parentElement ?? null;
+
+    /*
+      دو ناظر، چون دو پرسش متفاوت‌اند و حاشیه‌شان یکی نیست:
+
+       - «نزدیک دید هست؟» با حاشیهٔ ۴۰۰ پیکسلی، تا برگه **پیش از** رسیدن به دید
+         رندر شود و کاربر صفحهٔ خالی نبیند.
+       - «چقدر در دید است؟» بدون حاشیه. با حاشیه، برگه‌ای که هنوز پایین‌تر از
+         پنجره است نسبت ۱ می‌گرفت و «برگهٔ جاری» می‌شد — یعنی دکمهٔ چرخش روی
+         برگه‌ای کار می‌کرد که کاربر اصلاً نمی‌دید.
+    */
+    const renderNear = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) setNear(entry.isIntersecting);
+      },
+      { root: box, rootMargin: '400px 0px', threshold: 0 },
+    );
+
+    const inView = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
         if (!entry) return;
-        setNear(entry.isIntersecting);
-        if (entry.isIntersecting && entry.intersectionRatio > 0.5) onVisible();
+        onVisible(pageNumber, entry.isIntersecting ? entry.intersectionRatio : 0, doc.numPages);
       },
-      { root: root.current?.parentElement ?? null, rootMargin: '400px 0px', threshold: [0, 0.6] },
+      // پله‌های ریز: بدون آن‌ها نسبتِ دیده‌شدن فقط دو مقدار داشت و مقایسه بی‌معنا بود.
+      { root: box, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] },
     );
 
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [root, onVisible]);
+    renderNear.observe(element);
+    inView.observe(element);
+    return () => {
+      renderNear.disconnect();
+      inView.disconnect();
+    };
+  }, [root, onVisible, pageNumber, doc]);
 
   useEffect(() => {
     if (!near) return undefined;
@@ -259,7 +328,11 @@ function PdfPage({
         این نمایشگر برای حذفش ساخته شده.
       */
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
-      const viewport = page.getViewport({ scale: scale * ratio });
+      // `rotation` در pdf.js **مطلق** است، پس چرخش ذاتی برگه را خودمان جمع می‌زنیم.
+      const viewport = page.getViewport({
+        scale: scale * ratio,
+        rotation: (((page.rotate + rotation) % 360) + 360) % 360,
+      });
 
       canvas.width = Math.round(viewport.width);
       canvas.height = Math.round(viewport.height);
@@ -286,7 +359,7 @@ function PdfPage({
         canvas.height = 0;
       }
     };
-  }, [near, doc, pageNumber, scale]);
+  }, [near, doc, pageNumber, scale, rotation]);
 
   return (
     <div

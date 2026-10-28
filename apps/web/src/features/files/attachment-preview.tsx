@@ -1,12 +1,19 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { UPLOAD_TYPES } from '@dm/shared';
 
+import { hasPermission, useCurrentUser } from '../auth/auth.api';
 import { Button } from '../../shared/ui/button';
 import { Icon } from '../../shared/ui/icon';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { Modal } from '../../shared/ui/modal';
 import { toPersianDigits } from '../../shared/format/money';
-import { attachmentContentUrl, type AttachmentRow } from './files.api';
+import {
+  attachmentContentUrl,
+  useAttachmentRotations,
+  useSaveRotations,
+  type AttachmentRow,
+} from './files.api';
+import { RotationControls, useRotations } from './page-rotation';
 
 /*
   pdf.js حدود ۳۵۰ کیلوبایت است و فقط وقتی لازم می‌شود که کاربر یک PDF باز کند.
@@ -49,6 +56,12 @@ export function AttachmentPreview({
   const [zoom, setZoom] = useState(1);
   const [pages, setPages] = useState<{ pageCount: number; currentPage: number } | null>(null);
 
+  const saved = useAttachmentRotations(attachment.id, isPdf && attachment.previewable);
+  const save = useSaveRotations(attachment.id);
+  const rotation = useRotations(saved.data?.rotations ?? null, save.mutate);
+  // دکمه را پنهان می‌کند، نه بیشتر: مجوز واقعی سمت سرور اعمال می‌شود.
+  const canRotate = hasPermission(useCurrentUser().data, 'attachment:upload');
+
   useEffect(() => {
     if (!attachment.previewable) return undefined;
 
@@ -86,15 +99,21 @@ export function AttachmentPreview({
     اسکن چند ده مگابایتی، همان یک‌بار هم کافی است.
   */
   const download = (): void => {
-    const url = bytes
-      ? URL.createObjectURL(new Blob([bytes], { type: attachment.detectedMime }))
-      : attachmentContentUrl(attachment.id, 'attachment');
+    /*
+      وقتی برگه‌ای چرخانده شده، فایل باید از **سرور** بیاید و نه از بایت‌های داخل
+      مرورگر: چرخش در خودِ فایل دانلودی نشانده می‌شود و این کار آنجا انجام می‌گیرد.
+      در بقیهٔ موارد همان بایت‌های خوانده‌شده کافی‌اند و فایل دوبار از شبکه نمی‌آید.
+    */
+    const fromServer = rotation.map.size > 0 || bytes === null;
+    const url = fromServer
+      ? attachmentContentUrl(attachment.id, 'attachment')
+      : URL.createObjectURL(new Blob([bytes], { type: attachment.detectedMime }));
 
     const link = document.createElement('a');
     link.href = url;
     link.download = attachment.originalFilename;
     link.click();
-    if (bytes) URL.revokeObjectURL(url);
+    if (!fromServer) URL.revokeObjectURL(url);
   };
 
   const toolbar = (
@@ -104,6 +123,16 @@ export function AttachmentPreview({
           صفحهٔ {toPersianDigits(String(pages.currentPage))} از{' '}
           {toPersianDigits(String(pages.pageCount))}
         </span>
+      ) : null}
+
+      {isPdf && canRotate ? (
+        <RotationControls
+          state={rotation}
+          currentPage={pages?.currentPage ?? 1}
+          pageCount={pages?.pageCount ?? 0}
+          saving={save.isPending}
+          failed={save.isError}
+        />
       ) : null}
 
       {attachment.previewable ? (
@@ -153,7 +182,7 @@ export function AttachmentPreview({
         <ImageViewer bytes={bytes} mime={attachment.detectedMime} name={attachment.originalFilename} zoom={zoom} />
       ) : isPdf ? (
         <Suspense fallback={<LoadingState label="در حال آماده‌سازی نمایشگر…" />}>
-          <PdfViewer data={bytes} scale={zoom} onState={setPages} />
+          <PdfViewer data={bytes} scale={zoom} rotations={rotation.map} onState={setPages} />
         </Suspense>
       ) : (
         <ErrorState

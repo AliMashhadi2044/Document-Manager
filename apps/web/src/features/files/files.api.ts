@@ -38,7 +38,45 @@ export interface AttachmentHistoryRow {
 export const attachmentKeys = {
   list: (documentId: string) => ['attachments', 'list', documentId] as const,
   history: (attachmentId: string) => ['attachments', 'history', attachmentId] as const,
+  rotations: (attachmentId: string) => ['attachments', 'rotations', attachmentId] as const,
 };
+
+export interface PageRotationRow {
+  readonly page: number;
+  readonly rotation: number;
+}
+
+/**
+ * چرخش برگه‌ها روی **سرور** نگه داشته می‌شود و نه در مرورگر.
+ *
+ * اگر در `localStorage` می‌نشست، همان اسکنِ کج برای هر کس دیگری کج می‌ماند و روی
+ * دستگاه بعدیِ خودِ کاربر هم. و فایل دانلودی که سرور می‌سازد اصلاً از آن خبر
+ * نداشت.
+ */
+export function useAttachmentRotations(attachmentId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: attachmentKeys.rotations(attachmentId ?? ''),
+    queryFn: () =>
+      apiFetch<{ rotations: readonly PageRotationRow[] }>(
+        `/attachments/${attachmentId as string}/rotations`,
+      ),
+    enabled: attachmentId !== null && enabled,
+  });
+}
+
+export function useSaveRotations(attachmentId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (rotations: readonly PageRotationRow[]) =>
+      apiFetch<{ rotations: readonly PageRotationRow[] }>(
+        `/attachments/${attachmentId}/rotations`,
+        { method: 'PUT', json: { rotations } },
+      ),
+    onSuccess: (result) => {
+      client.setQueryData(attachmentKeys.rotations(attachmentId), result);
+    },
+  });
+}
 
 export function useAttachments(documentId: string | null) {
   return useQuery({

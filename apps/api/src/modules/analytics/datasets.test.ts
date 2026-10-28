@@ -153,4 +153,27 @@ describe('فهرست مجموعه‌داده‌ها', () => {
       expect(plainPath(field.path)).not.toContain(LIST_MARKER);
     }
   });
+
+  /*
+    فهرست گزینه‌های یک فیلد از یک مدل **دیگر** خوانده می‌شود؛ پس ستون و مسیر دامنه‌اش
+    هم باید در schema باشند، وگرنه فیلتر به‌جای فهرست، خطای زمان اجرا می‌دهد.
+  */
+  it('منبع گزینه‌های فیلتر در schema وجود دارد', () => {
+    const problems: string[] = [];
+
+    for (const dataset of DATASETS) {
+      for (const field of fieldsOf(dataset)) {
+        const source = field.optionsFrom;
+        if (!source) continue;
+
+        const column = checkPath(source.model, source.column);
+        if (column) problems.push(`${dataset.key}.${field.key} ستون: ${column}`);
+
+        const scope = checkPath(source.model, `${source.documentPath}.id`);
+        if (scope) problems.push(`${dataset.key}.${field.key} دامنه: ${scope}`);
+      }
+    }
+
+    expect(problems).toEqual([]);
+  });
 });

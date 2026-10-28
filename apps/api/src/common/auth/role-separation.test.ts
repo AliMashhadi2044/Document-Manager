@@ -223,6 +223,14 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       'ArchiveController.paymentStatus',
       'ArchiveController.saveInfo',
       'AttachmentsController.remove',
+      /*
+        چرخش برگه‌های اسکن: مسیری نوشتنی که بایگانی **باید** داشته باشد.
+
+        صاف کردن اسکن کج، کارِ همان کسی است که اسکن در دستش است. آنچه می‌نویسد نه
+        مبلغ است و نه حتی خودِ فایل — شیء ذخیره‌شده و checksum آن دست‌نخورده
+        می‌مانند و فقط زاویهٔ نمایش و نسخهٔ دانلودی عوض می‌شود.
+      */
+      'AttachmentsController.setRotations',
       'AttachmentsController.upload',
       'AuthController.logoutAll',
       'NotificationsController.markAllRead',

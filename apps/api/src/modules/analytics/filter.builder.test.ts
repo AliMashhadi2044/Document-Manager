@@ -273,6 +273,31 @@ describe('دامنه دسترسی سند در گزارش‌ها', () => {
     });
   });
 
+  /*
+    شرط ثابتِ گزارش انشعابات باید در **هر** کوئری باشد و نه فقط در جدول؛ اگر فیلتر
+    کاربر بتواند جایش را بگیرد، همان گزارش با یک کلیک قبض سوخت هم نشان می‌دهد.
+  */
+  it('شرط ثابت مجموعه‌داده با فیلتر کاربر هم می‌ماند', () => {
+    const utilities = DATASET_BY_KEY.get('utilities') as never;
+    const where = service.whereFor(
+      utilities,
+      { filter: group([{ field: 'districtTitle', op: 'eq', values: ['ناحیه ۱'] }]) },
+      { ...archivist, permissions: ALL },
+    );
+
+    expect(where).toEqual({
+      AND: [
+        {
+          document: {
+            deletedAt: null,
+          },
+        },
+        { invoiceKind: 'UTILITY' },
+        { utilityDetail: { districtTitleSnapshot: 'ناحیه ۱' } },
+      ],
+    });
+  });
+
   it('مجموعه‌داده بدون مجوز ۴۰۴ می‌گیرد، نه ۴۰۳', () => {
     try {
       service.requireDataset('activity', archivist);

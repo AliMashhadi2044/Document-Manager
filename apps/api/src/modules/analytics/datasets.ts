@@ -47,6 +47,21 @@ export interface ReportFieldDefinition {
    * «تعداد فاکتور» فروشنده، فاکتورهای سندهای **در سطل زباله** را هم می‌شمرد.
    */
   readonly countWhere?: Record<string, unknown>;
+  /**
+   * گزینه‌های فیلتر از **خودِ داده**، نه از اطلاعات پایهٔ امروز.
+   *
+   * برای ستون‌های snapshot، فهرست گرفتن از جدول پایه غلط است: اگر نام مدرسه‌ای عوض
+   * شده باشد، ردیف‌های قدیمی نام قبلی را نگه داشته‌اند و با گزینهٔ امروز هیچ‌وقت
+   * برابر نمی‌شوند — کاربر یک فهرست مرتب می‌بیند که بعضی سطرها را پیدا نمی‌کند.
+   * پس گزینه‌ها «مقدارهای یکتایی که واقعاً در داده هست» است، با همان دامنهٔ دسترسی
+   * کاربر.
+   */
+  readonly optionsFrom?: {
+    readonly model: 'invoiceUtilityDetail';
+    readonly column: string;
+    /** مسیر رابطه از آن مدل تا سند، برای اعمال دامنه دسترسی. */
+    readonly documentPath: string;
+  };
 }
 
 /**
@@ -130,6 +145,14 @@ export interface DatasetDefinition {
   readonly documentScope: 'root' | 'relation' | 'none';
   /** مسیر رابطه به سند، وقتی `documentScope === 'relation'`. */
   readonly documentPath?: string;
+  /**
+   * شرط ثابت این مجموعه‌داده — همیشه اعمال می‌شود و فیلتر کاربر بازش نمی‌کند.
+   *
+   * گزارش «انشعابات» همان مدل فاکتور را می‌خواند ولی فقط فاکتورهای انشعابات را؛
+   * گذاشتن این شرط در تعریف، یعنی هیچ مسیری در سرور — جدول، خروجی، شمارش — نمی‌تواند
+   * فراموشش کند.
+   */
+  readonly baseWhere?: Record<string, unknown>;
 }
 
 const DOCUMENT_STATUS_VALUES = [
@@ -1236,9 +1259,104 @@ export const ENUM_LABELS: Readonly<Record<string, Readonly<Record<string, string
   documentStatus: Object.fromEntries(DOCUMENT_STATUS_VALUES.map((item) => [item.value, item.label])),
 };
 
+/*
+  گزارش انشعابات.
+
+  همان مدل فاکتور است، ولی فقط فاکتورهای انشعابات — و این شرط در **تعریف** نشسته،
+  نه در فیلتر کاربر: گزارشی که با پاک کردن یک شرط، قبض سوخت هم نشان بدهد، گزارش
+  انشعابات نیست.
+
+  چرا یک گزارش جدا، وقتی همین فیلدها در «فاکتورها» هم هستند: کاربری که دنبال قبض
+  یک مدرسه است، باید اول نوع فاکتور را روی انشعابات بگذارد و بعد از میان ده‌ها فیلدِ
+  بی‌ربط (پلاک خودرو، نوع سوخت) دنبال «مدرسه» بگردد. اینجا فیلدهای انشعابات اولِ
+  فهرست‌اند، ستون‌های پیش‌فرض همان چیزی است که در عمل نگاه می‌شود، و سه فیلد کلیدی
+  فهرست انتخاب دارند و نه جعبهٔ متن خالی.
+*/
+const UTILITY_ONLY_KEYS = new Set([
+  'vehiclePlate',
+  'vehicleTypeTitle',
+  'fuelTypeTitle',
+  'fuelJalaliYear',
+  'fuelJalaliMonth',
+  // نوع فاکتور اینجا همیشه «انشعابات» است؛ فیلتری که همیشه یک جواب دارد، فیلتر نیست.
+  'invoiceKind',
+]);
+
+/** سه فیلد اصلی انشعابات، با فهرست گزینه از خودِ داده. */
+const UTILITY_KEY_FIELDS: ReportFieldDefinition[] = [
+  {
+    key: 'schoolTitle',
+    titleFa: 'مدرسه',
+    type: 'text',
+    path: 'utilityDetail.schoolTitleSnapshot',
+    width: 30,
+    optionsFrom: {
+      model: 'invoiceUtilityDetail',
+      column: 'schoolTitleSnapshot',
+      documentPath: 'invoice.document',
+    },
+  },
+  {
+    key: 'districtTitle',
+    titleFa: 'ناحیه',
+    type: 'text',
+    path: 'utilityDetail.districtTitleSnapshot',
+    width: 20,
+    optionsFrom: {
+      model: 'invoiceUtilityDetail',
+      column: 'districtTitleSnapshot',
+      documentPath: 'invoice.document',
+    },
+  },
+  {
+    key: 'utilityTypeTitle',
+    titleFa: 'نوع انشعاب',
+    type: 'text',
+    path: 'utilityDetail.utilityTypeTitleSnapshot',
+    width: 18,
+    optionsFrom: {
+      model: 'invoiceUtilityDetail',
+      column: 'utilityTypeTitleSnapshot',
+      documentPath: 'invoice.document',
+    },
+  },
+];
+
+const UTILITIES: DatasetDefinition = {
+  key: 'utilities',
+  titleFa: 'انشعابات',
+  description: 'یک ردیف برای هر قبض انشعاب، با مدرسه و ناحیه و نوع انشعاب و مبلغ و پرداخت.',
+  kind: 'rows',
+  model: 'invoice',
+  requiredPermissions: ['document:read'],
+  documentScope: 'relation',
+  documentPath: 'document',
+  baseWhere: { invoiceKind: 'UTILITY' },
+  defaultColumns: [
+    'schoolTitle',
+    'districtTitle',
+    'utilityTypeTitle',
+    'invoiceNumber',
+    'invoiceDate',
+    'totalAmount',
+    'documentTitle',
+  ],
+  defaultSort: [{ field: 'invoiceDate', dir: 'desc' }],
+  fields: [
+    ...UTILITY_KEY_FIELDS,
+    ...INVOICES.fields.filter(
+      (field) =>
+        !UTILITY_ONLY_KEYS.has(field.key) &&
+        !UTILITY_KEY_FIELDS.some((key) => key.key === field.key),
+    ),
+  ],
+};
+
+
 export const DATASETS: readonly DatasetDefinition[] = [
   DOCUMENTS,
   INVOICES,
+  UTILITIES,
   AMOUNTS,
   VENDORS,
   PAYMENTS,

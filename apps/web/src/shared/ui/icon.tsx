@@ -67,6 +67,8 @@ export type IconName =
   | 'arrow-down'
   | 'sliders'
   | 'restore'
+  | 'rotate-cw'
+  | 'rotate-ccw'
   | 'power'
   | 'grip'
   | 'more'
@@ -147,6 +149,8 @@ const PATHS: Record<IconName, readonly string[]> = {
   'arrow-down': ['M12 4v15', 'M6 13l6 6 6-6'],
   sliders: ['M4 7h10', 'M18 7h2', 'M4 17h4', 'M12 17h8', 'M16 5v4', 'M8 15v4'],
   restore: ['M3 12a9 9 0 1 0 3-6.7', 'M3 4v5h5'],
+  'rotate-cw': ['M21 12a9 9 0 1 1-3-6.7', 'M21 4v5h-5'],
+  'rotate-ccw': ['M3 12a9 9 0 1 0 3-6.7', 'M3 4v5h5'],
   power: ['M12 3v9', 'M7.5 6.2a7.5 7.5 0 1 0 9 0'],
   more: ['M12 5h.01', 'M12 12h.01', 'M12 19h.01'],
   grip: ['M9 6h.01', 'M9 12h.01', 'M9 18h.01', 'M15 6h.01', 'M15 12h.01', 'M15 18h.01'],

@@ -41,6 +41,7 @@ model User {
   exportJobs           ExportJob[]                   @relation("ExportJobRequestedBy")
   uploadedAttachments  Attachment[]                  @relation("AttachmentUploadedBy")
   deletedAttachments   Attachment[]                  @relation("AttachmentDeletedBy")
+  rotatedPages         AttachmentPageRotation[]      @relation("AttachmentRotationUpdatedBy")
   createdFeedbacks     ReviewFeedback[]              @relation("FeedbackCreatedBy")
   reportDefinitions    ReportDefinition[]            @relation("ReportDefinitionCreatedBy")
   reportVersions       ReportVersion[]               @relation("ReportVersionCreatedBy")
@@ -1438,9 +1439,34 @@ model Attachment {
   uploadedBy User              @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
   deletedBy  User?             @relation("AttachmentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
+  pageRotations AttachmentPageRotation[]
+
   @@index([documentId, deletedAt, createdAt])
   @@index([checksumSha256])
   @@map("attachments")
+}
+
+/// چرخش کاربر روی یک برگهٔ اسکن.
+///
+/// چرا جدول و نه بازنویسی خودِ فایل: شیء ذخیره‌شده و `checksum_sha256`اش سند بایگانی
+/// است و باید بایت‌به‌بایت دست‌نخورده بماند. چرخش یک **تصحیح نمایش** است که هم در
+/// نمایشگر و هم روی فایل دانلودی اعمال می‌شود، بی‌آنکه اصل فایل عوض شود.
+///
+/// مقدار، چرخش **افزوده** بر چرخش ذاتی خودِ برگه در فایل است؛ فقط ۹۰، ۱۸۰ و ۲۷۰
+/// ذخیره می‌شوند و «بدون چرخش» یعنی نبودِ ردیف — تا یک حالت، دو نمایش نداشته باشد.
+model AttachmentPageRotation {
+  attachmentId String @map("attachment_id") @db.Uuid
+  pageNumber   Int    @map("page_number")
+  rotation     Int
+
+  updatedById String   @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  updatedBy  User       @relation("AttachmentRotationUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@id([attachmentId, pageNumber])
+  @@map("attachment_page_rotations")
 }
 
 /// بازخورد ناظر روی سند یا یکی از اجزای آن.

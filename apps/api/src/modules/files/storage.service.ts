@@ -103,6 +103,21 @@ export class StorageService implements OnModuleInit {
     return result.Body as Readable;
   }
 
+  /**
+   * کل محتوا در حافظه.
+   *
+   * فقط جایی که چاره‌ای نیست — بازنویسی یک PDF جز با کل فایل ممکن نیست. مسیر
+   * عادی دانلود همچنان `getStream` است.
+   */
+  async getBuffer(key: string): Promise<Buffer> {
+    const stream = await this.getStream(key);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+    }
+    return Buffer.concat(chunks);
+  }
+
   async remove(key: string): Promise<void> {
     const client = this.requireClient();
     await client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
