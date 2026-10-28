@@ -360,6 +360,21 @@ describe('ابزار مسیر', () => {
   });
 });
 
+/*
+  مرتب‌سازی روی شمارش رابطه.
+
+  `{ _count: { invoices: 'asc' } }` شکلِ `select` است و نه `orderBy`؛ پریزما
+  دومی را `{ invoices: { _count: 'asc' } }` می‌خواهد و با اولی ۵۰۰ می‌داد.
+*/
+describe('مرتب‌سازی روی تعداد رابطه', () => {
+  it('شمارش رابطه شکل خودش را می‌گیرد', () => {
+    const vendors = DATASET_BY_KEY.get('vendors')!;
+    const order = buildOrderBy(vendors, [{ field: 'invoiceCount', dir: 'desc' }], ALL);
+
+    expect(order[0]).toEqual({ invoices: { _count: 'desc' } });
+  });
+});
+
 /**
  * فیلدهای یک‌به‌چند — «شرح ردیف‌ها».
  *
@@ -390,6 +405,26 @@ describe('فیلد یک‌به‌چند', () => {
       ALL,
     );
     expect(where).not.toEqual({ items: { description: { contains: 'کاغذ', mode: 'insensitive' } } });
+  });
+
+  /*
+    پرش دوپله: سند ← فاکتورها ← ردیف‌ها.
+
+    هر دو پله باید `some` بگیرند. نسخهٔ اول نشان پلهٔ دوم را موقع بریدن مسیر پاک
+    می‌کرد و شرطی می‌ساخت که پریزما نمی‌شناخت — ۵۰۰ روی گزارش اسناد.
+  */
+  it('دو پرش پشت سر هم، دو `some` می‌سازند', () => {
+    const where = buildWhere(
+      DOCUMENTS,
+      group([{ field: 'itemDescriptions', op: 'contains', values: ['کاغذ'] }]),
+      ALL,
+    );
+
+    expect(where).toEqual({
+      invoices: {
+        some: { items: { some: { description: { contains: 'کاغذ', mode: 'insensitive' } } } },
+      },
+    });
   });
 
   // «خالی است» روی یک رابطهٔ یک‌به‌چند دو معنای متفاوت دارد؛ هر دو بسته‌اند.

@@ -11,6 +11,7 @@ import {
   ENUM_LABELS,
   allowedOperators,
   findField,
+  plainPath,
   visibleFields,
   type DatasetDefinition,
   type ReportFieldDefinition,
@@ -295,24 +296,26 @@ export class AnalyticsService {
     const buckets = new Map<string, Record<string, bigint | number>>();
     for (const row of rows) {
       const key = groupKeyOf(row, dimensionKey);
+      // کلیدهای سطل، همان کلید ستون‌های تجمیعی‌اند و پیشوند `sum` دارند تا با
+      // فیلدهای فیلترِ فاکتور (که همین نام‌ها را دارند) یکی نشوند.
       const bucket = buckets.get(key) ?? {
         rowCount: 0,
-        grossAmount: 0n,
-        discountAmount: 0n,
-        netAmount: 0n,
-        taxAmount: 0n,
-        totalAmount: 0n,
+        sumGross: 0n,
+        sumDiscount: 0n,
+        sumNet: 0n,
+        sumTax: 0n,
+        sumTotal: 0n,
       };
       bucket.rowCount = (bucket.rowCount as number) + 1;
-      bucket.grossAmount = (bucket.grossAmount as bigint) + row.grossAmount;
-      bucket.discountAmount = (bucket.discountAmount as bigint) + row.discountAmount;
-      bucket.netAmount = (bucket.netAmount as bigint) + row.netAmount;
-      bucket.taxAmount = (bucket.taxAmount as bigint) + row.taxAmount;
-      bucket.totalAmount = (bucket.totalAmount as bigint) + row.totalAmount;
+      bucket.sumGross = (bucket.sumGross as bigint) + row.grossAmount;
+      bucket.sumDiscount = (bucket.sumDiscount as bigint) + row.discountAmount;
+      bucket.sumNet = (bucket.sumNet as bigint) + row.netAmount;
+      bucket.sumTax = (bucket.sumTax as bigint) + row.taxAmount;
+      bucket.sumTotal = (bucket.sumTotal as bigint) + row.totalAmount;
       buckets.set(key, bucket);
     }
 
-    const sortField = query.sort[0]?.field ?? dataset.defaultSort[0]?.field ?? 'totalAmount';
+    const sortField = query.sort[0]?.field ?? dataset.defaultSort[0]?.field ?? 'sumTotal';
     const sortDir = query.sort[0]?.dir ?? dataset.defaultSort[0]?.dir ?? 'desc';
 
     const all = [...buckets.entries()]
@@ -470,7 +473,8 @@ export function buildSelect(columns: readonly ReportFieldDefinition[]): Record<s
   const select: Record<string, unknown> = {};
 
   for (const column of columns) {
-    const segments = column.path.split('.');
+    // نشان رابطهٔ یک‌به‌چند فقط برای فیلتر است؛ `select` همان مسیر ساده را می‌خواهد.
+    const segments = plainPath(column.path).split('.');
 
     if (segments[0] === '_count') {
       const current = (select._count as { select?: Record<string, unknown> } | undefined) ?? {
@@ -507,35 +511,7 @@ export function flatten(
   const out: Record<string, ReportCellValue> = {};
 
   for (const column of columns) {
-    let value: unknown = row;
-    for (const segment of column.path.split('.')) {
-      if (value === null || value === undefined || typeof value !== 'object') {
-        value = null;
-        break;
-      }
-      /*
-        رابطهٔ یک‌به‌چند: مقدار اینجا یک آرایه است.
-
-        هر عضو همان کلید را می‌دهد و نتیجه با «، » کنار هم می‌نشیند — یک سلول
-        خوانا به‌جای `[object Object]`. ردیف‌های بی‌مقدار کنار گذاشته می‌شوند تا
-        جداکننده‌های پشت‌سرهم نسازند.
-      */
-      if (Array.isArray(value)) {
-        const joined = value
-          .map((item) =>
-            item !== null && typeof item === 'object'
-              ? (item as Record<string, unknown>)[segment]
-              : null,
-          )
-          .filter((item) => item !== null && item !== undefined && item !== '')
-          .join('، ');
-        // هیچ ردیفی، یعنی **خالی** و نه رشتهٔ خالی: بقیهٔ ستون‌ها هم نبودِ مقدار را
-        // همین‌طور می‌گویند و جدول و خروجی Excel روی همین حساب می‌کنند.
-        value = joined === '' ? null : joined;
-        break;
-      }
-      value = (value as Record<string, unknown>)[segment];
-    }
+    const value = readPath(row, plainPath(column.path).split('.'));
 
     if (value === undefined || value === null) out[column.key] = null;
     else if (typeof value === 'bigint') out[column.key] = value.toString();
@@ -545,4 +521,40 @@ export function flatten(
   }
 
   return out;
+}
+
+/**
+ * خواندن یک مسیر، با عبور از رابطه‌های یک‌به‌چند.
+ *
+ * جایی که مقدار یک **آرایه** است، بقیهٔ مسیر روی تک‌تک اعضا خوانده و نتیجه با
+ * «، » کنار هم گذاشته می‌شود — یک سلول خوانا به‌جای `[object Object]`. مقدارهای
+ * تهی و تکراری کنار می‌روند: ستونِ «مدرسه» برای سندی با پنج قبضِ یک مدرسه باید نام
+ * آن مدرسه را **یک بار** بگوید، نه پنج بار.
+ *
+ * هیچ عضوی، یعنی `null` و نه رشتهٔ خالی: بقیهٔ ستون‌ها هم نبودِ مقدار را همین‌طور
+ * می‌گویند و جدول و خروجی Excel روی همین حساب می‌کنند.
+ */
+function readPath(source: unknown, segments: readonly string[]): unknown {
+  let value: unknown = source;
+
+  for (let index = 0; index < segments.length; index += 1) {
+    if (value === null || value === undefined) return null;
+
+    if (Array.isArray(value)) {
+      const rest = segments.slice(index);
+      const parts: string[] = [];
+      for (const item of value) {
+        const read = readPath(item, rest);
+        if (read === null || read === undefined || read === '') continue;
+        const text = read instanceof Date ? read.toISOString() : String(read);
+        if (!parts.includes(text)) parts.push(text);
+      }
+      return parts.length === 0 ? null : parts.join('، ');
+    }
+
+    if (typeof value !== 'object') return null;
+    value = (value as Record<string, unknown>)[segments[index] as string];
+  }
+
+  return value;
 }

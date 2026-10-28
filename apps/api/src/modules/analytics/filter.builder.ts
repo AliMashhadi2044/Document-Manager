@@ -13,6 +13,8 @@ import { AppError } from '../../common/errors/app-error';
 import {
   allowedOperators,
   findField,
+  hasListHop,
+  splitListPath,
   type DatasetDefinition,
   type ReportFieldDefinition,
 } from './datasets';
@@ -117,14 +119,16 @@ function conditionToWhere(
  * ردیف‌هایش این شرح را دارد». بدون آن، Prisma شرط را نمی‌شناسد و کوئری می‌شکند.
  */
 function nestField(field: ReportFieldDefinition, leaf: unknown): Record<string, unknown> {
-  if (!field.many) return nest(field.path, leaf);
+  const split = splitListPath(field.path);
+  if (!split) return nest(field.path, leaf);
 
-  const segments = field.path.split('.');
-  const value = segments[segments.length - 1] as string;
-  const relation = segments.slice(0, -1);
-  if (relation.length === 0) return nest(field.path, leaf);
+  // بقیهٔ مسیر خودش می‌تواند پرش یک‌به‌چند دیگری داشته باشد؛ بازگشتی حلش می‌کنیم.
+  const inner =
+    split.after === ''
+      ? leaf
+      : nestField({ ...field, path: split.after }, leaf);
 
-  return nest(relation.join('.'), { some: { [value]: leaf } });
+  return nest(split.before, { some: inner });
 }
 
 /** شرط برگ — همان چیزی که زیر مسیر فیلد می‌نشیند. */
@@ -233,6 +237,22 @@ export function nest(path: string, leaf: unknown): Record<string, unknown> {
 }
 
 /**
+ * یک بند `orderBy` از مسیر فیلد.
+ *
+ * شمارش رابطه شکل خودش را دارد: `{ invoices: { _count: 'asc' } }` و نه
+ * `{ _count: { invoices: 'asc' } }`. مسیر `_count.invoices` را برای `select`
+ * نوشته‌ایم و همان‌طور که بود به `orderBy` می‌رفت — شرطی که پریزما نمی‌شناسد و
+ * مرتب‌سازی روی «تعداد فاکتور» را ۵۰۰ می‌کرد.
+ */
+function orderNode(path: string, dir: 'asc' | 'desc'): Record<string, unknown> {
+  const segments = path.split('.');
+  if (segments[0] === '_count' && segments.length === 2) {
+    return { [segments[1] as string]: { _count: dir } };
+  }
+  return nest(path, dir);
+}
+
+/**
  * ترتیب مرتب‌سازی، با همان دروازه‌ها.
  *
  * مرتب‌سازی روی ستونی که کاربر حق دیدنش را ندارد هم رد می‌شود: ترتیب ردیف‌ها، مقدار
@@ -250,7 +270,7 @@ export function buildOrderBy(
     if (!definition) {
       throw AppError.validation(`فیلد «${entry.field}» در این گزارش وجود ندارد`);
     }
-    if (definition.sortable === false || definition.many) {
+    if (definition.sortable === false || hasListHop(definition.path)) {
       throw AppError.validation(`روی فیلد «${definition.titleFa}» نمی‌شود مرتب‌سازی کرد`);
     }
     for (const required of definition.requiredPermissions ?? []) {
@@ -258,13 +278,13 @@ export function buildOrderBy(
         throw AppError.forbidden('مرتب‌سازی روی این فیلد در اختیار نقش شما نیست');
       }
     }
-    order.push(nest(definition.path, entry.dir));
+    order.push(orderNode(definition.path, entry.dir));
   }
 
   if (order.length === 0) {
     for (const entry of dataset.defaultSort) {
       const definition = findField(dataset, entry.field);
-      if (definition) order.push(nest(definition.path, entry.dir));
+      if (definition) order.push(orderNode(definition.path, entry.dir));
     }
   }
 
