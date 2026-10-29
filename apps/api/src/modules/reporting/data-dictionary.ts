@@ -188,6 +188,32 @@ export const DATA_SOURCES: readonly DataSourceDefinition[] = [
   ...expenseSources('CAPITAL', 'عمرانی'),
   ...expenseSources('CURRENT', 'جاری'),
   {
+    key: 'document.fuelExpenses',
+    titleFa: 'هزینه‌های سوخت سند',
+    cardinality: 'list',
+    requiredPermissions: ['document:read', 'report:run'],
+    /*
+      یک ردیف به‌ازای هر **فاکتور سوخت**، نه به‌ازای هر خودرو.
+
+      هر فاکتور سوخت دقیقاً یک خودرو و یک نوع سوخت دارد، پس خودرویی که هم بنزین
+      گرفته و هم گاز، دو ردیف می‌شود — همان شکلی که فرم کاغذی دارد.
+
+      مثل بقیهٔ فرم‌های چاپی، فقط **جمع** هر فاکتور می‌آید و نه تجزیه‌اش: مرز
+      `invoice:read_calc_details` دربارهٔ کالا و تخفیف و مالیات است و بایگانی که
+      این فرم را چاپ می‌کند آن مجوز را ندارد.
+    */
+    fields: [
+      { key: 'index', titleFa: 'ردیف', type: 'integer' },
+      text('invoiceId', 'شناسه فاکتور'),
+      text('vehicleTypeTitle', 'نوع خودرو'),
+      text('plateNumber', 'شماره خودرو'),
+      text('fuelTypeTitle', 'نوع سوخت'),
+      { key: 'jalaliYear', titleFa: 'سال شمسی', type: 'integer' },
+      { key: 'jalaliMonth', titleFa: 'ماه شمسی', type: 'integer' },
+      money('total', 'مبلغ فاکتور'),
+    ],
+  },
+  {
     key: 'document.invoices',
     titleFa: 'فاکتورهای سند',
     cardinality: 'list',

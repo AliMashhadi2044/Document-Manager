@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "reportTypeKey": "FUEL_EXPENSE",
+  "titleFa": "لیست هزینه سوخت بنزین و CNG خودروهای اداری",
+  "page": {
+    "size": "A4",
+    "orientation": "portrait",
+    "margins": {
+      "top": 12,
+      "bottom": 12,
+      "inlineStart": 12,
+      "inlineEnd": 12
+    },
+    "direction": "rtl"
+  },
+  "styles": {
+    "fontFamily": "Vazirmatn, Tahoma, sans-serif",
+    "baseFontSizePt": 9,
+    "headingFontSizePt": 13,
+    "tableFontSizePt": 9,
+    "borderWidthPx": 1,
+    "borderColor": "#333333",
+    "textColor": "#000000",
+    "mutedTextColor": "#555555"
+  },
+  "header": {
+    "repeatOnEveryPage": true,
+    "blocks": [
+      {
+        "id": "org-name",
+        "type": "text",
+        "text": "{{organization.name}}",
+        "align": "center",
+        "bold": true,
+        "fontSizePt": 13
+      },
+      {
+        "id": "report-title",
+        "type": "text",
+        "text": "لیست هزینه سوخت بنزین و CNG خودروهای اداری",
+        "align": "center",
+        "bold": true,
+        "fontSizePt": 12
+      },
+      {
+        "id": "document-line",
+        "type": "text",
+        "text": "شرح سند: {{document.title}} — سال مالی {{document.fiscalYear}}",
+        "align": "center",
+        "bold": false
+      },
+      {
+        "id": "document-number-line",
+        "type": "text",
+        "text": "شماره سند: {{document.documentNumber}} — تاریخ سند: {{document.documentDateJalali}}",
+        "align": "center",
+        "bold": false,
+        "visibleWhen": {
+          "k": "not",
+          "of": {
+            "k": "empty",
+            "of": {
+              "k": "var",
+              "path": "document.documentNumber"
+            }
+          }
+        }
+      },
+      {
+        "id": "header-divider",
+        "type": "divider"
+      }
+    ]
+  },
+  "body": [
+    {
+      "id": "fuel-table",
+      "type": "table",
+      "dataSource": "document.fuelExpenses",
+      "minRows": 12,
+      "sortBy": [],
+      "pagination": {
+        "repeatHeaderOnNewPage": true,
+        "avoidRowBreak": true
+      },
+      "totalsRow": {
+        "enabled": true,
+        "labelFa": "جمع کل",
+        "cells": {
+          "total": "sum"
+        }
+      },
+      "columns": [
+        {
+          "key": "vehicleTypeTitle",
+          "titleFa": "نوع خودرو",
+          "width": {
+            "unit": "mm",
+            "value": 45
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.vehicleTypeTitle"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": false,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        },
+        {
+          "key": "plateNumber",
+          "titleFa": "شماره خودرو",
+          "width": {
+            "unit": "mm",
+            "value": 45
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.plateNumber"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": true,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        },
+        {
+          "key": "fuelTypeTitle",
+          "titleFa": "نوع سوخت",
+          "width": {
+            "unit": "mm",
+            "value": 35
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.fuelTypeTitle"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": false,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        },
+        {
+          "key": "total",
+          "titleFa": "مبلغ فاکتور",
+          "width": {
+            "unit": "mm",
+            "value": 50
+          },
+          "align": "end",
+          "value": {
+            "k": "var",
+            "path": "row.total"
+          },
+          "format": {
+            "kind": "currency",
+            "persianDigits": true,
+            "thousandSeparator": true,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        }
+      ]
+    }
+  ],
+  "footer": {
+    "repeatOnEveryPage": false,
+    "blocks": [
+      {
+        "id": "footer-space",
+        "type": "spacer",
+        "heightMm": 8
+      },
+      {
+        "id": "signatures",
+        "type": "signatureRow",
+        "blocks": [
+          {
+            "id": "sign-admin-affairs-lead",
+            "type": "signature",
+            "signatoryRoleKey": "ADMIN_AFFAIRS_LEAD",
+            "align": "center",
+            "spaceMm": 18
+          }
+        ]
+      }
+    ]
+  }
+}

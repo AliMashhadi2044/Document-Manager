@@ -104,6 +104,14 @@ export function DocumentDetailView({
   /** گروه بودجهٔ سند — با فاکتور اولش تعیین شده است. */
   const budgetGroup = data.invoices[0]?.chapter.category.key ?? null;
 
+  /*
+    فرم سوخت فقط وقتی دکمه دارد که سند فاکتور سوخت داشته باشد.
+
+    همان قاعدهٔ فرم ریزهزینه: دکمه‌ای که به جدولی خالی می‌رسد، دکمه نیست — و سند
+    بدون قبض سوخت، فرم سوختش هیچ ردیفی ندارد.
+  */
+  const hasFuelInvoice = data.invoices.some((invoice) => invoice.invoiceKind === 'FUEL');
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -149,6 +157,11 @@ export function DocumentDetailView({
                   onClick={() => setShowReport('EXPENSE_BREAKDOWN_CURRENT')}
                 >
                   ریزهزینه جاری
+                </Button>
+              ) : null}
+              {hasFuelInvoice ? (
+                <Button variant="secondary" onClick={() => setShowReport('FUEL_EXPENSE')}>
+                  هزینه سوخت
                 </Button>
               ) : null}
             </>

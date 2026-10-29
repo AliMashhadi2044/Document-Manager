@@ -102,6 +102,7 @@ export class DatasetService {
               payment: true,
               chapter: { select: { id: true, category: { select: { key: true } } } },
               reportTitle: { include: { productType: { select: { title: true } } } },
+              fuelDetail: true,
             },
           },
         },
@@ -293,6 +294,37 @@ export class DatasetService {
           total: invoice.totalAmount.toString(),
         }));
 
+    /*
+      ریز هزینهٔ سوخت.
+
+      ترتیب اینجا **خودرو‌محور** است و نه تاریخ‌محور: فرم کاغذی خودروها را کنار هم
+      می‌خواهد (هر خودرو یک بار بنزین و یک بار گاز)، و ترتیب تاریخِ پیش‌فرضِ
+      فاکتورها آن‌ها را از هم جدا می‌کرد. مرتب‌سازی با `localeCompare` فارسی است تا
+      پلاک‌ها همان‌طور بنشینند که خوانده می‌شوند، و شناسهٔ فاکتور شکنندهٔ تساوی است
+      تا ترتیب در دو اجرا یکی بماند.
+    */
+    const fuelRows = full.invoices
+      .filter((invoice) => invoice.invoiceKind === 'FUEL' && invoice.fuelDetail !== null)
+      .map((invoice) => {
+        const detail = invoice.fuelDetail as NonNullable<typeof invoice.fuelDetail>;
+        return {
+          invoiceId: invoice.id,
+          vehicleTypeTitle: detail.vehicleTypeTitleSnapshot,
+          plateNumber: detail.plateNumberSnapshot,
+          fuelTypeTitle: detail.fuelTypeTitleSnapshot,
+          jalaliYear: detail.jalaliYear,
+          jalaliMonth: detail.jalaliMonth,
+          total: invoice.totalAmount.toString(),
+        };
+      })
+      .sort(
+        (left, right) =>
+          left.plateNumber.localeCompare(right.plateNumber, 'fa') ||
+          left.fuelTypeTitle.localeCompare(right.fuelTypeTitle, 'fa') ||
+          left.invoiceId.localeCompare(right.invoiceId),
+      )
+      .map((row, index) => ({ index: index + 1, ...row }));
+
     const documentDate = full.documentDate?.toISOString().slice(0, 10) ?? '';
 
     return {
@@ -330,6 +362,7 @@ export class DatasetService {
         'document.capitalExpenses': expenseRows('CAPITAL'),
         'document.currentChapters': chapterRows('CURRENT'),
         'document.currentExpenses': expenseRows('CURRENT'),
+        'document.fuelExpenses': fuelRows,
       },
       signatories: signatories.map(
         (item): SignatorySnapshot => ({

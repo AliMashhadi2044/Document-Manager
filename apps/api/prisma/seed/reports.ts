@@ -11,6 +11,7 @@ import taxReportTemplate from './templates/tax-report.json';
 import beneficiaryIbanTemplate from './templates/beneficiary-iban-report.json';
 import capitalExpenseTemplate from './templates/capital-expense-report.json';
 import currentExpenseTemplate from './templates/current-expense-report.json';
+import fuelExpenseTemplate from './templates/fuel-expense-report.json';
 
 /**
  * گزارش مالیات به‌صورت **داده**، نه کد (docs/09 §۹).
@@ -75,6 +76,12 @@ const SYSTEM_TEMPLATES: readonly {
     titleFa: 'صورت ریز هزینه‌های جاری انجام شده',
     definitionName: 'صورت ریز هزینه‌های جاری انجام شده (سیستمی)',
     raw: currentExpenseTemplate,
+  },
+  {
+    key: 'FUEL_EXPENSE',
+    titleFa: 'لیست هزینه سوخت بنزین و CNG خودروهای اداری',
+    definitionName: 'لیست هزینه سوخت بنزین و CNG خودروهای اداری (سیستمی)',
+    raw: fuelExpenseTemplate,
   },
 ];
 

@@ -232,7 +232,7 @@ export function FuelFields({
                 <td className="px-3 py-2 money">{toPersianDigits(String(index + 1))}</td>
                 <td className="px-3 py-2">
                   <Select
-                    aria-label={`روز ردیف ${index + 1}`}
+                    aria-label={`روز ردیف ${toPersianDigits(String(index + 1))}`}
                     value={entry.day === null ? '' : String(entry.day)}
                     onChange={(nextValue) =>
                       updateEntry(draft, onChange, index, {
@@ -249,6 +249,8 @@ export function FuelFields({
                 </td>
                 <td className="px-3 py-2">
                   <MoneyInput
+                    // بدون این، ستون مبلغ برای ابزار کمکی فقط یک جعبهٔ بی‌نام بود.
+                    ariaLabel={`مبلغ ردیف ${toPersianDigits(String(index + 1))}`}
                     value={entry.amount}
                     onChange={(amount) => updateEntry(draft, onChange, index, { amount })}
                   />

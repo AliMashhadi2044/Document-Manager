@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import type { Attachment, Prisma } from '@prisma/client';
 import {
@@ -123,7 +123,19 @@ export class AttachmentsService {
       data: {
         documentId,
         kind,
-        storageKey: '',
+        /*
+          کلید موقت و **یکتا**، نه رشتهٔ خالی.
+
+          `storage_key` قید یکتایی دارد، پس با رشتهٔ خالی فقط **یک** رکورد
+          PENDING می‌توانست هم‌زمان وجود داشته باشد: اولین آپلودی که نیمه‌کاره
+          می‌ماند (قطعی فضای ذخیره‌سازی، درخواست لغو‌شده) جای آن رشته را می‌گرفت و
+          از آن پس **هر** آپلودی در کل سامانه با خطای یکتایی رد می‌شد — با پیام
+          «آپلود این فایل ناموفق بود»، که هیچ نمی‌گوید.
+
+          پیشوند `pending:` عمدی است: کلید واقعی هرگز با آن شروع نمی‌شود، پس
+          رکورد نیمه‌کاره در نگاه اول پیداست.
+        */
+        storageKey: `pending:${randomUUID()}`,
         originalFilename: file.originalname.slice(0, 255),
         declaredMime: file.mimetype.slice(0, 150),
         detectedMime: detected.mime,

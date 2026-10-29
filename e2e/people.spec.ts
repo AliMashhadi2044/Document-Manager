@@ -26,6 +26,14 @@ test.describe('امضاکنندگان', () => {
     await dialog.getByRole('button', { name: 'ثبت امضاکننده' }).click();
     await expect(page.getByText('امضاکننده ثبت شد.')).toBeVisible();
 
+    /*
+      فهرست صفحه‌بندی می‌شود، پس ردیف تازه لزوماً در صفحهٔ اول نیست.
+
+      همان کاری که کاربر با فهرست بلند می‌کند: در جست‌وجو نامش را می‌زند. بدون
+      این، آزمون فقط تا وقتی سبز بود که پایگاه داده کم‌ردیف بماند.
+    */
+    await page.getByLabel('جست‌وجو').fill(name);
+
     const row = page.getByRole('row').filter({ hasText: name });
     await expect(row).toContainText('کارشناس مالی');
     await expect(row).toContainText('مسئول کارپردازی');
@@ -62,6 +70,9 @@ test.describe('تنخواه‌دار', () => {
     await dialog.getByLabel('شبا').fill(iban.slice(2));
     await dialog.getByRole('button', { name: 'ثبت تنخواه‌دار' }).click();
     await expect(page.getByText('تنخواه‌دار ثبت شد.')).toBeVisible();
+
+    // فهرست صفحه‌بندی است؛ ردیف تازه از راه جست‌وجو پیدا می‌شود، مثل خودِ کاربر.
+    await page.getByLabel('جست‌وجو').fill(holder);
 
     // بانک از خود شبا تشخیص داده می‌شود، نه از یک پرسش جدا.
     await expect(page.getByRole('row').filter({ hasText: holder })).toContainText('تجارت');

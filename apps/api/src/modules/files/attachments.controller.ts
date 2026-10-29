@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   Post,
   Put,
@@ -48,6 +49,8 @@ import { AttachmentsService, type UploadedFile } from './attachments.service';
 @ApiTags('attachments')
 @Controller()
 export class AttachmentsController {
+  private readonly logger = new Logger(AttachmentsController.name);
+
   constructor(private readonly attachments: AttachmentsService) {}
 
   @RequirePermission('attachment:read')
@@ -111,6 +114,20 @@ export class AttachmentsController {
         const attachment = await this.attachments.upload(documentId, file, attachmentKind, user);
         uploaded.push(attachment);
       } catch (error) {
+        /*
+          خطای غیرمنتظره **log** می‌شود، هرچند کاربر پیام کلی می‌گیرد.
+
+          بدون این، قطعیِ فضای ذخیره‌سازی دقیقاً شبیه «فایل نامعتبر» دیده می‌شد —
+          همان پیام، و هیچ ردی در log برای فهمیدن اینکه کدام‌یک بوده است. نام فایل
+          و متن خطا می‌روند و نه محتوای فایل.
+        */
+        if (!(error instanceof AppError)) {
+          this.logger.error(
+            { err: error, filename: file.originalname, documentId },
+            'آپلود پیوست با خطای غیرمنتظره شکست خورد',
+          );
+        }
+
         failed.push({
           filename: file.originalname,
           message: error instanceof AppError ? error.message : 'آپلود این فایل ناموفق بود',
