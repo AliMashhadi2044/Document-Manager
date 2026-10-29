@@ -26,6 +26,8 @@ export interface ReportRow {
 }
 
 export interface ReportResult {
+  /** کلید فیلدی که ردیف را برای پنجرهٔ جزئیات می‌شناساند؛ `null` یعنی جزئیات ندارد. */
+  readonly detailField?: string | null;
   readonly dataset: string;
   readonly columns: readonly { readonly key: string; readonly titleFa: string; readonly type: string }[];
   readonly rows: readonly ReportRow[];
@@ -122,6 +124,7 @@ export class AnalyticsService {
       kind: dataset.kind,
       defaultColumns: dataset.defaultColumns,
       defaultSort: dataset.defaultSort,
+      detailField: dataset.detailField ?? null,
       groupBy: dataset.groupBy ?? null,
       fields: visibleFields(dataset, user.permissions).map((field) => ({
         key: field.key,
@@ -216,11 +219,25 @@ export class AnalyticsService {
 
     const delegate = this.delegateOf(dataset);
 
+    /*
+      فیلدِ شناسایی ردیف، حتی وقتی ستونش انتخاب نشده.
+
+      پنجرهٔ جزئیات باید بداند کدام ردیف را باز کند، و شناسه چیزی نیست که کاربر
+      بخواهد در جدول ببیند. در **ستون‌های** پاسخ نمی‌آید، فقط در خودِ ردیف.
+    */
+    const detail = dataset.detailField
+      ? findField(dataset, dataset.detailField)
+      : undefined;
+    const selected =
+      detail && !columns.some((column) => column.key === detail.key)
+        ? [...columns, detail]
+        : columns;
+
     const [rows, total] = await Promise.all([
       delegate.findMany({
         where,
         orderBy,
-        select: buildSelect(columns),
+        select: buildSelect(selected),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
@@ -236,7 +253,8 @@ export class AnalyticsService {
         titleFa: column.titleFa,
         type: column.type,
       })),
-      rows: rows.map((row) => flatten(row, columns)),
+      rows: rows.map((row) => flatten(row, selected)),
+      detailField: dataset.detailField ?? null,
       total,
       page: query.page,
       pageSize: query.pageSize,

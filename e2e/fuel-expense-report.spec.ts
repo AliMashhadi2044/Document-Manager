@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { gotoSection, login, pickOption, toAsciiDigits, unique } from './helpers';
+import { gotoSection, login, pickOption, toAsciiDigits, toPersianDigits, unique } from './helpers';
 
 /**
  * فرم «لیست هزینه سوخت بنزین و CNG خودروهای اداری».
@@ -13,11 +13,6 @@ import { gotoSection, login, pickOption, toAsciiDigits, unique } from './helpers
  *     می‌شود و ردیف‌هایش کنار هم‌اند.
  *  ۳. ردیف «جمع کل» جمع همان مبلغ‌هاست.
  */
-
-/** پلاک با ارقام فارسی ذخیره می‌شود؛ جست‌وجوی پلاک هم باید فارسی باشد. */
-function toPersianDigits(value: string): string {
-  return value.replace(/\d/gu, (digit) => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)] as string);
-}
 
 function amount(text: string): string {
   return toAsciiDigits(text).replace(/[٬,\s]/gu, '');

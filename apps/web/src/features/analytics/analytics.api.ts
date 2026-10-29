@@ -37,6 +37,8 @@ export interface DatasetDto {
   readonly defaultSort: readonly ReportSort[];
   readonly groupBy: readonly { readonly key: string; readonly titleFa: string }[] | null;
   readonly fields: readonly DatasetFieldDto[];
+  /** کلید فیلدی که ردیف را برای پنجرهٔ جزئیات می‌شناساند؛ `null` یعنی جزئیات ندارد. */
+  readonly detailField: string | null;
 }
 
 export interface ReportResultDto {
@@ -49,6 +51,7 @@ export interface ReportResultDto {
   readonly pageCount: number;
   /** جمع ستون‌های مبلغی روی **همه** ردیف‌های فیلترشده، نه فقط صفحه جاری. */
   readonly totals: Readonly<Record<string, string>>;
+  readonly detailField?: string | null;
 }
 
 export interface ReportRequest {
@@ -214,6 +217,69 @@ export interface SharedReportDetailDto extends SharedReportDto {
     readonly sort: readonly ReportSort[];
     readonly pageSize: number;
   };
+}
+
+/** یک قلم از فاکتورِ ردیف گزارش ستاد. */
+export interface StadReportItemDto {
+  readonly rowNo: number;
+  readonly description: string;
+  readonly productCode: string | null;
+  readonly quantity: string;
+  readonly unitTitle: string | null;
+  readonly unitPrice: string;
+  readonly netAmount: string;
+}
+
+export interface StadReportLineDto {
+  readonly invoiceId: string;
+  readonly documentId: string;
+  readonly documentTitle: string;
+  readonly documentNumber: string | null;
+  readonly invoiceDescription: string | null;
+  readonly line: {
+    readonly itemTitle: string;
+    readonly quantity: number;
+    readonly unitAmount: string;
+    readonly cashAmount: string;
+    readonly notes: string;
+    readonly editedFields: readonly string[];
+  } | null;
+  readonly defaults: {
+    readonly itemTitle: string;
+    readonly quantity: number;
+    readonly cashAmount: string;
+    readonly notes: string;
+  };
+  readonly items: readonly StadReportItemDto[];
+}
+
+export function useStadReportLine(invoiceId: string | null) {
+  return useQuery({
+    queryKey: ['analytics', 'stad-report', invoiceId ?? ''] as const,
+    queryFn: () => apiFetch<StadReportLineDto>(`/analytics/stad-report/${invoiceId as string}`),
+    enabled: invoiceId !== null,
+  });
+}
+
+export function useSaveStadReportLine(invoiceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      itemTitle?: string | null;
+      quantity?: number | null;
+      cashAmount?: string | null;
+      notes?: string | null;
+    }) =>
+      apiFetch<StadReportLineDto>(`/analytics/stad-report/${invoiceId}`, {
+        method: 'PUT',
+        json: input,
+      }),
+    onSuccess: (result) => {
+      client.setQueryData(['analytics', 'stad-report', invoiceId], result);
+      // جدول گزارش باید مقدار تازه را نشان بدهد، نه آنچه پیش از ویرایش خوانده بود.
+      void client.invalidateQueries({ queryKey: ['analytics', 'query'] });
+    },
+  });
 }
 
 export function useSharedReports(enabled = true) {

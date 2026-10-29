@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-import { gotoSection, login } from './helpers';
+import { gotoSection, login, toPersianDigits } from './helpers';
 
 /**
  * ورودی پلاک به شکل پلاک ایران.
@@ -62,7 +62,14 @@ test.describe('پلاک خودرو', () => {
     await dialog.getByRole('button', { name: 'ثبت خودرو' }).click();
     await expect(page.getByText('خودرو ثبت شد.')).toBeVisible();
 
-    // ───── در فهرست، پلاک به شکل پلاک دیده می‌شود ─────
+    /*
+      ───── در فهرست، پلاک به شکل پلاک دیده می‌شود ─────
+
+      فهرست صفحه‌بندی می‌شود، پس خودروی تازه لزوماً در صفحهٔ اول نیست؛ همان کاری
+      که کاربر با فهرست بلند می‌کند: پلاک را در جست‌وجو می‌زند.
+    */
+    await page.getByLabel('جست‌وجو').fill(toPersianDigits(parts.right));
+
     const badge = page.locator(`[title="${parts.left} ${parts.letter} ${parts.right} ایران ${parts.iran}"]`);
     await expect(badge.first()).toBeVisible();
 

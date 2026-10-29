@@ -128,3 +128,13 @@ export function toAsciiDigits(value: string): string {
   const fa = '۰۱۲۳۴۵۶۷۸۹';
   return value.replace(/[۰-۹]/g, (digit) => String(fa.indexOf(digit)));
 }
+
+/**
+ * ارقام فارسی — برای **ورودی**، نه فقط مقایسه.
+ *
+ * جست‌وجوی پلاک روی همان چیزی کار می‌کند که ذخیره شده، و پلاک با ارقام فارسی
+ * ذخیره می‌شود؛ تایپ کردن ارقام لاتین هیچ ردیفی پیدا نمی‌کرد.
+ */
+export function toPersianDigits(value: string): string {
+  return value.replace(/\d/gu, (digit) => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)] as string);
+}

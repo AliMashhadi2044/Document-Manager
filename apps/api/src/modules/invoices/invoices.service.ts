@@ -15,6 +15,7 @@ import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
 import { InvoiceKindService } from './invoice-kind.service';
 import { UtilityDuplicateService } from './utility-duplicate.service';
 import { DocumentAccessService } from '../documents/document-access.service';
+import { StadReportLinesService } from '../reporting/stad-report-lines.service';
 import type { InvoiceDetailsBody } from './invoice.schema';
 
 export interface CreateInvoiceInput {
@@ -54,6 +55,7 @@ export class InvoicesService {
     private readonly kinds: InvoiceKindService,
     private readonly duplicates: UtilityDuplicateService,
     private readonly access: DocumentAccessService,
+    private readonly stadLines: StadReportLinesService,
   ) {}
 
   /**
@@ -275,6 +277,14 @@ export class InvoicesService {
         await prepared.writeDetails(tx, created);
 
         await this.financial.refreshDocumentTotals(tx, document.id);
+
+        /*
+          ردیف «گزارش مالی سامانه ستاد» در همان تراکنش ساخته می‌شود.
+
+          بیرون از تراکنش، شکستنش یعنی سندی که در گزارش نیست — و کسی هم خبردار
+          نمی‌شود، چون فاکتور که ثبت شده است.
+        */
+        await this.syncStadLine(tx, document.type, created.id);
 
         await this.audit.record(
           {
@@ -595,6 +605,8 @@ export class InvoicesService {
           tx,
         );
 
+        await this.syncStadLine(tx, document.type, updated.id);
+
         return updated;
       });
 
@@ -602,6 +614,31 @@ export class InvoicesService {
     } catch (error) {
       throw this.translateConstraint(error, document.type);
     }
+  }
+
+  /**
+   * هماهنگ کردن ردیف گزارش ستاد با فاکتورِ تازه‌نوشته‌شده.
+   *
+   * فاکتور دوباره **خوانده** می‌شود و نه از ورودی ساخته: مبلغ‌ها و قلم‌ها را لایهٔ
+   * مالی نوشته و تنها چیزی که می‌شود به آن اعتماد کرد، همان ردیف دیتابیس است.
+   */
+  private async syncStadLine(
+    tx: Prisma.TransactionClient,
+    documentType: string,
+    invoiceId: string,
+  ): Promise<void> {
+    const invoice = await tx.invoice.findUniqueOrThrow({
+      where: { id: invoiceId },
+      select: {
+        id: true,
+        description: true,
+        netAmount: true,
+        totalAmount: true,
+        items: { select: { quantity: true } },
+      },
+    });
+
+    await this.stadLines.sync(tx, documentType, invoice);
   }
 
   async remove(invoiceId: string, user: AuthenticatedUser): Promise<void> {

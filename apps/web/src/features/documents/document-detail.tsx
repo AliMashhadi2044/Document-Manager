@@ -112,6 +112,15 @@ export function DocumentDetailView({
   */
   const hasFuelInvoice = data.invoices.some((invoice) => invoice.invoiceKind === 'FUEL');
 
+  /*
+    سند ستادی فقط **یک** فاکتور می‌پذیرد.
+
+    سرور این را از اول رد می‌کرد، ولی کاربر فرم را باز می‌کرد، فروشنده و قلم‌ها و
+    مبلغ را پر می‌کرد و خطا را موقع ثبت می‌گرفت. پیام باید پیش از پر کردن بیاید؛
+    کاری که انجام‌شدنی نیست نباید فرم باز کند.
+  */
+  const stadInvoiceTaken = data.type === 'STAD' && data.invoices.length > 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -121,7 +130,20 @@ export function DocumentDetailView({
 
         <div className="flex gap-2">
           {editable ? (
-            <Button variant="secondary" onClick={() => setShowAddInvoice((value) => !value)}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (stadInvoiceTaken) {
+                  setNotice({
+                    kind: 'error',
+                    text: 'سند سامانه ستاد فقط یک فاکتور دارد و فاکتورش ثبت شده است. برای تغییر، همان فاکتور را ویرایش کنید.',
+                  });
+                  return;
+                }
+                setNotice(null);
+                setShowAddInvoice((value) => !value);
+              }}
+            >
               افزودن فاکتور
             </Button>
           ) : null}

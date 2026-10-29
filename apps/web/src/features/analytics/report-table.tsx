@@ -19,6 +19,7 @@ export function ReportTable({
   sortableKeys,
   enumLabels,
   isLoading,
+  onOpenDetail,
 }: {
   result: ReportResultDto;
   sort: readonly ReportSort[];
@@ -34,8 +35,18 @@ export function ReportTable({
    */
   enumLabels: Readonly<Record<string, Readonly<Record<string, string>>>>;
   isLoading: boolean;
+  /**
+   * باز کردن جزئیات یک ردیف.
+   *
+   * شناسهٔ ردیف از فیلدی می‌آید که خودِ مجموعه‌داده اعلام کرده (`detailField`) و
+   * در **ستون‌ها** نیست: شناسه چیزی نیست که کاربر بخواهد در جدول ببیند.
+   */
+  onOpenDetail?: ((rowId: string) => void) | undefined;
 }): JSX.Element {
   const activeSort = sort[0];
+
+  /** ستون جزئیات فقط وقتی هست که هم مجموعه‌داده‌اش را اعلام کرده باشد و هم فراخواننده. */
+  const detailKey = result.detailField ?? null;
 
   function toggleSort(key: string): void {
     if (!sortableKeys.includes(key)) return;
@@ -57,6 +68,11 @@ export function ReportTable({
         <table className="w-full border-collapse text-sm">
           <thead className="bg-muted/50">
             <tr>
+              {detailKey && onOpenDetail ? (
+                <th scope="col" className="w-20 px-2 py-2 text-start text-xs font-medium">
+                  جزئیات
+                </th>
+              ) : null}
               {result.columns.map((column) => {
                 const sortable = sortableKeys.includes(column.key);
                 const isActive = activeSort?.field === column.key;
@@ -100,7 +116,7 @@ export function ReportTable({
             {result.rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={result.columns.length}
+                  colSpan={result.columns.length + (detailKey && onOpenDetail ? 1 : 0)}
                   className="px-3 py-8 text-center text-sm text-muted-foreground"
                 >
                   هیچ ردیفی با این فیلترها پیدا نشد.
@@ -110,6 +126,17 @@ export function ReportTable({
 
             {result.rows.map((row, index) => (
               <tr key={`row-${index}`} className="border-t border-border">
+                {detailKey && onOpenDetail ? (
+                  <td className="px-2 py-1.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onOpenDetail(String(row[detailKey] ?? ''))}
+                    >
+                      جزئیات
+                    </Button>
+                  </td>
+                ) : null}
                 {result.columns.map((column) => (
                   <td
                     key={column.key}
@@ -137,6 +164,7 @@ export function ReportTable({
           {Object.keys(result.totals).length > 0 && result.rows.length > 0 ? (
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30 font-bold">
+                {detailKey && onOpenDetail ? <td className="px-2 py-2" /> : null}
                 {result.columns.map((column, index) => (
                   <td
                     key={column.key}

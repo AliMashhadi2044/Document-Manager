@@ -153,6 +153,14 @@ export interface DatasetDefinition {
    * فراموشش کند.
    */
   readonly baseWhere?: Record<string, unknown>;
+  /**
+   * کلید فیلدی که ردیف را برای **پنجرهٔ جزئیات** می‌شناساند.
+   *
+   * همیشه خوانده می‌شود، حتی وقتی ستونش انتخاب نشده: شناسهٔ ردیف داده‌ای نیست که
+   * کاربر بخواهد در جدول ببیند، ولی بدون آن دکمهٔ جزئیات نمی‌داند کدام ردیف را باز
+   * کند.
+   */
+  readonly detailField?: string;
 }
 
 const DOCUMENT_STATUS_VALUES = [
@@ -1353,10 +1361,143 @@ const UTILITIES: DatasetDefinition = {
 };
 
 
+/*
+  گزارش مالی سامانه ستاد.
+
+  ردیفش **فاکتور** است و نه سند، چون سند ستادی دقیقاً یک فاکتور می‌پذیرد و دانه‌بندی
+  هر دو یکی است؛ ولی از روی فاکتور، هم مبلغ‌ها مستقیم‌اند (مرتب‌سازی و جمع واقعی
+  دارند) و هم فروشنده و تاریخ، که از سمت سند باید با پرش یک‌به‌چند خوانده می‌شدند.
+
+  شرط «فقط اسناد ستادی» در تعریف نشسته و نه در فیلتر: گزارشی که با پاک کردن یک شرط
+  سند عادی هم نشان بدهد، گزارش سامانه ستاد نیست.
+
+  چهار ستونِ عنوان کالا، تعداد، مبلغ نقدی و سایر توضیحات از ردیف گزارش می‌آیند —
+  مقدارهایی که کاربر در جزئیات همان ردیف می‌تواند عوضشان کند.
+*/
+const STAD_FINANCIAL: DatasetDefinition = {
+  key: 'stadFinancial',
+  titleFa: 'گزارش مالی سامانه ستاد',
+  description:
+    'یک ردیف برای هر سند ستادی، با شماره‌های نیاز و درخواست و گردش، عنوان کالا، مبالغ و توضیحات.',
+  kind: 'rows',
+  model: 'invoice',
+  requiredPermissions: ['document:read'],
+  documentScope: 'relation',
+  documentPath: 'document',
+  baseWhere: { document: { type: 'STAD' } },
+  detailField: 'id',
+  defaultColumns: [
+    'requestNumber',
+    'needNumber',
+    'workflowNumber',
+    'documentNumber',
+    'stadSystem',
+    'itemTitle',
+    'quantity',
+    'vendorName',
+    'invoiceDate',
+    'unitAmount',
+    'netAmount',
+    'taxAmount',
+    'totalAmount',
+    'cashAmount',
+    'notes',
+  ],
+  defaultSort: [{ field: 'invoiceDate', dir: 'desc' }],
+  fields: [
+    { key: 'id', titleFa: 'شناسه', type: 'uuid', path: 'id', filterable: false, sortable: false },
+    {
+      key: 'requestNumber',
+      titleFa: 'شماره درخواست',
+      type: 'text',
+      path: 'document.stadMetadata.requestNumber',
+      width: 22,
+    },
+    {
+      key: 'needNumber',
+      titleFa: 'شماره نیاز',
+      type: 'text',
+      path: 'document.stadMetadata.needNumber',
+      width: 22,
+    },
+    { key: 'workflowNumber', titleFa: 'شماره گردش', type: 'text', path: 'document.workflowNumber' },
+    { key: 'documentNumber', titleFa: 'شماره سند', type: 'text', path: 'document.documentNumber' },
+    {
+      key: 'stadSystem',
+      titleFa: 'سامانه ستاد',
+      type: 'text',
+      path: 'document.stadMetadata.requestType.title',
+      width: 18,
+    },
+    {
+      key: 'itemTitle',
+      titleFa: 'عنوان کالا',
+      type: 'text',
+      path: 'stadReport.itemTitle',
+      width: 40,
+    },
+    { key: 'quantity', titleFa: 'تعداد', type: 'integer', path: 'stadReport.quantity' },
+    { key: 'vendorName', titleFa: 'فروشنده طرف معامله', type: 'text', path: 'vendorSnapshot.name', width: 35 },
+    { key: 'invoiceDate', titleFa: 'تاریخ قرارداد/خرید', type: 'jalaliDate', path: 'invoiceDate' },
+    /*
+      مبلغ‌ها جزئیات محاسبه‌اند — همان مرزی که گزارش فاکتورها دارد.
+
+      «جمع کل» از این قاعده بیرون است: رقمی است که روی خودِ فرم می‌نشیند و نقشی که
+      فرم را چاپ می‌کند آن مجوز را ندارد.
+    */
+    {
+      key: 'unitAmount',
+      titleFa: 'مبلغ واحد کالا',
+      type: 'money',
+      path: 'stadReport.unitAmount',
+      requiredPermissions: ['invoice:read_calc_details'],
+    },
+    {
+      key: 'netAmount',
+      titleFa: 'مبلغ کل بدون ارزش افزوده',
+      type: 'money',
+      path: 'netAmount',
+      requiredPermissions: ['invoice:read_calc_details'],
+    },
+    {
+      key: 'taxAmount',
+      titleFa: 'مالیات ارزش افزوده',
+      type: 'money',
+      path: 'taxAmount',
+      requiredPermissions: ['invoice:read_calc_details'],
+    },
+    { key: 'totalAmount', titleFa: 'مبلغ کل با ارزش افزوده', type: 'money', path: 'totalAmount' },
+    { key: 'cashAmount', titleFa: 'مبلغ نقدی', type: 'money', path: 'stadReport.cashAmount' },
+    { key: 'notes', titleFa: 'سایر توضیحات', type: 'text', path: 'stadReport.notes', width: 45 },
+
+    // ستون‌های کمکی که در فرم کاغذی نیستند ولی فیلتر کردن با آن‌ها لازم می‌شود.
+    { key: 'documentTitle', titleFa: 'شرح سند', type: 'text', path: 'document.title', width: 35 },
+    {
+      key: 'documentStatus',
+      titleFa: 'وضعیت سند',
+      type: 'enum',
+      path: 'document.status',
+      enumValues: DOCUMENT_STATUS_VALUES,
+    },
+    { key: 'fiscalYear', titleFa: 'سال مالی', type: 'integer', path: 'document.fiscalYear' },
+    { key: 'invoiceNumber', titleFa: 'شماره صورتحساب', type: 'text', path: 'invoiceNumber' },
+    {
+      key: 'itemDescriptions',
+      titleFa: 'شرح قلم‌ها',
+      type: 'text',
+      path: 'items[].description',
+      sortable: false,
+      width: 45,
+    },
+    { key: 'createdByName', titleFa: 'ثبت‌کننده', type: 'text', path: 'createdBy.fullName' },
+  ],
+};
+
 export const DATASETS: readonly DatasetDefinition[] = [
   DOCUMENTS,
   INVOICES,
   UTILITIES,
+  STAD_FINANCIAL,
   AMOUNTS,
   VENDORS,
   PAYMENTS,

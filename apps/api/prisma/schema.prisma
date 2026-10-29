@@ -43,6 +43,7 @@ model User {
   deletedAttachments   Attachment[]                  @relation("AttachmentDeletedBy")
   rotatedPages         AttachmentPageRotation[]      @relation("AttachmentRotationUpdatedBy")
   sharedReports        SharedReport[]                @relation("SharedReportSender")
+  stadReportLines      InvoiceStadReportLine[]       @relation("StadReportLineUpdatedBy")
   createdFeedbacks     ReviewFeedback[]              @relation("FeedbackCreatedBy")
   reportDefinitions    ReportDefinition[]            @relation("ReportDefinitionCreatedBy")
   reportVersions       ReportVersion[]               @relation("ReportVersionCreatedBy")
@@ -1109,6 +1110,7 @@ model Invoice {
 
   feedbacks   ReviewFeedback[]
   reportTitle InvoiceReportTitle?
+  stadReport  InvoiceStadReportLine?
 
   /// مرجع FK ترکیبی جدول‌های جزئیات اختصاصی: جزئیات انشعابات فقط به فاکتوری با
   /// `invoice_kind = 'UTILITY'` می‌چسبد و جزئیات سوخت فقط به `'FUEL'`. این قید را
@@ -1764,6 +1766,47 @@ model InvoiceReportTitle {
 
   @@index([productTypeId])
   @@map("invoice_report_titles")
+}
+
+/// یک ردیف «گزارش مالی سامانه ستاد»، به‌ازای فاکتورِ یک سند ستادی.
+///
+/// چرا جدول جدا و نه ستون روی فاکتور: این مقدارها **گزارشی‌اند** و نه مالی — عنوان
+/// کالایی که روی فرم می‌نشیند، تعدادی که کاربر مبنا می‌گیرد، و توضیحی که خودش
+/// می‌نویسد. هیچ‌کدام جمع سند را عوض نمی‌کنند و هیچ‌کدام نباید بتوانند.
+///
+/// مقدارها **مادی‌شده‌اند** و نه فقط override: ردیف با پیش‌فرض ساخته می‌شود تا
+/// گزارش از همان اول پر باشد. `editedFields` می‌گوید کاربر کدام را دست زده؛ بقیه
+/// با هر تغییر فاکتور دوباره حساب می‌شوند. بدون آن، یا ویرایش کاربر پاک می‌شد یا
+/// عددی که فاکتورش عوض شده بود برای همیشه کهنه می‌ماند.
+model InvoiceStadReportLine {
+  invoiceId String @id @map("invoice_id") @db.Uuid
+
+  /// عنوان کالا روی فرم؛ پیش‌فرضش شرح فاکتور است.
+  itemTitle String @map("item_title") @db.VarChar(500)
+
+  /// تعدادِ مبنای فرم. پیش‌فرض: وقتی فاکتور **یک** قلم دارد، تعداد همان قلم؛
+  /// وقتی چند قلم دارد، ۱ — و شرح قلم‌ها در «سایر توضیحات» می‌نشیند.
+  quantity Int @default(1)
+
+  /// مبلغ واحد = مبلغ کل بدون ارزش افزوده ÷ تعداد. ذخیره می‌شود تا ستون واقعی
+  /// باشد (مرتب‌سازی، فیلتر، جمع) و نه متنی که فقط چاپ می‌شود.
+  unitAmount BigInt @map("unit_amount") @db.BigInt
+
+  /// مبلغ نقدی؛ پیش‌فرضش جمع کل فاکتور است.
+  cashAmount BigInt @map("cash_amount") @db.BigInt
+
+  notes String @default("") @db.Text
+
+  /// نام فیلدهایی که کاربر دستی تغییرشان داده و دیگر بازحساب نمی‌شوند.
+  editedFields String[] @map("edited_fields")
+
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  updatedBy User?   @relation("StadReportLineUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("invoice_stad_report_lines")
 }
 
 /// پیشنهاد نوع کالا برای یک فروشنده، بر اساس انتخاب‌های قبلی.

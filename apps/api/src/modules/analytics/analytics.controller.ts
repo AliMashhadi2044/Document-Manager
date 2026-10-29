@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
   Query,
   Res,
 } from '@nestjs/common';
@@ -26,6 +27,7 @@ import { Idempotent } from '../../common/idempotency/idempotency.interceptor';
 import { AnalyticsService } from './analytics.service';
 import { DashboardService, type SettlementView } from './dashboard.service';
 import { ExportService } from './export.service';
+import { StadReportLinesService } from '../reporting/stad-report-lines.service';
 import { SharedReportsService } from './shared-reports.service';
 import { ViewsService } from './views.service';
 
@@ -37,6 +39,19 @@ const shareReportSchema = z.object({
   title: z.string().trim().min(1, 'عنوان گزارش الزامی است').max(200),
   description: z.string().trim().max(4000).optional(),
   query: z.unknown(),
+});
+
+/**
+ * ویرایش یک ردیف گزارش ستاد.
+ *
+ * `null` یعنی «به پیش‌فرض برگرد»؛ نبودنِ کلید یعنی «دست نزن». این دو فرق دارند و
+ * یک مقدار نمی‌توانست هر دو را بگوید.
+ */
+const stadReportLineSchema = z.object({
+  itemTitle: z.string().trim().max(500).nullable().optional(),
+  quantity: z.number().int().min(1).max(1_000_000).nullable().optional(),
+  cashAmount: z.string().regex(/^\d{1,18}$/u).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
 });
 
 const saveViewSchema = z.object({
@@ -66,6 +81,7 @@ export class AnalyticsController {
     private readonly exports: ExportService,
     private readonly dashboard: DashboardService,
     private readonly shared: SharedReportsService,
+    private readonly stadLines: StadReportLinesService,
   ) {}
 
   // ───────────────────────── گزارش‌های ارسالی ─────────────────────────
@@ -215,6 +231,36 @@ export class AnalyticsController {
       `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
     );
     stream.pipe(response);
+  }
+
+  // ─────────────────── ردیف‌های گزارش مالی سامانه ستاد ───────────────────
+
+  @RequirePermission('report:run')
+  @Get('stad-report/:invoiceId')
+  @ApiOperation({ summary: 'جزئیات یک ردیف گزارش ستاد، با قلم‌های همان فاکتور' })
+  async stadReportLine(
+    @Param('invoiceId') invoiceId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stadLines.detail(invoiceId, user);
+  }
+
+  /*
+    ویرایش، مجوز `invoice:update` می‌خواهد و نه `report:run`.
+
+    آنچه نوشته می‌شود کنار فاکتور می‌نشیند و در خروجی همه دیده می‌شود؛ ناظری که
+    گزارش را می‌خواند نباید بتواند عوضش کند.
+  */
+  @RequirePermission('invoice:update')
+  @Put('stad-report/:invoiceId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'ثبت عنوان کالا، تعداد، مبلغ نقدی و توضیحات یک ردیف' })
+  async saveStadReportLine(
+    @Param('invoiceId') invoiceId: string,
+    @Body(new ZodBody(stadReportLineSchema)) body: z.infer<typeof stadReportLineSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.stadLines.save(invoiceId, body, user);
   }
 
   // ───────────────────────── نماهای ذخیره‌شده ─────────────────────────

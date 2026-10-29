@@ -30,6 +30,7 @@ import {
 import { ExportJobs } from './export-jobs';
 import { FilterBuilder } from './filter-builder';
 import { ReportTable } from './report-table';
+import { StadReportDialog } from './stad-report-dialog';
 
 /**
  * صفحه گزارش‌گیری عمومی (فاز ۸).
@@ -282,6 +283,8 @@ function DatasetReport({
   const deleteView = useDeleteView(dataset.key);
   const plan = useExportPlan();
   const queueExport = useQueueExport();
+  /** ردیفی که پنجرهٔ جزئیاتش باز است. */
+  const [detailRow, setDetailRow] = useState<string | null>(null);
   const shareReport = useShareReport();
   const [shareTitle, setShareTitle] = useState('');
   const [shareDescription, setShareDescription] = useState('');
@@ -657,6 +660,7 @@ function DatasetReport({
 
       {result.data ? (
         <ReportTable
+          onOpenDetail={dataset.detailField ? (rowId) => setDetailRow(rowId) : undefined}
           result={result.data}
           sort={sort}
           sortableKeys={sortableKeys}
@@ -673,6 +677,15 @@ function DatasetReport({
       ) : null}
 
       {canExport ? <ExportJobs jobs={exports.data ?? []} /> : null}
+
+      {detailRow ? (
+        <StadReportDialog
+          invoiceId={detailRow}
+          // دکمه را پنهان می‌کند، نه بیشتر: مجوز واقعی سمت سرور اعمال می‌شود.
+          canEdit={user.permissions.includes('invoice:update')}
+          onClose={() => setDetailRow(null)}
+        />
+      ) : null}
     </div>
   );
 }
