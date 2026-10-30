@@ -18,6 +18,8 @@ import { DocumentsPage } from '../features/documents/documents-page';
 import { ArchivePage } from '../features/archive/archive-page';
 import { ReportTemplatesPage } from '../features/report-designer/templates-page';
 import { ReportsPage } from '../features/analytics/reports-page';
+import { ReportGallery } from '../features/analytics/report-gallery';
+import { UsersPage } from '../features/users/users-page';
 import { DashboardPage } from '../features/analytics/dashboard-page';
 import { NotificationBell } from '../features/notifications/notification-bell';
 import { NotificationsPage } from '../features/notifications/notifications-page';
@@ -30,7 +32,9 @@ type SectionKey =
   | 'documents'
   | 'archive'
   | 'reports'
+  | 'report-gallery'
   | 'report-templates'
+  | 'users'
   | 'overview'
   | 'lookups'
   | 'chapters'
@@ -109,6 +113,13 @@ const GROUPS: readonly SectionGroup[] = [
   {
     titleFa: 'گزارش‌ها',
     items: [
+      {
+        key: 'report-gallery',
+        titleFa: 'فهرست گزارش‌ها',
+        icon: 'layers',
+        description: 'ویترین گزارش‌ها و گزارش‌های ارسال‌شده — یک کلیک تا گزارش‌گیری',
+        permission: 'report:run',
+      },
       {
         key: 'reports',
         titleFa: 'گزارش‌گیری',
@@ -190,6 +201,13 @@ const GROUPS: readonly SectionGroup[] = [
     titleFa: 'سامانه',
     items: [
       {
+        key: 'users',
+        titleFa: 'مدیریت کاربران',
+        icon: 'users',
+        description: 'ساخت کاربر، تخصیص نقش، بازنشانی رمز و دسترسی‌های هر نقش',
+        permission: 'user:read',
+      },
+      {
         key: 'overview',
         titleFa: 'وضعیت پروژه',
         icon: 'info',
@@ -233,6 +251,8 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
   const [sharedReportFromNotification, setSharedReportFromNotification] = useState<string | null>(
     null,
   );
+  /** گزارشی که از ویترین «فهرست گزارش‌ها» انتخاب شده است. */
+  const [datasetFromGallery, setDatasetFromGallery] = useState<string | null>(null);
   /** درخواست «سند تازه» از داشبورد: بخش اسناد با فرم باز، نه فقط فهرست. */
   const [createDocumentRequested, setCreateDocumentRequested] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -411,7 +431,10 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
           className={cn(
             'mx-auto w-full flex-1 px-4 py-6 sm:px-6',
             // گزارش‌گیری و طراح گزارش ستون‌های زیادی دارند و در عرض معمول خفه می‌شوند.
-            section === 'reports' || section === 'report-templates' || section === 'dashboard'
+            section === 'reports' ||
+            section === 'report-gallery' ||
+            section === 'report-templates' ||
+            section === 'dashboard'
               ? 'max-w-[110rem]'
               : 'max-w-7xl',
           )}
@@ -431,8 +454,23 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
                 user={user}
                 openSharedReportId={sharedReportFromNotification}
                 onOpenedSharedReport={() => setSharedReportFromNotification(null)}
+                openDatasetKey={datasetFromGallery}
+                onOpenedDataset={() => setDatasetFromGallery(null)}
               />
             ) : null}
+            {section === 'report-gallery' ? (
+              <ReportGallery
+                onOpenDataset={(datasetKey) => {
+                  setDatasetFromGallery(datasetKey);
+                  go('reports');
+                }}
+                onOpenSharedReport={(sharedReportId) => {
+                  setSharedReportFromNotification(sharedReportId);
+                  go('reports');
+                }}
+              />
+            ) : null}
+            {section === 'users' ? <UsersPage /> : null}
             {section === 'report-templates' ? <ReportTemplatesPage user={user} /> : null}
             {section === 'dashboard' ? (
               <DashboardPage

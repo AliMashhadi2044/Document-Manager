@@ -44,11 +44,16 @@ export function ReportsPage({
   user,
   openSharedReportId,
   onOpenedSharedReport,
+  openDatasetKey,
+  onOpenedDataset,
 }: {
   user: CurrentUser;
   /** گزارشی که کاربر از روی اعلان بازش کرده است. */
   openSharedReportId?: string | null;
   onOpenedSharedReport?: (() => void) | undefined;
+  /** گزارشی که کاربر از ویترین «فهرست گزارش‌ها» انتخاب کرده است. */
+  openDatasetKey?: string | null;
+  onOpenedDataset?: (() => void) | undefined;
 }): JSX.Element {
   const datasets = useDatasets();
   const [datasetKey, setDatasetKey] = useState<string | null>(null);
@@ -70,6 +75,21 @@ export function ReportsPage({
       onOpenedSharedReport?.();
     }
   }, [openSharedReportId, onOpenedSharedReport]);
+
+  /*
+    انتخاب از ویترین هم مثل اعلان **یک‌بار** مصرف می‌شود.
+
+    بدون پاک کردنش، کاربری که از ویترین گزارش «الف» را باز کرده دیگر نمی‌توانست
+    در همین صفحه به گزارش «ب» برود: هر رندر او را به «الف» برمی‌گرداند.
+  */
+  useEffect(() => {
+    if (openDatasetKey) {
+      setDatasetKey(openDatasetKey);
+      // ویترین و اعلان نمی‌توانند هم‌زمان باشند؛ بنر گزارش ارسالی باید بسته شود.
+      setSharedId(null);
+      onOpenedDataset?.();
+    }
+  }, [openDatasetKey, onOpenedDataset]);
 
   // گزارش ارسالی، مجموعه‌دادهٔ خودش را می‌آورد.
   useEffect(() => {

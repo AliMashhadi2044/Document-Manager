@@ -24,3 +24,4 @@ export * from './vehicles/plate-format.js';
 export * from './files/file-types.js';
 export * from './analytics/filter.js';
 export * from './files/page-rotation.js';
+export * from './auth/password-policy.js';

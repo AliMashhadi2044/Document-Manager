@@ -10,6 +10,7 @@ import { IdempotencyInterceptor } from './common/idempotency/idempotency.interce
 import { SessionGuard } from './common/auth/session.guard';
 import { PermissionGuard } from './common/auth/permission.guard';
 import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
 import { BaseDataModule } from './modules/base-data/base-data.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
 import { DocumentsModule } from './modules/documents/documents.module';
@@ -30,6 +31,7 @@ import { HealthController } from './modules/health/health.controller';
     }),
     PrismaModule,
     AuthModule,
+    UsersModule,
     BaseDataModule,
     VendorsModule,
     NotificationsModule,

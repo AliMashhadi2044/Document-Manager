@@ -47,6 +47,21 @@ export function ReportTable({
 
   /** ستون جزئیات فقط وقتی هست که هم مجموعه‌داده‌اش را اعلام کرده باشد و هم فراخواننده. */
   const detailKey = result.detailField ?? null;
+  const hasDetail = detailKey !== null && onOpenDetail !== undefined;
+
+  /*
+    ستون جزئیات: **آخرین** ستون و چسبیده به لبه.
+
+    گزارش ستادی هفده ستون دارد و افقی اسکرول می‌شود؛ دکمهٔ جزئیات در ستون اول
+    با اسکرول بیرون کادر می‌رفت و کاربر برای باز کردن ردیفی که همین حالا نگاهش
+    می‌کرد باید تا ته برمی‌گشت. حالا ستون `sticky` است و سر جایش می‌ماند.
+
+    ولی `sticky` روی ستونی که **خودش ستون واقعی جدول است** می‌نشیند، نه روی یک
+    لایه شناور: پس در ته اسکرول دقیقاً در جای خودش می‌ایستد و روی هیچ عددی
+    نمی‌افتد. پس‌زمینهٔ کدر و لبهٔ جداکننده هم لازم‌اند — سلول نیمه‌شفاف،
+    عددهای زیرش را نشان می‌داد.
+  */
+  const stickyCell = 'sticky left-0 z-10 w-24 border-s border-border';
 
   function toggleSort(key: string): void {
     if (!sortableKeys.includes(key)) return;
@@ -64,15 +79,11 @@ export function ReportTable({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-x-auto rounded-lg border border-border bg-background">
         <table className="w-full border-collapse text-sm">
-          <thead className="bg-muted/50">
+          {/* `bg-muted` و نه `bg-muted/50`: سلولِ چسبیدهٔ سرستون باید کدر باشد. */}
+          <thead className="bg-muted">
             <tr>
-              {detailKey && onOpenDetail ? (
-                <th scope="col" className="w-20 px-2 py-2 text-start text-xs font-medium">
-                  جزئیات
-                </th>
-              ) : null}
               {result.columns.map((column) => {
                 const sortable = sortableKeys.includes(column.key);
                 const isActive = activeSort?.field === column.key;
@@ -109,6 +120,11 @@ export function ReportTable({
                   </th>
                 );
               })}
+              {hasDetail ? (
+                <th scope="col" className={`${stickyCell} bg-muted px-2 py-2 text-start text-xs font-medium`}>
+                  جزئیات
+                </th>
+              ) : null}
             </tr>
           </thead>
 
@@ -116,7 +132,7 @@ export function ReportTable({
             {result.rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={result.columns.length + (detailKey && onOpenDetail ? 1 : 0)}
+                  colSpan={result.columns.length + (hasDetail ? 1 : 0)}
                   className="px-3 py-8 text-center text-sm text-muted-foreground"
                 >
                   هیچ ردیفی با این فیلترها پیدا نشد.
@@ -126,17 +142,6 @@ export function ReportTable({
 
             {result.rows.map((row, index) => (
               <tr key={`row-${index}`} className="border-t border-border">
-                {detailKey && onOpenDetail ? (
-                  <td className="px-2 py-1.5">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onOpenDetail(String(row[detailKey] ?? ''))}
-                    >
-                      جزئیات
-                    </Button>
-                  </td>
-                ) : null}
                 {result.columns.map((column) => (
                   <td
                     key={column.key}
@@ -157,27 +162,28 @@ export function ReportTable({
                     )}
                   </td>
                 ))}
+                {hasDetail && detailKey && onOpenDetail ? (
+                  <td className={`${stickyCell} bg-background px-2 py-1.5`}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onOpenDetail(String(row[detailKey] ?? ''))}
+                    >
+                      جزئیات
+                    </Button>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
 
           {Object.keys(result.totals).length > 0 && result.rows.length > 0 ? (
             <tfoot>
-              <tr className="border-t-2 border-border bg-muted/30 font-bold">
-                {detailKey && onOpenDetail ? <td className="px-2 py-2" /> : null}
-                {result.columns.map((column, index) => (
-                  <td
-                    key={column.key}
-                    className={`px-3 py-2 ${column.type === 'money' ? 'text-end money' : ''}`}
-                  >
-                    {column.key in result.totals
-                      ? formatMoney(result.totals[column.key] as string, { withUnit: false })
-                      : index === 0
-                        ? 'جمع همه ردیف‌های فیلترشده'
-                        : ''}
-                  </td>
-                ))}
-              </tr>
+              <TotalsRow
+                columns={result.columns}
+                totals={result.totals}
+                detailCell={hasDetail ? `${stickyCell} bg-muted px-2 py-2` : null}
+              />
             </tfoot>
           ) : null}
         </table>
@@ -214,6 +220,56 @@ export function ReportTable({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * ردیف جمع.
+ *
+ * برچسب «جمع همه ردیف‌های فیلترشده» روی **همهٔ ستون‌های ابتدایی که جمع ندارند**
+ * کشیده می‌شود (`colSpan`) و `whitespace-nowrap` می‌گیرد.
+ *
+ * پیش از این برچسب در ستون اول می‌نشست؛ ستون اولِ یک گزارش می‌تواند «شماره
+ * درخواست» باشد و برچسب در عرضش به سه خط می‌شکست — ردیف جمع دو برابر بقیه بلند
+ * می‌شد و عددها از خطِ چشم بیرون می‌افتادند. پهن کردن ستون هم چاره نبود: آن یک
+ * ستون داده است و نباید به‌خاطر یک برچسب جا بگیرد.
+ */
+function TotalsRow({
+  columns,
+  totals,
+  detailCell,
+}: {
+  columns: ReportResultDto['columns'];
+  totals: ReportResultDto['totals'];
+  /** کلاس سلول خالیِ ستون جزئیات، یا `null` وقتی ستونی نیست. */
+  detailCell: string | null;
+}): JSX.Element {
+  /* شمار ستون‌های ابتداییِ بی‌جمع — همان‌هایی که برچسب می‌تواند رویشان بنشیند. */
+  let labelSpan = 0;
+  while (labelSpan < columns.length) {
+    if ((columns[labelSpan]?.key ?? '') in totals) break;
+    labelSpan += 1;
+  }
+
+  return (
+    <tr className="border-t-2 border-border bg-muted font-bold">
+      {labelSpan > 0 ? (
+        <td colSpan={labelSpan} className="whitespace-nowrap px-3 py-2">
+          جمع همه ردیف‌های فیلترشده
+        </td>
+      ) : null}
+      {columns.slice(labelSpan).map((column) => (
+        <td
+          key={column.key}
+          className={`px-3 py-2 ${column.type === 'money' ? 'text-end money' : ''}`}
+        >
+          {column.key in totals
+            ? formatMoney(totals[column.key] as string, { withUnit: false })
+            : ''}
+        </td>
+      ))}
+      {detailCell ? <td className={detailCell} /> : null}
+    </tr>
   );
 }
 
