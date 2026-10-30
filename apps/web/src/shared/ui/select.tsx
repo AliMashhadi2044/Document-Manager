@@ -13,17 +13,15 @@ import { createPortal } from 'react-dom';
 import { cn } from './cn';
 import { useAnchoredPosition } from './use-anchored-position';
 import { useDebouncedValue } from '../hooks/use-debounced-value';
+import { useSelectPrefs } from '../preferences/preferences';
 import { Icon } from './icon';
 import { CONTROL_CLASS, HELP_CLASS, LABEL_CLASS, borderClass } from './field';
 import {
   applyOrder,
-  loadPrefs,
   moveInGroup,
   optionMatches,
-  savePrefs,
   splitPinned,
   togglePinned,
-  type SelectPrefs,
 } from './select-prefs';
 
 export interface SelectOption {
@@ -138,7 +136,7 @@ export function Select({
     return ariaLabel ?? null;
   }, [prefsKey, label, ariaLabel]);
 
-  const [prefs, setPrefs] = useState<SelectPrefs>(() => loadPrefs(storageKey));
+  const { prefs, save: savePrefs } = useSelectPrefs(storageKey);
   const [open, setOpen] = useState(false);
   const [manage, setManage] = useState(false);
   /*
@@ -182,13 +180,7 @@ export function Select({
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const updatePrefs = useCallback(
-    (next: SelectPrefs) => {
-      setPrefs(next);
-      savePrefs(storageKey, next);
-    },
-    [storageKey],
-  );
+  const updatePrefs = savePrefs;
 
   const selected = options.find((option) => option.value === value);
 

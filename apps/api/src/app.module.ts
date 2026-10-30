@@ -20,6 +20,7 @@ import { ArchiveModule } from './modules/archive/archive.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PreferencesModule } from './modules/preferences/preferences.module';
 import { HealthController } from './modules/health/health.controller';
 
 @Module({
@@ -35,6 +36,7 @@ import { HealthController } from './modules/health/health.controller';
     BaseDataModule,
     VendorsModule,
     NotificationsModule,
+    PreferencesModule,
     DocumentsModule,
     FilesModule,
     FeedbackModule,

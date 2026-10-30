@@ -196,6 +196,11 @@ model UserPreferences {
   columnVisibility Json?
   dashboard        Json?
 
+  /// آخرین بخشِ باز در پوسته — یک کلید کوتاه، بی‌معنا برای سرور.
+  lastSection String? @map("last_section") @db.VarChar(60)
+  /// ترجیح فهرست‌های انتخاب: پین‌شده‌ها و ترتیب دلخواه، با کلیدِ هر فهرست.
+  selectPrefs Json?   @map("select_prefs")
+
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

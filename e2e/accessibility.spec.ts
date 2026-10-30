@@ -130,6 +130,19 @@ test.describe('کنترل انتخاب', () => {
     await login(page, 'admin');
     await openFilter(page);
 
+    /*
+      از چیدمان تمیز شروع می‌کنیم.
+
+      ترجیح‌ها دیگر در `localStorage` همان مرورگر نیستند، در پروفایل کاربر روی
+      سرور می‌مانند؛ پس پینی که اجرای قبلی گذاشته، به این اجرا هم می‌رسد و
+      ترتیب گزینه‌ها را عوض می‌کند.
+    */
+    const reset = page.getByRole('button', { name: 'بازنشانی' });
+    if ((await reset.count()) > 0) {
+      await reset.click();
+      await expect(page.getByRole('group', { name: 'پین‌شده' })).toHaveCount(0);
+    }
+
     // گزینه سوم انتخاب شده تا بالا آمدنش قابل تشخیص باشد (ردیف صفر «همه» است).
     const list = page.getByRole('listbox', { name: FIELD });
     const target = ((await list.getByRole('option').nth(3).textContent()) ?? '').trim();
@@ -177,14 +190,27 @@ test.describe('دسترس‌پذیری تم تاریک', () => {
    * درست ولی توکنِ اشتباه نوشته‌شده، فقط همین‌جا پیدا می‌شود.
    */
   test('رنگ اصلی کهربایی در تم تاریک', async ({ page }) => {
-    await page.addInitScript(() => {
-      window.localStorage.setItem('dm.theme.primary', 'amber');
-    });
-
     await login(page, 'admin');
+
+    /*
+      رنگ از **منوی ظاهر** انتخاب می‌شود، نه با نوشتن در localStorage.
+
+      ترجیح‌ها حالا در پروفایل کاربر روی سرور می‌مانند و مرورگر فقط نسخهٔ موقتی
+      برای نخستین رنگ‌آمیزی نگه می‌دارد؛ نوشتن در آن نسخه، با رسیدن پاسخ سرور
+      بی‌اثر می‌شد. در عوض انتخاب در پایان برگردانده می‌شود، وگرنه برای آزمون‌های
+      بعدی هم کهربایی می‌ماند.
+    */
+    await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
+    await page.getByRole('button', { name: 'کهربایی' }).click();
+    await page.keyboard.press('Escape');
+
     await gotoSection(page, 'داشبورد');
     await expect(page.locator('html')).toHaveAttribute('data-primary', 'amber');
     expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
+    await page.getByRole('button', { name: 'نیلی' }).click();
+    await expect(page.locator('html')).not.toHaveAttribute('data-primary', 'amber');
   });
 });
 
@@ -200,7 +226,9 @@ test.describe('تنظیمات ظاهر', () => {
     await login(page, 'admin');
 
     await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
-    await page.getByRole('menuitemradio', { name: /تاریک/ }).click();
+    // `exact` لازم است: ردیف «مطابق سیستم» تمِ حل‌شده را هم کنارش می‌نویسد، پس
+    // نام دسترس‌پذیرش وقتی سیستم تاریک است «مطابق سیستم تاریک» می‌شود.
+    await page.getByRole('menuitemradio', { name: 'تاریک', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
     await page.keyboard.press('Escape');
@@ -209,8 +237,19 @@ test.describe('تنظیمات ظاهر', () => {
 
     // و برگرداندنش هم کار می‌کند — وگرنه کاربر در تمی گیر می‌افتد که نمی‌خواهد.
     await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
-    await page.getByRole('menuitemradio', { name: /روشن/ }).click();
+    await page.getByRole('menuitemradio', { name: 'روشن', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+
+    /*
+      و در پایان، «مطابق سیستم».
+
+      ترجیح حالا در پروفایل کاربر روی سرور می‌ماند، پس انتخابِ این آزمون به
+      آزمون‌های بعدی هم می‌رسد — آزمون‌هایی که با `colorScheme: 'dark'` سیستم را
+      تاریک می‌کنند و از سامانه انتظار دارند تابعش باشد.
+    */
+    await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
+    await page.getByRole('menuitemradio', { name: /^مطابق سیستم/ }).click();
+    await page.keyboard.press('Escape');
   });
 
   test('منوی ظاهر با Escape بسته می‌شود و فوکوس برمی‌گردد', async ({ page }) => {
@@ -247,7 +286,7 @@ test.describe('پوسته برنامه', () => {
 
     await login(page, 'admin');
     await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
-    await page.getByRole('menuitemradio', { name: /تاریک/ }).click();
+    await page.getByRole('menuitemradio', { name: 'تاریک', exact: true }).click();
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     const started = await page.evaluate(
@@ -255,9 +294,11 @@ test.describe('پوسته برنامه', () => {
     );
     expect(started, 'تغییر تم بدون گذار انجام شد').toBeGreaterThan(0);
 
-    // برگرداندن تم تا اجراهای بعدی از حالت تمیز شروع کنند.
+    // برگرداندن تم تا اجراهای بعدی از حالت تمیز شروع کنند — ترجیح در پروفایل
+    // کاربر می‌ماند و «روشن» گذاشتنش، آزمون‌های تم تاریک را می‌شکست.
     await page.getByRole('button', { name: 'تنظیمات ظاهر' }).click();
-    await page.getByRole('menuitemradio', { name: /روشن/ }).click();
+    await page.getByRole('menuitemradio', { name: /^مطابق سیستم/ }).click();
+    await page.keyboard.press('Escape');
   });
 
   test('آخرین بخش پس از بارگذاری دوباره باز می‌ماند', async ({ page }) => {

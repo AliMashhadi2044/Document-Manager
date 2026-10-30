@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ROLE_LABELS, type Permission, type RoleKey } from '@dm/shared';
 
 import { Button } from '../shared/ui/button';
 import { Icon, type IconName } from '../shared/ui/icon';
 import { cn } from '../shared/ui/cn';
+import { usePreferences } from '../shared/preferences/preferences';
 import { useLogout, type CurrentUser } from '../features/auth/auth.api';
 import { LookupManager } from '../features/base-data/lookup-manager';
 import { ChaptersView } from '../features/base-data/chapters-view';
@@ -217,35 +218,51 @@ const GROUPS: readonly SectionGroup[] = [
   },
 ];
 
-const LAST_SECTION_KEY = 'dm.shell.section';
-
 /**
- * آخرین بخشِ باز، از اجرای قبلی.
+ * آخرین بخشِ باز، از پروفایل کاربر.
  *
  * این برنامه مسیر‌یابی URL ندارد، پس بارگذاری دوباره صفحه کاربر را به بخش پیش‌فرض
- * برمی‌گرداند — همان چیزی که بعد از هر refresh آزاردهنده است. مقدار ذخیره‌شده
- * **اعتبارسنجی** می‌شود: کلید ناشناس یا بخشی که کاربر دیگر مجوزش را ندارد، نادیده
- * گرفته می‌شود و اثری بر دسترسی ندارد (مرجع دسترسی همچنان سرور است).
+ * برمی‌گرداند — همان چیزی که بعد از هر refresh آزاردهنده است. حالا در پروفایل
+ * می‌ماند، پس روی دستگاه دیگر هم همان بخش باز می‌شود.
+ *
+ * مقدار ذخیره‌شده **اعتبارسنجی** می‌شود: کلید ناشناس یا بخشی که کاربر دیگر مجوزش
+ * را ندارد، نادیده گرفته می‌شود و اثری بر دسترسی ندارد (مرجع دسترسی همچنان سرور
+ * است — نامِ یک بخش در پروفایل، به آن بخش راه نمی‌دهد).
  */
-function readLastSection(allowed: readonly SectionKey[]): SectionKey | null {
-  try {
-    const stored = window.localStorage.getItem(LAST_SECTION_KEY);
-    return stored !== null && (allowed as readonly string[]).includes(stored)
-      ? (stored as SectionKey)
-      : null;
-  } catch {
-    // حالت خصوصی مرورگر یا مسدود بودن ذخیره‌سازی؛ یک ترجیح نمایشی است، نه داده.
-    return null;
-  }
+function validSection(
+  stored: string | null,
+  allowed: readonly SectionKey[],
+): SectionKey | null {
+  return stored !== null && (allowed as readonly string[]).includes(stored)
+    ? (stored as SectionKey)
+    : null;
 }
 
 export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
-  const [section, setSection] = useState<SectionKey>(() => {
-    const permitted = GROUPS.flatMap((group) => group.items)
-      .filter((item) => item.permission === undefined || user.permissions.includes(item.permission))
-      .map((item) => item.key);
-    return readLastSection(permitted) ?? 'documents';
-  });
+  const { prefs, update } = usePreferences();
+  const permitted = GROUPS.flatMap((group) => group.items)
+    .filter((item) => item.permission === undefined || user.permissions.includes(item.permission))
+    .map((item) => item.key);
+
+  const [section, setSection] = useState<SectionKey>(
+    () => validSection(prefs.lastSection, permitted) ?? 'documents',
+  );
+
+  /*
+    بخشِ آمده از سرور، **یک بار** اعمال می‌شود.
+
+    مقدار اولیهٔ بالا از نسخهٔ موقت مرورگر می‌آید و ممکن است با پروفایل فرق کند؛
+    ولی پس از نشستن، پیمایشِ خودِ کاربر نباید با هر بازخوانی به بخش ذخیره‌شده
+    برگردد.
+  */
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current) return;
+    const stored = validSection(prefs.lastSection, permitted);
+    if (stored === null) return;
+    restored.current = true;
+    setSection(stored);
+  }, [prefs.lastSection, permitted]);
   /** سندی که از اعلان باز می‌شود؛ تا پیش از مسیر‌یابی واقعی، همین کافی است. */
   const [documentFromNotification, setDocumentFromNotification] = useState<string | null>(null);
   const [sharedReportFromNotification, setSharedReportFromNotification] = useState<string | null>(
@@ -279,11 +296,8 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
   const go = (key: SectionKey): void => {
     setSection(key);
     setDrawerOpen(false);
-    try {
-      window.localStorage.setItem(LAST_SECTION_KEY, key);
-    } catch {
-      // ذخیره نشدن ترجیح، نباید جلوی پیمایش را بگیرد.
-    }
+    restored.current = true;
+    update((prev) => ({ ...prev, lastSection: key }));
     // بدون این، کاربری که وسط یک فهرست بلند بوده، بخش تازه را از وسطش می‌بیند.
     window.scrollTo({ top: 0, behavior: 'instant' });
   };

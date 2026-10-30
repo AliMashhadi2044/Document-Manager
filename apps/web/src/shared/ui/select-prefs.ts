@@ -1,120 +1,17 @@
 /**
- * ترجیح‌های کاربر برای فهرست‌های انتخاب: پین کردن و ترتیب دلخواه.
+ * توابع چیدن فهرست‌های انتخاب: پین کردن و ترتیب دلخواه.
  *
  * چرا جدا از کامپوننت: این‌ها توابع خالص‌اند و بدون مرورگر هم تست می‌شوند. منطق
  * «کدام گزینه کجا بایستد» جایی است که اشتباه در آن بی‌صدا به کاربر می‌رسد، پس
  * باید تست داشته باشد نه بازرسی چشمی.
  *
- * محل ذخیره `localStorage` است و این یک تصمیم آگاهانه است: محتوای ذخیره‌شده فقط
- * شناسه‌های گزینه‌هایی است که کاربر پین یا جابه‌جا کرده — نه داده مالی، نه نشانه
- * نشست، نه چیزی که افشایش معنادار باشد. هر خواندن و نوشتن هم در `try` است، چون
- * در حالت ناشناس یا با مسدود بودن ذخیره‌سازی، دسترسی به آن **پرتاب خطا می‌کند**.
+ * **محل ذخیره اینجا نیست.** ترجیح‌ها در پروفایل کاربر روی سرور می‌مانند تا روی هر
+ * دستگاهی که وارد می‌شود همان چیدمان را ببیند؛ شکل داده و پاک‌سازی‌اش در
+ * `@dm/shared` است و خواندن و نوشتنش از `useSelectPrefs`.
  */
 
-export interface SelectPrefs {
-  /** شناسه گزینه‌های پین‌شده، به ترتیبی که کاربر خواسته. */
-  readonly pinned: readonly string[];
-  /** ترتیب دلخواه؛ گزینه‌های نیامده در این فهرست، ترتیب طبیعی خود را نگه می‌دارند. */
-  readonly order: readonly string[];
-  /**
-   * عنوان گزینه‌های پین‌شده.
-   *
-   * برای فهرست‌هایی لازم است که جست‌وجویشان سمت سرور است: گزینهٔ پین‌شده
-   * ممکن است در صفحهٔ نتایج جاری نباشد و بین شناسه و عنوانش چیزی در دست نماند.
-   */
-  readonly labels: Readonly<Record<string, string>>;
-}
-
-export const EMPTY_PREFS: SelectPrefs = { pinned: [], order: [], labels: {} };
-
-const PREFIX = 'dm.select.';
-
-/** سقف تعداد شناسه در هر کلید، تا یک فهرست بلند، ذخیره‌ساز را پر نکند. */
-const MAX_ENTRIES = 300;
-
-function storage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    // حالت ناشناس یا مسدود بودن ذخیره‌سازی؛ خودِ دسترسی خطا می‌دهد.
-    return null;
-  }
-}
-
-function sanitize(input: unknown): readonly string[] {
-  if (!Array.isArray(input)) return [];
-  const seen = new Set<string>();
-  for (const item of input) {
-    if (typeof item === 'string' && item !== '' && item.length <= 200) seen.add(item);
-    if (seen.size >= MAX_ENTRIES) break;
-  }
-  return [...seen];
-}
-
-export function loadPrefs(key: string | null): SelectPrefs {
-  if (!key) return EMPTY_PREFS;
-  const store = storage();
-  if (!store) return EMPTY_PREFS;
-
-  try {
-    const raw = store.getItem(PREFIX + key);
-    if (raw === null) return EMPTY_PREFS;
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) return EMPTY_PREFS;
-    const record = parsed as Record<string, unknown>;
-    return {
-      pinned: sanitize(record.pinned),
-      order: sanitize(record.order),
-      labels: sanitizeLabels(record.labels),
-    };
-  } catch {
-    // محتوای خراب یا دست‌کاری‌شده نباید فهرست را از کار بیندازد.
-    return EMPTY_PREFS;
-  }
-}
-
-function sanitizeLabels(input: unknown): Readonly<Record<string, string>> {
-  if (typeof input !== 'object' || input === null) return {};
-
-  const result: Record<string, string> = {};
-  let count = 0;
-  for (const [key, label] of Object.entries(input as Record<string, unknown>)) {
-    if (typeof label !== 'string' || label === '') continue;
-    if (key.length > 200) continue;
-    result[key] = label.slice(0, 300);
-    if (++count >= MAX_ENTRIES) break;
-  }
-  return result;
-}
-
-export function savePrefs(key: string | null, prefs: SelectPrefs): void {
-  if (!key) return;
-  const store = storage();
-  if (!store) return;
-
-  try {
-    if (prefs.pinned.length === 0 && prefs.order.length === 0) {
-      store.removeItem(PREFIX + key);
-      return;
-    }
-
-    // عنوان فقط برای گزینه‌هایی نگه داشته می‌شود که هنوز پین‌اند؛ وگرنه با هر
-    // پین و برداشتن، یک رد دائمی از نام رکوردها در مرورگر جمع می‌شود.
-    const pinned = prefs.pinned.slice(0, MAX_ENTRIES);
-    const labels: Record<string, string> = {};
-    for (const value of pinned) {
-      const label = prefs.labels[value];
-      if (label !== undefined) labels[value] = label;
-    }
-
-    store.setItem(
-      PREFIX + key,
-      JSON.stringify({ pinned, order: prefs.order.slice(0, MAX_ENTRIES), labels }),
-    );
-  } catch {
-    // پر شدن سهمیه ذخیره‌ساز نباید جلوی انتخاب کاربر را بگیرد.
-  }
-}
+export { EMPTY_SELECT_PREFS as EMPTY_PREFS } from '@dm/shared';
+export type { SelectPrefs } from '@dm/shared';
 
 export interface Arrangeable {
   readonly value: string;

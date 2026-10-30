@@ -9,22 +9,19 @@ import {
   type ReactNode,
 } from 'react';
 import { flushSync } from 'react-dom';
+import { PRIMARY_COLORS, THEME_MODES, type PrimaryColor, type ThemeMode } from '@dm/shared';
 
-export const THEME_MODES = ['light', 'dark', 'system'] as const;
-export type ThemeMode = (typeof THEME_MODES)[number];
+import { usePreferences } from '../preferences/preferences';
 
-export const PRIMARY_COLORS = [
-  'default',
-  'violet',
-  'fuchsia',
-  'rose',
-  'amber',
-  'emerald',
-  'teal',
-  'cyan',
-  'blue',
-] as const;
-export type PrimaryColor = (typeof PRIMARY_COLORS)[number];
+/*
+ * فهرست تم‌ها و رنگ‌ها در `@dm/shared` است، نه اینجا.
+ *
+ * سرور همان فهرست را اعتبارسنجی می‌کند؛ دو نسخهٔ جداگانه یعنی رنگی که رابط نشان
+ * می‌دهد و سرور ردش می‌کند. از اینجا دوباره صادر می‌شود تا هر جای رابط که تم را
+ * می‌شناسد، از همین یک جا بخواند.
+ */
+export { PRIMARY_COLORS, THEME_MODES };
+export type { PrimaryColor, ThemeMode };
 
 export const THEME_MODE_LABELS: Record<ThemeMode, string> = {
   light: 'روشن',
@@ -81,20 +78,17 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const MODE_KEY = 'dm.theme.mode';
-const PRIMARY_KEY = 'dm.theme.primary';
-
-function readStored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-  const value = window.localStorage.getItem(key);
-  return value !== null && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
-}
-
+/**
+ * تم و رنگ، از پروفایل کاربر.
+ *
+ * هیچ حالت محلی‌ای کنار ترجیح نگه داشته نمی‌شود: مقدار جاری **همان** چیزی است که
+ * ذخیره شده، وگرنه دو منبع حقیقت پیدا می‌شد و با رسیدن پاسخ سرور، آن‌که روی صفحه
+ * است و آن‌که در پروفایل است فرق می‌کردند.
+ */
 export function ThemeProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [mode, setModeState] = useState<ThemeMode>(() => readStored(MODE_KEY, THEME_MODES, 'system'));
-  const [primary, setPrimaryState] = useState<PrimaryColor>(() =>
-    readStored(PRIMARY_KEY, PRIMARY_COLORS, 'default'),
-  );
+  const { prefs, update } = usePreferences();
+  const mode = prefs.theme;
+  const primary = prefs.primaryColor;
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia('(prefers-color-scheme: dark)').matches,
   );
@@ -138,18 +132,18 @@ export function ThemeProvider({ children }: { children: ReactNode }): JSX.Elemen
    *  - فراخوانی بدون نقطه شروع (مثلاً تغییر تم از جایی غیر از دکمه).
    */
   const setMode = useCallback((next: ThemeMode, origin?: ThemeOrigin) => {
-    window.localStorage.setItem(MODE_KEY, next);
+    const apply = (): void => update((prev) => ({ ...prev, theme: next }));
 
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const startViewTransition = document.startViewTransition?.bind(document);
 
     if (!origin || reduced || startViewTransition === undefined) {
-      setModeState(next);
+      apply();
       return;
     }
 
     const transition = startViewTransition(() => {
-      flushSync(() => setModeState(next));
+      flushSync(apply);
     });
 
     void transition.ready.then(() => {
@@ -172,12 +166,12 @@ export function ThemeProvider({ children }: { children: ReactNode }): JSX.Elemen
         },
       );
     });
-  }, []);
+  }, [update]);
 
-  const setPrimary = useCallback((next: PrimaryColor) => {
-    setPrimaryState(next);
-    window.localStorage.setItem(PRIMARY_KEY, next);
-  }, []);
+  const setPrimary = useCallback(
+    (next: PrimaryColor) => update((prev) => ({ ...prev, primaryColor: next })),
+    [update],
+  );
 
   const value = useMemo<ThemeContextValue>(
     () => ({ mode, primary, setMode, setPrimary, resolved }),

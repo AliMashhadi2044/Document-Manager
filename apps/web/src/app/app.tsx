@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { ThemeProvider } from '../shared/theme/theme';
+import { PreferencesProvider, useSyncPreferences } from '../shared/preferences/preferences';
 import { ErrorState } from '../shared/ui/states';
 import { DefaultMark } from '../features/organization/organization-mark';
 import { useCurrentUser } from '../features/auth/auth.api';
@@ -10,6 +11,15 @@ import { AppShell } from './app-shell';
 
 function Shell(): JSX.Element {
   const { data: user, isPending, isError, refetch } = useCurrentUser();
+
+  /*
+    هم‌گام‌سازی پروفایل با سرور، به‌ازای هر ورود.
+
+    Provider بالای صفحهٔ ورود می‌نشیند (تم باید آنجا هم درست باشد) و در آن لحظه
+    هنوز کاربری نیست؛ پس خواندنِ پروفایل به اینجا سپرده شده، جایی که نشست معلوم
+    است.
+  */
+  useSyncPreferences(user?.id ?? null);
 
   if (isPending) return <SplashScreen />;
 
@@ -80,9 +90,11 @@ export function App(): JSX.Element {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <Shell />
-      </ThemeProvider>
+      <PreferencesProvider>
+        <ThemeProvider>
+          <Shell />
+        </ThemeProvider>
+      </PreferencesProvider>
     </QueryClientProvider>
   );
 }

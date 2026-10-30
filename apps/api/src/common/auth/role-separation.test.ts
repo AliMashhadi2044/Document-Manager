@@ -176,6 +176,14 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       'FeedbackController.create',
       'NotificationsController.markAllRead',
       'NotificationsController.markRead',
+      /*
+        ذخیرهٔ شخصی‌سازی: مسیری نوشتنی که **هر** کاربر واردشده دارد.
+
+        آنچه می‌نویسد تم، رنگ، پینِ فهرست‌ها و آخرین بخشِ خودِ همان کاربر است و
+        دامنه‌اش شناسهٔ نشست — نه داده سند و نه دسترسی. نشان «فقط خواندنی» رویش
+        دروغ می‌بود، چون واقعاً در دیتابیس می‌نویسد.
+      */
+      'PreferencesController.replace',
       // اجرای گزارش POST است و واقعاً می‌نویسد — ولی تنها چیزی که می‌نویسد **گزارشِ
       // اجرا** است (یک ردیف `report_runs` و یک ردیف حسابرسی)، نه داده سند. نشان
       // «فقط خواندنی» روی این مسیرها دروغ می‌بود.
@@ -235,6 +243,14 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       'AuthController.logoutAll',
       'NotificationsController.markAllRead',
       'NotificationsController.markRead',
+      /*
+        ذخیرهٔ شخصی‌سازی: مسیری نوشتنی که **هر** کاربر واردشده دارد.
+
+        آنچه می‌نویسد تم، رنگ، پینِ فهرست‌ها و آخرین بخشِ خودِ همان کاربر است و
+        دامنه‌اش شناسهٔ نشست — نه داده سند و نه دسترسی. نشان «فقط خواندنی» رویش
+        دروغ می‌بود، چون واقعاً در دیتابیس می‌نویسد.
+      */
+      'PreferencesController.replace',
       // اجرای گزارش: فقط ردیف اجرا می‌نویسد، نه داده سند (توضیح در تست ناظر).
       'ReportsController.excelExport',
       'ReportsController.html',
@@ -309,7 +325,14 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       .sort();
 
     // هر افزوده‌ای به این فهرست باید یک تصمیم آگاهانه باشد، نه نتیجه فراموشی.
-    expect(authenticatedOnly).toEqual(['AuthController.logoutAll', 'AuthController.me']);
+    expect(authenticatedOnly).toEqual([
+      'AuthController.logoutAll',
+      'AuthController.me',
+      // شخصی‌سازی کاربر: مجوز گرفتن برای عوض کردن رنگ رابط معنایی نداشت، و دامنهٔ
+      // هر دو مسیر همان کاربرِ نشست است.
+      'PreferencesController.get',
+      'PreferencesController.replace',
+    ]);
   });
 
   it('نشان «فقط خواندنی» فقط روی مسیرهایی است که واقعاً نمی‌نویسند', () => {

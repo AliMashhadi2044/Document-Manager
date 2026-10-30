@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  EMPTY_PREFS,
   applyOrder,
-  loadPrefs,
   moveInGroup,
   normalizeFa,
   optionMatches,
-  savePrefs,
   splitPinned,
   togglePinned,
 } from './select-prefs';
@@ -130,18 +127,5 @@ describe('optionMatches', () => {
 
   it('اختلاف املای عربی مانع یافتن نمی‌شود', () => {
     expect(optionMatches({ label: 'کتابخانه' }, 'كتاب')).toBe(true);
-  });
-});
-
-describe('loadPrefs / savePrefs', () => {
-  it('بدون localStorage هم خطا نمی‌دهد و ترجیح خالی می‌دهد', () => {
-    // محیط تست node است و `window` وجود ندارد؛ همان مسیری که در مرورگرِ
-    // حالت ناشناس هم طی می‌شود.
-    expect(loadPrefs('any')).toEqual(EMPTY_PREFS);
-    expect(() => savePrefs('any', { pinned: ['a'], order: [], labels: {} })).not.toThrow();
-  });
-
-  it('کلید null یعنی ذخیره‌ای در کار نیست', () => {
-    expect(loadPrefs(null)).toEqual(EMPTY_PREFS);
   });
 });
