@@ -8,6 +8,7 @@ import type {
 
 import { apiFetch } from '../../shared/api/client';
 import type { PageResult } from '../base-data/base-data.api';
+import { usePageSize } from '../../shared/preferences/preferences';
 
 /**
  * مبالغ از API به‌صورت **رشته عددی** می‌آیند (ADR-0003).
@@ -150,11 +151,12 @@ export const documentKeys = {
 };
 
 export function useDocuments(page: number, search: string) {
-  const query = new URLSearchParams({ page: String(page) });
+  const pageSize = usePageSize();
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (search) query.set('search', search);
 
   return useQuery({
-    queryKey: documentKeys.list(page, search),
+    queryKey: [...documentKeys.list(page, search), pageSize],
     queryFn: () => apiFetch<PageResult<DocumentRow>>(`/documents?${query.toString()}`),
     placeholderData: (previous) => previous,
   });
@@ -256,11 +258,12 @@ const trashKeys = {
 };
 
 export function useTrash(page: number, search: string) {
-  const query = new URLSearchParams({ page: String(page) });
+  const pageSize = usePageSize();
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (search) query.set('search', search);
 
   return useQuery({
-    queryKey: trashKeys.list(page, search),
+    queryKey: [...trashKeys.list(page, search), pageSize],
     queryFn: () => apiFetch<PageResult<TrashRow>>(`/document-trash?${query.toString()}`),
     placeholderData: (previous) => previous,
   });

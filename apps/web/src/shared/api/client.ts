@@ -40,6 +40,37 @@ export class ApiError extends Error {
   }
 }
 
+/*
+  شنوندهٔ «نشست تمام شد».
+
+  هر ۴۰۱ از مسیرهای غیر از `auth/` یعنی نشست دیگر معتبر نیست؛ تا پیش از این، رابط
+  همان لحظه فقط یک خطای موردی نشان می‌داد و کاربر تا وقتی خودش صفحه را رفرش نکرده
+  بود در برنامه‌ای می‌ماند که هیچ درخواستش جواب نمی‌گرفت.
+
+  چرا `auth/` استثناست: ۴۰۱ آنجا معنای دیگری دارد — رمز اشتباه در ورود، رمز فعلیِ
+  نادرست در تغییر رمز، و «وارد نشده» در `auth/me` که خودش حالت عادی است.
+*/
+/**
+ * زمان آخرین پاسخِ گرفته‌شده از سرور.
+ *
+ * نشست با **بی‌تحرکی** تمام می‌شود و سرور همین درخواست‌ها را «تحرک» می‌شمارد؛ پس
+ * همین‌جا دقیق‌ترین جایی است که رابط می‌تواند بداند چقدر از آخرین تماس گذشته.
+ */
+let lastResponseAt = Date.now();
+
+export function lastServerContactAt(): number {
+  return lastResponseAt;
+}
+
+type UnauthorizedListener = () => void;
+
+const unauthorizedListeners = new Set<UnauthorizedListener>();
+
+export function onUnauthorized(listener: UnauthorizedListener): () => void {
+  unauthorizedListeners.add(listener);
+  return () => unauthorizedListeners.delete(listener);
+}
+
 function readCookie(name: string): string | null {
   const match = document.cookie
     .split('; ')
@@ -73,6 +104,8 @@ export async function apiFetch<T>(
     ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
   });
 
+  lastResponseAt = Date.now();
+
   if (response.status === 204) {
     return undefined as T;
   }
@@ -80,6 +113,10 @@ export async function apiFetch<T>(
   const payload: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/auth/')) {
+      for (const listener of unauthorizedListeners) listener();
+    }
+
     const body = (payload ?? {}) as {
       code?: string;
       message?: string;

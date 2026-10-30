@@ -27,7 +27,15 @@ export class PreferencesService {
   async get(userId: string): Promise<UserPreferences> {
     const row = await this.prisma.userPreferences.findUnique({
       where: { userId },
-      select: { theme: true, primaryColor: true, lastSection: true, selectPrefs: true },
+      select: {
+        theme: true,
+        primaryColor: true,
+        lastSection: true,
+        tableDensity: true,
+        pageSize: true,
+        columnVisibility: true,
+        selectPrefs: true,
+      },
     });
 
     // کاربری که هنوز چیزی عوض نکرده ردیفی ندارد؛ این حالت عادی است، نه خطا.
@@ -37,6 +45,9 @@ export class PreferencesService {
       theme: row.theme,
       primaryColor: row.primaryColor,
       lastSection: row.lastSection,
+      density: row.tableDensity,
+      pageSize: row.pageSize,
+      hiddenColumns: row.columnVisibility ?? {},
       select: row.selectPrefs ?? {},
     });
   }
@@ -59,6 +70,9 @@ export class PreferencesService {
       theme: input.theme,
       primaryColor: input.primaryColor,
       lastSection: input.lastSection,
+      tableDensity: input.density,
+      pageSize: input.pageSize,
+      columnVisibility: input.hiddenColumns as unknown as Prisma.InputJsonObject,
       // `select` فقط رشته و آرایهٔ رشته دارد؛ Prisma نوع JSON ورودی را نمی‌تواند از
       // یک نوع ساختاری استنتاج کند.
       selectPrefs: select as unknown as Prisma.InputJsonObject,
@@ -68,6 +82,9 @@ export class PreferencesService {
       where: { userId },
       create: { userId, ...data },
       update: data,
+      // فقط کلید: بدون `select`، Prisma همهٔ ستون‌ها را برمی‌گرداند و پاسخِ نوشتن،
+      // چیزهایی را می‌خواند که این سرویس هیچ کاری با آن‌ها ندارد.
+      select: { userId: true },
     });
 
     return { ...input, select };

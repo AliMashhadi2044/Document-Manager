@@ -193,8 +193,8 @@ model UserPreferences {
   primaryColor     String @default("default") @db.VarChar(30)
   tableDensity     String @default("comfortable") @db.VarChar(20)
   pageSize         Int    @default(25)
+  /// ستون‌های پنهان‌شده در هر جدول، با کلیدِ همان جدول.
   columnVisibility Json?
-  dashboard        Json?
 
   /// آخرین بخشِ باز در پوسته — یک کلید کوتاه، بی‌معنا برای سرور.
   lastSection String? @map("last_section") @db.VarChar(60)

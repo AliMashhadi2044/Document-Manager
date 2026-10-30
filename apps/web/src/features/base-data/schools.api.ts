@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch } from '../../shared/api/client';
 import type { PageResult } from './base-data.api';
+import { usePageSize } from '../../shared/preferences/preferences';
 
 /**
  * مدارس — اطلاعات پایهٔ فاکتور انشعابات.
@@ -35,13 +36,14 @@ export const schoolKeys = {
 };
 
 export function useSchools(page: number, search: string, districtId = '', isActive = '') {
-  const query = new URLSearchParams({ page: String(page) });
+  const pageSize = usePageSize();
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (search) query.set('search', search);
   if (districtId) query.set('districtId', districtId);
   if (isActive) query.set('isActive', isActive);
 
   return useQuery({
-    queryKey: schoolKeys.list(page, search, districtId, isActive),
+    queryKey: [...schoolKeys.list(page, search, districtId, isActive), pageSize],
     queryFn: () => apiFetch<PageResult<SchoolRow>>(`/base-data/schools?${query.toString()}`),
     placeholderData: (previous) => previous,
   });

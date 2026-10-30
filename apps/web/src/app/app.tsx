@@ -5,12 +5,14 @@ import { ThemeProvider } from '../shared/theme/theme';
 import { PreferencesProvider, useSyncPreferences } from '../shared/preferences/preferences';
 import { ErrorState } from '../shared/ui/states';
 import { DefaultMark } from '../features/organization/organization-mark';
-import { useCurrentUser } from '../features/auth/auth.api';
+import { useCurrentUser, useSessionExpiry } from '../features/auth/auth.api';
+import { ErrorBoundary } from '../shared/ui/error-boundary';
 import { LoginPage } from '../features/auth/login-page';
 import { AppShell } from './app-shell';
 
 function Shell(): JSX.Element {
   const { data: user, isPending, isError, refetch } = useCurrentUser();
+  const sessionExpired = useSessionExpiry();
 
   /*
     هم‌گام‌سازی پروفایل با سرور، به‌ازای هر ورود.
@@ -37,7 +39,7 @@ function Shell(): JSX.Element {
     );
   }
 
-  return user ? <AppShell user={user} /> : <LoginPage />;
+  return user ? <AppShell user={user} /> : <LoginPage sessionExpired={sessionExpired} />;
 }
 
 /**
@@ -92,7 +94,10 @@ export function App(): JSX.Element {
     <QueryClientProvider client={queryClient}>
       <PreferencesProvider>
         <ThemeProvider>
-          <Shell />
+          {/* مرز بیرونی: حتی خطای رندر در خودِ پوسته هم صفحهٔ سفید نمی‌دهد. */}
+          <ErrorBoundary title="سامانه باز نشد">
+            <Shell />
+          </ErrorBoundary>
         </ThemeProvider>
       </PreferencesProvider>
     </QueryClientProvider>

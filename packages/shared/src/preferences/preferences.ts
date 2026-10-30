@@ -59,6 +59,17 @@ export type SelectPrefs = z.infer<typeof selectPrefsSchema>;
 
 export const EMPTY_SELECT_PREFS: SelectPrefs = { pinned: [], order: [], labels: {} };
 
+export const TABLE_DENSITIES = ['comfortable', 'compact'] as const;
+export type TableDensity = (typeof TABLE_DENSITIES)[number];
+
+export const TABLE_DENSITY_LABELS: Record<TableDensity, string> = {
+  comfortable: 'راحت',
+  compact: 'فشرده',
+};
+
+/** اندازه‌های مجاز صفحه؛ سقفش همان سقف سرور است. */
+export const PAGE_SIZES = [10, 25, 50, 100] as const;
+
 export const userPreferencesSchema = z.object({
   theme: z.enum(THEME_MODES).default('system'),
   primaryColor: z.enum(PRIMARY_COLORS).default('default'),
@@ -70,6 +81,27 @@ export const userPreferencesSchema = z.object({
    * برنمی‌دارد. ذخیرهٔ نام بخش، **دسترسی نمی‌دهد** — مرجع دسترسی همان مجوزهاست.
    */
   lastSection: z.string().min(1).max(60).nullable().default(null),
+  /** فشردگی جدول‌ها. */
+  density: z.enum(TABLE_DENSITIES).default('comfortable'),
+
+  /**
+   * تعداد ردیف در هر صفحه.
+   *
+   * سقفش با سقف سرور یکی است؛ عدد بزرگ‌تر از آن، همان‌جا رد می‌شود و رابط نباید
+   * چیزی را نشان دهد که سرور نمی‌پذیرد.
+   */
+  pageSize: z.coerce.number().int().min(10).max(100).default(25),
+
+  /**
+   * ستون‌های **پنهان‌شده** در هر جدول، با کلیدِ همان جدول.
+   *
+   * پنهان‌شده‌ها ذخیره می‌شوند نه نمایش‌داده‌شده‌ها: ستونی که فردا به جدول اضافه
+   * شود باید **دیده شود**، نه اینکه چون در فهرست ذخیره‌شده نبوده پنهان بماند.
+   */
+  hiddenColumns: z
+    .record(z.string().min(1).max(120), z.array(z.string().min(1).max(120)).max(100))
+    .default({}),
+
   /** ترجیح هر فهرست انتخاب، با کلیدِ همان فهرست. */
   select: z
     .record(z.string().min(1).max(120), selectPrefsSchema)
@@ -85,6 +117,9 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   theme: 'system',
   primaryColor: 'default',
   lastSection: null,
+  density: 'comfortable',
+  pageSize: 25,
+  hiddenColumns: {},
   select: {},
 };
 
@@ -106,6 +141,9 @@ export function parsePreferences(input: unknown): UserPreferences {
       typeof record.lastSection === 'string' && record.lastSection !== ''
         ? record.lastSection.slice(0, 60)
         : null,
+    density: pick(record.density, TABLE_DENSITIES, 'comfortable'),
+    pageSize: salvagePageSize(record.pageSize),
+    hiddenColumns: salvageHiddenColumns(record.hiddenColumns),
     select: salvageSelect(record.select),
   };
 }
@@ -114,6 +152,27 @@ function pick<T extends string>(value: unknown, allowed: readonly T[], fallback:
   return typeof value === 'string' && (allowed as readonly string[]).includes(value)
     ? (value as T)
     : fallback;
+}
+
+function salvagePageSize(value: unknown): number {
+  // همان دامنه‌ای که schema می‌پذیرد — نه فهرست `PAGE_SIZES`، چون آن فقط گزینه‌های
+  // رابط است و عدد دیگری که از قبل ذخیره شده نباید بی‌دلیل دور ریخته شود.
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 10 && parsed <= 100 ? parsed : 25;
+}
+
+function salvageHiddenColumns(input: unknown): Record<string, string[]> {
+  if (typeof input !== 'object' || input === null) return {};
+
+  const result: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (key === '' || key.length > 120 || !Array.isArray(value)) continue;
+    result[key] = value.filter(
+      (item): item is string => typeof item === 'string' && item !== '' && item.length <= 120,
+    );
+    if (Object.keys(result).length >= MAX_SELECT_KEYS) break;
+  }
+  return result;
 }
 
 function salvageSelect(input: unknown): Record<string, SelectPrefs> {

@@ -14,11 +14,23 @@ import {
   type AuthenticatedUser,
 } from '../../common/auth/auth.decorators';
 import { ZodBody } from '../../common/validation/zod.pipe';
+import { PASSWORD_MAX_LENGTH } from '@dm/shared';
 import type { Env } from '../../common/config/env';
 
 const loginSchema = z.object({
   username: z.string().trim().min(1, 'نام کاربری الزامی است').max(100),
   password: z.string().min(1, 'رمز عبور الزامی است').max(200),
+});
+
+/*
+  قاعدهٔ رمز، یک‌جا در `@dm/shared` است و اینجا فقط سقف طول را می‌گذاریم.
+
+  سقف لازم است چون بدون آن، هر درخواست می‌توانست سرور را به هش کردن مگابایت‌ها
+  وادار کند؛ ولی «رمز خوب چیست» نباید دو تعریف داشته باشد.
+*/
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'رمز عبور فعلی الزامی است').max(PASSWORD_MAX_LENGTH),
+  newPassword: z.string().min(1, 'رمز عبور تازه الزامی است').max(PASSWORD_MAX_LENGTH),
 });
 
 @ApiTags('auth')
@@ -81,6 +93,7 @@ export class AuthController {
     fullName: string;
     roles: readonly string[];
     permissions: readonly string[];
+    sessionIdleMinutes: number;
   } {
     return {
       id: user.id,
@@ -88,6 +101,13 @@ export class AuthController {
       fullName: user.fullName,
       roles: user.roles,
       permissions: user.permissions,
+      /*
+        مهلت بی‌تحرکی، تا رابط بتواند **پیش از** پایان نشست هشدار بدهد.
+
+        بدون این عدد، کلاینت باید حدس می‌زد؛ و کسی که وسط فرم فاکتور است، بی‌خبر
+        بیرون می‌افتاد و کارِ نیمه‌تمامش را از دست می‌داد.
+      */
+      sessionIdleMinutes: this.config.get('SESSION_IDLE_TTL_MINUTES', { infer: true }),
     };
   }
 
@@ -106,6 +126,33 @@ export class AuthController {
     });
     this.clearAuthCookies(response);
     return { revoked };
+  }
+
+  /**
+   * تغییر رمز توسط خودِ کاربر.
+   *
+   * پاسخ، کوکی نشستِ تازه را هم می‌گذارد: سرویس همهٔ نشست‌ها را می‌بندد و اگر این
+   * دستگاه نشست تازه نگیرد، کاربر با عوض کردن رمز خودش را بیرون انداخته است.
+   */
+  @Authenticated()
+  @Post('password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'تغییر رمز عبور کاربر جاری' })
+  async changePassword(
+    @Body(new ZodBody(changePasswordSchema)) body: z.infer<typeof changePasswordSchema>,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<{ ok: true }> {
+    const session = await this.auth.changeOwnPassword(
+      user.id,
+      body.currentPassword,
+      body.newPassword,
+      { ip: request.ip ?? null, userAgent: request.headers['user-agent'] ?? null },
+    );
+
+    this.setAuthCookies(response, session.sessionToken, session.csrfToken, session.expiresAt);
+    return { ok: true };
   }
 
   private setAuthCookies(

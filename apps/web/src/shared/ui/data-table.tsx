@@ -12,6 +12,7 @@ import { cn } from './cn';
 import { Button } from './button';
 import { Icon } from './icon';
 import { EmptyState, ErrorState, LoadingState, Skeleton } from './states';
+import { useDensity, useHiddenColumns } from '../preferences/preferences';
 
 /**
  * جدول داده عمومی.
@@ -52,8 +53,21 @@ export interface DataTableProps<T> {
   readonly emptyTitle?: string | undefined;
   readonly emptyDescription?: string | undefined;
   readonly emptyAction?: ReactNode | undefined;
-  /** فشردگی جدول — تنظیم شخصی کاربر. */
+  /**
+   * فشردگی جدول.
+   *
+   * ندادنش یعنی «هرچه کاربر در ترجیح‌هایش خواسته» — حالت عادی. دادنش برای
+   * جدول‌هایی است که فشردگی‌شان بخشی از طراحی همان صفحه است، نه سلیقهٔ کاربر.
+   */
   readonly density?: 'comfortable' | 'compact' | undefined;
+  /**
+   * کلید این جدول برای پنهان کردن ستون‌ها.
+   *
+   * دادنش، دکمهٔ «ستون‌ها» را روشن می‌کند و انتخاب کاربر در پروفایلش می‌ماند.
+   * جدول‌های کوتاه لازمش ندارند؛ جایی به کار می‌آید که ستون‌ها از عرض صفحه
+   * بیرون می‌زنند.
+   */
+  readonly columnsPrefsKey?: string | undefined;
   readonly toolbar?: ReactNode | undefined;
   /**
    * ترتیب تازهٔ ردیف‌های دیده‌شده. دادنش، دستگیرهٔ جابه‌جایی را روشن می‌کند.
@@ -80,13 +94,29 @@ export function DataTable<T>({
   emptyTitle = 'موردی یافت نشد',
   emptyDescription,
   emptyAction,
-  density = 'comfortable',
+  density,
+  columnsPrefsKey,
   toolbar,
   onReorder,
   reorderBlockedReason,
 }: DataTableProps<T>): JSX.Element {
-  const cellPadding = density === 'compact' ? 'px-3 py-1.5' : 'px-3 py-2.5';
+  const preferredDensity = useDensity();
+  const effectiveDensity = density ?? preferredDensity;
+  const cellPadding = effectiveDensity === 'compact' ? 'px-3 py-1.5' : 'px-3 py-2.5';
   const tableId = useId();
+
+  const { hidden, toggle, showAll } = useHiddenColumns(columnsPrefsKey ?? null);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+
+  /*
+    ستون پنهان از **نمایش** کنار می‌رود، نه از داده.
+
+    ستونی که فردا اضافه شود دیده می‌شود، چون ذخیره‌شده‌ها پنهان‌ها هستند نه
+    نمایش‌داده‌شده‌ها. و اگر کاربر همه را پنهان کند، جدول بی‌معنا می‌شد؛ پس
+    دست‌کم یکی می‌ماند.
+  */
+  const visibleColumns = columns.filter((column) => !hidden.includes(column.key));
+  const shownColumns = visibleColumns.length > 0 ? visibleColumns : columns;
 
   const reorderable = onReorder !== undefined && reorderBlockedReason === undefined;
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -190,6 +220,58 @@ export function DataTable<T>({
     <div className="space-y-3">
       {toolbar}
 
+      {columnsPrefsKey ? (
+        <div className="flex justify-end">
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-expanded={columnsOpen}
+              onClick={() => setColumnsOpen((open) => !open)}
+            >
+              <Icon name="layers" size={16} />
+              ستون‌ها
+              {hidden.length > 0 ? ` (${hidden.length.toLocaleString('fa-IR')} پنهان)` : ''}
+            </Button>
+
+            {columnsOpen ? (
+              <div
+                role="group"
+                aria-label="ستون‌های جدول"
+                className="absolute end-0 z-20 mt-1 w-56 rounded-lg border border-border bg-card p-2 shadow-[var(--shadow-lift)]"
+              >
+                <ul className="max-h-72 space-y-0.5 overflow-y-auto">
+                  {columns.map((column) => {
+                    const visible = !hidden.includes(column.key);
+                    return (
+                      <li key={column.key}>
+                        <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted">
+                          <input
+                            type="checkbox"
+                            checked={visible}
+                            onChange={() => toggle(column.key)}
+                          />
+                          <span className="truncate">{column.header}</span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                <div className="mt-1 flex justify-between border-t border-border pt-1">
+                  <Button variant="ghost" size="sm" onClick={showAll}>
+                    نمایش همه
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setColumnsOpen(false)}>
+                    بستن
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-[var(--shadow-soft)]">
         <table className="w-full border-collapse text-sm">
           {/* سرستون چسبان: در جدول بلند، بدون آن کاربر بعد از چند ردیف نمی‌داند
@@ -205,7 +287,7 @@ export function DataTable<T>({
                   <span className="sr-only">جابه‌جایی ترتیب</span>
                 </th>
               ) : null}
-              {columns.map((column) => {
+              {shownColumns.map((column) => {
                 const sortable = column.sortKey !== undefined && onSortChange !== undefined;
                 const active = sortable && sortBy === column.sortKey;
 
@@ -255,7 +337,7 @@ export function DataTable<T>({
                         <Skeleton className="h-4 w-4" />
                       </td>
                     ) : null}
-                    {columns.map((column) => (
+                    {shownColumns.map((column) => (
                       <td key={column.key} className={cellPadding}>
                         <Skeleton className="h-4 w-full" />
                       </td>
@@ -301,7 +383,7 @@ export function DataTable<T>({
                         </button>
                       </td>
                     ) : null}
-                    {columns.map((column) => (
+                    {shownColumns.map((column) => (
                       <td
                         key={column.key}
                         className={cn(

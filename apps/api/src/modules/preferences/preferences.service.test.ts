@@ -24,6 +24,9 @@ const FULL = {
   theme: 'dark' as const,
   primaryColor: 'amber' as const,
   lastSection: 'documents',
+  density: 'compact' as const,
+  pageSize: 50,
+  hiddenColumns: { documents: ['createdAt'] },
   select: { k: { pinned: ['a'], order: ['a'], labels: { a: 'آب' } } },
 };
 
@@ -43,14 +46,15 @@ describe('ترجیح‌های کاربر', () => {
       theme: 'neon',
       primaryColor: 'teal',
       lastSection: null,
+      tableDensity: 'roomy',
+      pageSize: 9_000,
+      columnVisibility: null,
       selectPrefs: null,
     });
 
     await expect(service.get('user-1')).resolves.toEqual({
-      theme: 'system',
+      ...DEFAULT_PREFERENCES,
       primaryColor: 'teal',
-      lastSection: null,
-      select: {},
     });
   });
 

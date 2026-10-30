@@ -21,6 +21,41 @@ export const envSchema = z.object({
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   LOGIN_LOCK_MINUTES: z.coerce.number().int().positive().default(15),
 
+  /**
+   * نگهداشت داده (روز).
+   *
+   * فقط اعلان‌های **خوانده‌شده** و رویدادهای امنیتی پاک می‌شوند. ردپای حسابرسی
+   * (`audit_logs`) هیچ‌وقت خودکار پاک نمی‌شود؛ آن را باید آرشیو کرد، نه حذف.
+   */
+  NOTIFICATION_RETENTION_DAYS: z.coerce.number().int().min(7).default(180),
+  SECURITY_EVENT_RETENTION_DAYS: z.coerce.number().int().min(30).default(365),
+
+  /**
+   * سقف نرخ درخواست بر پایهٔ نشانی شبکه.
+   *
+   * جدا از `LOGIN_MAX_ATTEMPTS` است و کار دیگری می‌کند: آن یک **حساب** را پس از
+   * چند تلاش ناموفق قفل می‌کند، این جلوی پخش کردنِ تلاش روی نام‌های کاربری مختلف
+   * از یک نشانی را می‌گیرد.
+   *
+   * قابل تنظیم است چون در آزمون E2E ده‌ها ورود پشت سر هم از یک نشانی انجام
+   * می‌شود و سقف واقعی آنجا معنا ندارد.
+   */
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
+  AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(5),
+  GENERAL_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(600),
+
+  /**
+   * آیا سرویس پشت یک proxy معکوس (nginx و مانندش) است؟
+   *
+   * بدون این، `request.ip` نشانی خودِ proxy است و سقف نرخ، همهٔ کاربران را یک
+   * نفر می‌بیند. با `true`، هدر `X-Forwarded-For` باور می‌شود — پس فقط وقتی که
+   * واقعاً proxy جلوی سرویس است، وگرنه هر کسی می‌تواند نشانی‌اش را جعل کند.
+   */
+  TRUST_PROXY: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
   S3_ENDPOINT: z.string().url().optional(),

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch } from '../../shared/api/client';
 import type { PageResult } from '../base-data/base-data.api';
+import { usePageSize } from '../../shared/preferences/preferences';
 
 /**
  * مجموعه‌های خریدار (§۸.۳).
@@ -51,12 +52,13 @@ export const buyerKeys = {
 };
 
 export function useBuyers(page: number, search: string, isActive: string) {
-  const query = new URLSearchParams({ page: String(page) });
+  const pageSize = usePageSize();
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (search) query.set('search', search);
   if (isActive) query.set('isActive', isActive);
 
   return useQuery({
-    queryKey: buyerKeys.list(page, search, isActive),
+    queryKey: [...buyerKeys.list(page, search, isActive), pageSize],
     queryFn: () => apiFetch<PageResult<BuyerRow>>(`/buyers?${query.toString()}`),
     placeholderData: (previous) => previous,
   });

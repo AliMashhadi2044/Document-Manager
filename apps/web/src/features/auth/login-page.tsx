@@ -45,7 +45,7 @@ const SLIDES: readonly { readonly title: string; readonly body: string }[] = [
 
 const SLIDE_INTERVAL_MS = 6000;
 
-export function LoginPage(): JSX.Element {
+export function LoginPage({ sessionExpired = false }: { sessionExpired?: boolean }): JSX.Element {
   const login = useLogin();
 
   const {
@@ -78,6 +78,19 @@ export function LoginPage(): JSX.Element {
             <h1 className="mt-4 text-xl font-bold">سامانه مدیریت اسناد کارپردازی</h1>
             <p className="mt-1.5 text-sm text-muted-foreground">برای ادامه وارد شوید</p>
           </header>
+
+          {/*
+            کاربری که نشستش منقضی شده باید **بداند** چرا اینجاست؛ وگرنه فکر می‌کند
+            سامانه او را بی‌دلیل بیرون انداخته و همان را به پشتیبانی گزارش می‌کند.
+          */}
+          {sessionExpired && login.error === null ? (
+            <p
+              role="status"
+              className="mb-5 rounded-lg border border-border bg-muted px-3 py-2.5 text-center text-xs text-muted-foreground"
+            >
+              نشست شما پایان یافت. برای ادامه دوباره وارد شوید.
+            </p>
+          ) : null}
 
           <form onSubmit={onSubmit} className="space-y-4" noValidate>
             <Input

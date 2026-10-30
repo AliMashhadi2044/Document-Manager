@@ -24,6 +24,9 @@ describe('خواندن ترجیح', () => {
       theme: 'dark',
       primaryColor: 'amber',
       lastSection: 'documents',
+      density: 'compact',
+      pageSize: 50,
+      hiddenColumns: { documents: ['createdAt'] },
       select: { 'نوع کالا': { pinned: ['a'], order: ['a', 'b'], labels: { a: 'آب' } } },
     };
     expect(parsePreferences(input)).toEqual(input);
@@ -38,10 +41,8 @@ describe('خواندن ترجیح', () => {
     // تم ناشناس نباید رنگِ درست را هم با خودش ببرد.
     const result = parsePreferences({ theme: 'neon', primaryColor: 'teal', lastSection: '' });
     expect(result).toEqual({
-      theme: 'system',
+      ...DEFAULT_PREFERENCES,
       primaryColor: 'teal',
-      lastSection: null,
-      select: {},
     });
   });
 
@@ -61,6 +62,17 @@ describe('اعتبارسنجی نوشتن', () => {
     const pinned = Array.from({ length: MAX_SELECT_ENTRIES + 1 }, (_, index) => `v${index}`);
     const result = userPreferencesSchema.safeParse({ select: { k: { pinned } } });
     expect(result.success).toBe(false);
+  });
+
+  it('اندازهٔ صفحهٔ بیرون از دامنه رد می‌شود', () => {
+    // سقف، همان سقف سرور است؛ رابط نباید چیزی بدهد که سرور ردش می‌کند.
+    expect(userPreferencesSchema.safeParse({ pageSize: 5_000 }).success).toBe(false);
+    expect(userPreferencesSchema.safeParse({ pageSize: 50 }).success).toBe(true);
+  });
+
+  it('اندازهٔ صفحهٔ بی‌ربط در خواندن، به پیش‌فرض برمی‌گردد', () => {
+    expect(parsePreferences({ pageSize: 5_000 }).pageSize).toBe(25);
+    expect(parsePreferences({ pageSize: 'خیلی' }).pageSize).toBe(25);
   });
 
   it('نام بخشِ بیش از حد بلند رد می‌شود', () => {

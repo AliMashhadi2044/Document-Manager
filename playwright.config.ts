@@ -47,6 +47,14 @@ export default defineConfig({
     {
       command: 'npm run -w @dm/api start:prod',
       url: `http://localhost:${API_PORT}/api/v1/health`,
+      /*
+        سقف نرخِ ورود در این اجرا بالا برده می‌شود.
+
+        همهٔ سناریوها از یک نشانی (localhost) و پشت سر هم وارد می‌شوند؛ سقف
+        واقعی اینجا چیزی را اثبات نمی‌کند و فقط اجرای آزمون را می‌شکند. خودِ
+        سقف، تستِ واحد خودش را دارد.
+      */
+      env: { ...process.env, AUTH_RATE_LIMIT_MAX: '10000' },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       stdout: 'pipe',

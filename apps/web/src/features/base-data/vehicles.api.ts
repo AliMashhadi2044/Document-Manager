@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch } from '../../shared/api/client';
 import type { PageResult } from './base-data.api';
+import { usePageSize } from '../../shared/preferences/preferences';
 
 /**
  * خودروها — اطلاعات پایهٔ فاکتور سوخت.
@@ -33,13 +34,14 @@ export const vehicleKeys = {
 };
 
 export function useVehicles(page: number, search: string, vehicleTypeId = '', isActive = '') {
-  const query = new URLSearchParams({ page: String(page) });
+  const pageSize = usePageSize();
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (search) query.set('search', search);
   if (vehicleTypeId) query.set('vehicleTypeId', vehicleTypeId);
   if (isActive) query.set('isActive', isActive);
 
   return useQuery({
-    queryKey: vehicleKeys.list(page, search, vehicleTypeId, isActive),
+    queryKey: [...vehicleKeys.list(page, search, vehicleTypeId, isActive), pageSize],
     queryFn: () => apiFetch<PageResult<VehicleRow>>(`/base-data/vehicles?${query.toString()}`),
     placeholderData: (previous) => previous,
   });

@@ -25,6 +25,16 @@ async function bootstrap(): Promise<void> {
 
   app.use(cookieParser());
 
+  /*
+    پشت proxy، نشانی واقعی کاربر از `X-Forwarded-For` می‌آید.
+
+    عمداً پیش‌فرضش خاموش است: با روشن بودنِ بی‌مورد، هر کسی می‌تواند نشانی‌اش را
+    جعل کند و سقف نرخ را دور بزند.
+  */
+  if (config.get('TRUST_PROXY', { infer: true })) {
+    app.set('trust proxy', 1);
+  }
+
   // شمارنده کوئری: ابزار تشخیصی، فقط در محیط توسعه و فقط با متغیر محیطی صریح.
   if (isQueryCountEnabled()) {
     app.use(queryCountMiddleware);

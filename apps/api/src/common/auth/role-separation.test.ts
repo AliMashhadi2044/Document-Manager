@@ -169,7 +169,9 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       'AnalyticsController.exportNow',
       'AnalyticsController.queueExport',
       'AnalyticsController.saveView',
-      // خروج از نشست‌های خود کاربر و خواندن اعلان‌های خودش، کار هر کاربر واردشده است.
+      // تغییر رمز خود، خروج از نشست‌های خود و خواندن اعلان‌های خودش، کار هر کاربر
+      // واردشده است.
+      'AuthController.changePassword',
       'AuthController.logoutAll',
       'DocumentsController.sendBack',
       'FeedbackController.changeStatus',
@@ -240,6 +242,7 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       */
       'AttachmentsController.setRotations',
       'AttachmentsController.upload',
+      'AuthController.changePassword',
       'AuthController.logoutAll',
       'NotificationsController.markAllRead',
       'NotificationsController.markRead',
@@ -326,6 +329,7 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
 
     // هر افزوده‌ای به این فهرست باید یک تصمیم آگاهانه باشد، نه نتیجه فراموشی.
     expect(authenticatedOnly).toEqual([
+      'AuthController.changePassword',
       'AuthController.logoutAll',
       'AuthController.me',
       // شخصی‌سازی کاربر: مجوز گرفتن برای عوض کردن رنگ رابط معنایی نداشت، و دامنهٔ

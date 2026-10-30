@@ -5,6 +5,10 @@ import { Button } from '../shared/ui/button';
 import { Icon, type IconName } from '../shared/ui/icon';
 import { cn } from '../shared/ui/cn';
 import { usePreferences } from '../shared/preferences/preferences';
+import { ErrorBoundary } from '../shared/ui/error-boundary';
+import { buildHash, parseHash } from './routing';
+import { AccountPage } from '../features/account/account-page';
+import { SessionWarning } from '../features/account/session-warning';
 import { useLogout, type CurrentUser } from '../features/auth/auth.api';
 import { LookupManager } from '../features/base-data/lookup-manager';
 import { ChaptersView } from '../features/base-data/chapters-view';
@@ -36,6 +40,7 @@ type SectionKey =
   | 'report-gallery'
   | 'report-templates'
   | 'users'
+  | 'account'
   | 'overview'
   | 'lookups'
   | 'chapters'
@@ -209,6 +214,13 @@ const GROUPS: readonly SectionGroup[] = [
         permission: 'user:read',
       },
       {
+        // بدون مجوز: هر کاربری حسابِ خودش را دارد.
+        key: 'account',
+        titleFa: 'حساب من',
+        icon: 'settings',
+        description: 'تغییر رمز، ظاهر و شخصی‌سازی، و خروج از دستگاه‌های دیگر',
+      },
+      {
         key: 'overview',
         titleFa: 'وضعیت پروژه',
         icon: 'info',
@@ -244,8 +256,19 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
     .filter((item) => item.permission === undefined || user.permissions.includes(item.permission))
     .map((item) => item.key);
 
+  /*
+    اولویت با نشانی است، بعد پروفایل.
+
+    کسی که لینکِ «این سند را ببین» را باز می‌کند، باید همان سند را ببیند — نه
+    بخشی که دفعهٔ قبل باز گذاشته بود.
+  */
+  const initialRoute = useRef(parseHash(window.location.hash));
+
   const [section, setSection] = useState<SectionKey>(
-    () => validSection(prefs.lastSection, permitted) ?? 'documents',
+    () =>
+      validSection(initialRoute.current?.section ?? null, permitted) ??
+      validSection(prefs.lastSection, permitted) ??
+      'documents',
   );
 
   /*
@@ -255,7 +278,7 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
     ولی پس از نشستن، پیمایشِ خودِ کاربر نباید با هر بازخوانی به بخش ذخیره‌شده
     برگردد.
   */
-  const restored = useRef(false);
+  const restored = useRef(initialRoute.current !== null);
   useEffect(() => {
     if (restored.current) return;
     const stored = validSection(prefs.lastSection, permitted);
@@ -263,10 +286,16 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
     restored.current = true;
     setSection(stored);
   }, [prefs.lastSection, permitted]);
-  /** سندی که از اعلان باز می‌شود؛ تا پیش از مسیر‌یابی واقعی، همین کافی است. */
-  const [documentFromNotification, setDocumentFromNotification] = useState<string | null>(null);
+  /** سندی که از اعلان یا از نشانی باز می‌شود. */
+  const [documentFromNotification, setDocumentFromNotification] = useState<string | null>(
+    () => (initialRoute.current?.section === 'documents' ? initialRoute.current.id : null),
+  );
   const [sharedReportFromNotification, setSharedReportFromNotification] = useState<string | null>(
-    null,
+    () => (initialRoute.current?.section === 'reports' ? initialRoute.current.id : null),
+  );
+  /** سندِ بازِ جاری — فقط برای بازتاب در نشانی. */
+  const [openDocumentId, setOpenDocumentId] = useState<string | null>(
+    () => (initialRoute.current?.section === 'documents' ? initialRoute.current.id : null),
   );
   /** گزارشی که از ویترین «فهرست گزارش‌ها» انتخاب شده است. */
   const [datasetFromGallery, setDatasetFromGallery] = useState<string | null>(null);
@@ -297,10 +326,43 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
     setSection(key);
     setDrawerOpen(false);
     restored.current = true;
+    if (key !== 'documents') setOpenDocumentId(null);
     update((prev) => ({ ...prev, lastSection: key }));
     // بدون این، کاربری که وسط یک فهرست بلند بوده، بخش تازه را از وسطش می‌بیند.
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
+
+  /*
+    نشانی، آینهٔ وضعیت است نه منبعش.
+
+    نوشتنِ نشانی فقط وقتی انجام می‌شود که با وضعیت فرق داشته باشد؛ وگرنه هر
+    نوشتن یک `hashchange` می‌ساخت و آن هم دوباره وضعیت را می‌نوشت.
+  */
+  useEffect(() => {
+    const next = buildHash(section, section === 'documents' ? openDocumentId : null);
+    if (window.location.hash !== next) window.location.hash = next;
+  }, [section, openDocumentId]);
+
+  // دکمهٔ «برگشت» مرورگر، و لینکی که کاربر در همان برگه باز می‌کند.
+  useEffect(() => {
+    const onHashChange = (): void => {
+      const route = parseHash(window.location.hash);
+      if (!route) return;
+
+      const target = validSection(route.section, permitted);
+      if (target === null) return;
+
+      setSection(target);
+      if (target === 'documents') {
+        setOpenDocumentId(route.id);
+        setDocumentFromNotification(route.id);
+      }
+      if (target === 'reports' && route.id) setSharedReportFromNotification(route.id);
+    };
+
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, [permitted]);
 
   const navigation = (
     <nav aria-label="بخش‌های سامانه" className="flex-1 overflow-y-auto px-3 py-2">
@@ -453,11 +515,20 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
               : 'max-w-7xl',
           )}
         >
-          <div key={section} className="animate-[var(--animate-fade-in)]">
+          {/*
+            مرز خطا، با `key` روی بخش.
+
+            افتادنِ یک بخش نباید نوار کناری را هم ببرد: پوسته سرِ جایش می‌ماند و
+            `key` باعث می‌شود رفتن به بخش دیگر، مرز را از نو بسازد — وگرنه کاربر
+            در همان پیام خطا گیر می‌کرد.
+          */}
+          <ErrorBoundary key={section}>
+            <div className="animate-[var(--animate-fade-in)]">
             {section === 'documents' ? (
               <DocumentsPage
                 openDocumentId={documentFromNotification}
                 onOpenedDocument={() => setDocumentFromNotification(null)}
+                onOpenChange={setOpenDocumentId}
                 startCreating={createDocumentRequested}
                 onStartedCreating={() => setCreateDocumentRequested(false)}
               />
@@ -518,9 +589,14 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
             {section === 'signatories' ? <SignatoriesPage /> : null}
             {section === 'petty-cash' ? <PettyCashPage /> : null}
             {section === 'vendors' ? <VendorsPage /> : null}
-          </div>
+            {section === 'account' ? <AccountPage user={user} /> : null}
+            </div>
+          </ErrorBoundary>
         </main>
       </div>
+
+      {/* هشدار پایان نشست، بیرون از مرز خطا: باید حتی وقتی یک بخش افتاده هم بیاید. */}
+      <SessionWarning idleMinutes={user.sessionIdleMinutes} />
     </div>
   );
 }

@@ -28,11 +28,14 @@ export function DocumentsPage({
   /** درخواست بیرونی برای باز کردن مستقیم فرم ایجاد (از دکمه داشبورد). */
   startCreating = false,
   onStartedCreating,
+  /** سندِ باز عوض شد — پوسته با این، نشانی را به‌روز نگه می‌دارد. */
+  onOpenChange,
 }: {
   openDocumentId?: string | null;
   onOpenedDocument?: () => void;
   startCreating?: boolean;
   onStartedCreating?: () => void;
+  onOpenChange?: (documentId: string | null) => void;
 } = {}): JSX.Element {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -52,6 +55,11 @@ export function DocumentsPage({
       onOpenedDocument?.();
     }
   }, [openDocumentId, onOpenedDocument]);
+
+  // بازتاب در نشانی؛ خودِ صفحه همچنان مالک این وضعیت است.
+  useEffect(() => {
+    onOpenChange?.(selected);
+  }, [selected, onOpenChange]);
 
   useEffect(() => {
     if (!startCreating) return;
@@ -151,6 +159,7 @@ export function DocumentsPage({
       {creating ? <CreateDocumentForm onClose={() => setCreating(false)} /> : null}
 
       <DataTable
+        columnsPrefsKey="documents"
         columns={columns}
         rows={list.data?.items ?? []}
         rowKey={(row) => row.id}

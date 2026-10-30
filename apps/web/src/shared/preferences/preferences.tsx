@@ -59,6 +59,20 @@ function writeCache(prefs: UserPreferences): void {
   }
 }
 
+/**
+ * پاک کردن نسخهٔ موقت، هنگام خروج.
+ *
+ * روی دستگاه مشترک، بدون این، کاربر بعدی تا رسیدن پاسخ سرور تم و رنگ نفر قبل را
+ * می‌دید — و اگر سرور در دسترس نبود، همان‌طور می‌ماند.
+ */
+export function clearPreferencesCache(): void {
+  try {
+    window.localStorage.removeItem(CACHE_KEY);
+  } catch {
+    // ذخیره‌ساز مسدود؛ چیزی هم برای پاک کردن نبوده است.
+  }
+}
+
 interface PreferencesContextValue {
   readonly prefs: UserPreferences;
   /** تغییر ترجیح؛ با تابع، تا روی مقدار جاری بنشیند و نه روی عکسِ کهنه‌ای از آن. */
@@ -119,6 +133,33 @@ export function PreferencesProvider({ children }: { children: ReactNode }): JSX.
       });
   }, []);
 
+  /*
+    دو برگهٔ باز، ترجیح‌های هم را بازنویسی نکنند.
+
+    `PUT` کل سند را جایگزین می‌کند، پس برگه‌ای که از تغییر برگهٔ دیگر بی‌خبر است با
+    نوشتن بعدی‌اش آن را پاک می‌کرد. رویداد `storage` فقط در **برگه‌های دیگرِ** همان
+    مرورگر می‌آید و دقیقاً همین شکاف را می‌بندد.
+
+    دو مرورگر یا دو دستگاه همچنان «آخرین نویسنده برنده» می‌مانند؛ آنجا دو کاربرِ
+    هم‌زمانِ واقعی‌اند و ترجیحِ تازه‌تر همان است که باید بماند.
+  */
+  useEffect(() => {
+    const onStorage = (event: StorageEvent): void => {
+      if (event.key !== CACHE_KEY || event.newValue === null) return;
+      // تغییرِ در صفِ ارسالِ همین برگه، تازه‌تر از چیزی است که برگهٔ دیگر نوشته.
+      if (pending.current) return;
+
+      try {
+        setPrefs(parsePreferences(JSON.parse(event.newValue)));
+      } catch {
+        // محتوای خراب از برگهٔ دیگر؛ همان ترجیح جاری می‌ماند.
+      }
+    };
+
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   // بستن برگه یا رفتن به پشت‌زمینه در موبایل: آخرین تغییر باید برود.
   useEffect(() => {
     const onHide = (): void => flush();
@@ -157,6 +198,66 @@ export function useSyncPreferences(userId: string | null): void {
     if (userId === null) return;
     reload();
   }, [userId, reload]);
+}
+
+/**
+ * تعداد ردیف در هر صفحه.
+ *
+ * قلاب‌های فهرست خودشان این را می‌خوانند، نه صفحه‌ها: ترجیح کاربر باید در **همهٔ**
+ * فهرست‌ها اثر کند و وادار کردن هر صفحه به پاس دادنش، یعنی فهرستی که یادمان رفته.
+ */
+export function usePageSize(): number {
+  return usePreferences().prefs.pageSize;
+}
+
+/** فشردگی جدول‌ها. */
+export function useDensity(): 'comfortable' | 'compact' {
+  return usePreferences().prefs.density;
+}
+
+/**
+ * ستون‌های پنهانِ یک جدول، و راه عوض کردنشان.
+ *
+ * `key` نام همان جدول است؛ جدولی که کلید ندارد، ستون‌هایش قابل پنهان کردن نیست.
+ */
+export function useHiddenColumns(key: string | null): {
+  hidden: readonly string[];
+  toggle: (column: string) => void;
+  showAll: () => void;
+} {
+  const { prefs, update } = usePreferences();
+  const hidden = key === null ? [] : (prefs.hiddenColumns[key] ?? []);
+
+  const toggle = useCallback(
+    (column: string) => {
+      if (key === null) return;
+      update((prev) => {
+        const current = prev.hiddenColumns[key] ?? [];
+        const next = current.includes(column)
+          ? current.filter((item) => item !== column)
+          : [...current, column];
+
+        const hiddenColumns = { ...prev.hiddenColumns };
+        // جدولی که همهٔ ستون‌هایش دیده می‌شوند، کلیدی در پروفایل لازم ندارد.
+        if (next.length === 0) delete hiddenColumns[key];
+        else hiddenColumns[key] = next;
+
+        return { ...prev, hiddenColumns };
+      });
+    },
+    [key, update],
+  );
+
+  const showAll = useCallback(() => {
+    if (key === null) return;
+    update((prev) => {
+      const hiddenColumns = { ...prev.hiddenColumns };
+      delete hiddenColumns[key];
+      return { ...prev, hiddenColumns };
+    });
+  }, [key, update]);
+
+  return { hidden, toggle, showAll };
 }
 
 /** ترجیح یک فهرست انتخاب، و راه عوض کردنش. */

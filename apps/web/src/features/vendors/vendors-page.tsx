@@ -173,6 +173,7 @@ export function VendorsPage(): JSX.Element {
       ) : null}
 
       <DataTable
+        columnsPrefsKey="vendors"
         columns={columns}
         rows={list.data?.items ?? []}
         rowKey={(row) => row.id}

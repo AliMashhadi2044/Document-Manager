@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import type { Permission } from '@dm/shared';
 
-import { apiFetch, ApiError } from '../../shared/api/client';
+import { apiFetch, ApiError, onUnauthorized } from '../../shared/api/client';
+import { clearPreferencesCache } from '../../shared/preferences/preferences';
 
 export interface CurrentUser {
   readonly id: string;
@@ -9,6 +11,8 @@ export interface CurrentUser {
   readonly fullName: string;
   readonly roles: readonly string[];
   readonly permissions: readonly Permission[];
+  /** مهلت بی‌تحرکی نشست (دقیقه) — برای هشدار پیش از پایان نشست. */
+  readonly sessionIdleMinutes: number;
 }
 
 export const authKeys = {
@@ -33,6 +37,32 @@ export function useCurrentUser() {
     retry: false,
     staleTime: 60_000,
   });
+}
+
+/**
+ * پایان نشست را همان لحظه می‌بیند.
+ *
+ * `useCurrentUser` تا ۶۰ ثانیه کهنه نمی‌شود و با فوکوس پنجره هم بازخوانی نمی‌شود؛
+ * پس بدون این، کاربری که نشستش منقضی شده در برنامه می‌ماند و هر کارش خطا می‌دهد.
+ * خروجی `true` یعنی «نشست تمام شد»، تا صفحهٔ ورود بتواند دلیلش را بگوید — وگرنه
+ * کاربر فکر می‌کند سامانه او را بی‌دلیل بیرون انداخته.
+ */
+export function useSessionExpiry(): boolean {
+  const queryClient = useQueryClient();
+  const [expired, setExpired] = useState(false);
+
+  useEffect(
+    () =>
+      onUnauthorized(() => {
+        // کش کامل پاک می‌شود: دادهٔ کاربرِ قبلی نباید پشت صفحهٔ ورود بماند.
+        setExpired(true);
+        queryClient.setQueryData(authKeys.me, null);
+        queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' });
+      }),
+    [queryClient],
+  );
+
+  return expired;
 }
 
 export function useLogin() {
@@ -65,6 +95,9 @@ export function useLogout() {
       // بارگذاری دوباره تضمین می‌کند هیچ داده‌ای از کاربر قبلی — نه در کش، نه در
       // state کامپوننت‌ها و نه در blob فایل‌های باز شده — در حافظه نمی‌ماند.
       queryClient.clear();
+      // و نسخهٔ موقت ترجیح‌ها: روی دستگاه مشترک، تم و رنگ نفر قبل نباید به کاربر
+      // بعدی برسد.
+      clearPreferencesCache();
       window.location.assign('/');
     },
   });

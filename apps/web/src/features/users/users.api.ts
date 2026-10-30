@@ -3,6 +3,7 @@ import type { Permission, RoleKey } from '@dm/shared';
 
 import { apiFetch } from '../../shared/api/client';
 import type { PageResult } from '../base-data/base-data.api';
+import { usePageSize } from '../../shared/preferences/preferences';
 
 /**
  * مدیریت کاربران.
@@ -62,12 +63,13 @@ function useInvalidate(): () => void {
 }
 
 export function useUsersList(page: number, search: string, isActive: string) {
-  const query = new URLSearchParams({ page: String(page) });
+  const pageSize = usePageSize();
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (search) query.set('search', search);
   if (isActive) query.set('isActive', isActive);
 
   return useQuery({
-    queryKey: [...keys.all, 'list', page, search, isActive],
+    queryKey: [...keys.all, 'list', page, search, isActive, pageSize],
     queryFn: () => apiFetch<PageResult<UserRow>>(`/users?${query.toString()}`),
     placeholderData: (previous) => previous,
   });

@@ -224,6 +224,7 @@ export function ArchivePage({ user }: { user: CurrentUser }): JSX.Element {
       </div>
 
       <DataTable
+        columnsPrefsKey="archive"
         columns={columns}
         rows={inbox.data?.items ?? []}
         rowKey={(row) => row.id}

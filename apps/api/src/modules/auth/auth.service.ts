@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 
+import { passwordPolicyIssue } from '@dm/shared';
+
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AuditService } from '../../common/audit/audit.service';
 import { AppError } from '../../common/errors/app-error';
 import type { Env } from '../../common/config/env';
 import { SessionService, type IssuedSession } from './session.service';
@@ -12,7 +15,9 @@ export type SecurityEventType =
   | 'LOGIN_FAILED'
   | 'LOGIN_LOCKED'
   | 'LOGOUT'
-  | 'LOGOUT_ALL';
+  | 'LOGOUT_ALL'
+  | 'PASSWORD_CHANGED'
+  | 'PASSWORD_CHANGE_FAILED';
 
 export interface LoginContext {
   readonly ip: string | null;
@@ -27,6 +32,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly sessions: SessionService,
     private readonly config: ConfigService<Env, true>,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -80,6 +86,64 @@ export class AuthService {
     const count = await this.sessions.revokeAllForUser(userId);
     await this.recordEvent('LOGOUT_ALL', userId, null, context);
     return count;
+  }
+
+  /**
+   * تغییر رمز توسط خودِ کاربر.
+   *
+   * تا پیش از این تنها راهِ عوض کردن رمز، مدیر سامانه بود؛ یعنی رمز هر کاربر را
+   * همیشه یک نفر دیگر هم می‌دانست و کسی که رمزش را لو رفته می‌دید، تا رسیدن به
+   * مدیر کاری از دستش برنمی‌آمد.
+   *
+   * سه قاعده:
+   *  - رمز فعلی دوباره پرسیده می‌شود: نشستِ باز روی رایانهٔ رهاشده نباید برای
+   *    قفل کردنِ حساب صاحبش کافی باشد.
+   *  - همهٔ نشست‌ها بسته می‌شوند — نشست به رمز گره نخورده و بدون بستن، نشستِ
+   *    کسی که رمز قدیمی را دارد همچنان کار می‌کرد.
+   *  - و برای همین دستگاه نشستِ تازه صادر می‌شود، وگرنه کاربر با عوض کردن رمز
+   *    خودش را بیرون می‌انداخت.
+   */
+  async changeOwnPassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    context: LoginContext,
+  ): Promise<IssuedSession> {
+    const issue = passwordPolicyIssue(newPassword);
+    if (issue) throw AppError.validation(issue, [{ path: 'newPassword', message: issue }]);
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw AppError.unauthorized('نشست معتبر نیست');
+
+    const valid = await argon2.verify(user.passwordHash, currentPassword).catch(() => false);
+    if (!valid) {
+      await this.recordEvent('PASSWORD_CHANGE_FAILED', user.id, user.username, context);
+      throw AppError.unauthorized('رمز عبور فعلی نادرست است');
+    }
+
+    if (currentPassword === newPassword) {
+      throw AppError.conflict('SAME_PASSWORD', 'رمز تازه باید با رمز فعلی فرق داشته باشد');
+    }
+
+    const passwordHash = await AuthService.hashPassword(newPassword);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash, failedLoginCount: 0, lockedUntil: null },
+      });
+
+      // نه `before` و نه `after`: رمز داده‌ای نیست که در ردپا بنشیند.
+      await this.audit.record(
+        { actorId: userId, action: 'USER_PASSWORD_CHANGE', entityType: 'user', entityId: userId },
+        tx,
+      );
+    });
+
+    await this.sessions.revokeAllForUser(userId);
+    await this.recordEvent('PASSWORD_CHANGED', userId, user.username, context);
+
+    return this.sessions.issue(userId, context.ip, context.userAgent);
   }
 
   private async registerFailedAttempt(userId: string, current: number): Promise<void> {

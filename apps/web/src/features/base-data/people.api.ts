@@ -3,6 +3,7 @@ import type { SignatoryRoleKey } from '@dm/shared';
 
 import { apiFetch } from '../../shared/api/client';
 import type { PageResult } from './base-data.api';
+import { usePageSize } from '../../shared/preferences/preferences';
 
 /**
  * اشخاص سازمان: امضاکنندگان و تنخواه‌داران.
@@ -61,8 +62,8 @@ export interface PettyCashHolderInput {
 const signatoryKeys = { all: ['base-data', 'signatories'] as const };
 const holderKeys = { all: ['base-data', 'petty-cash-holders'] as const };
 
-function listQuery(page: number, search: string, isActive: string): string {
-  const query = new URLSearchParams({ page: String(page) });
+function listQuery(page: number, search: string, isActive: string, pageSize: number): string {
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (search) query.set('search', search);
   if (isActive) query.set('isActive', isActive);
   return query.toString();
@@ -71,10 +72,12 @@ function listQuery(page: number, search: string, isActive: string): string {
 // ───────────────────────── امضاکنندگان ─────────────────────────
 
 export function useSignatoriesList(page: number, search: string, isActive = '') {
+  const pageSize = usePageSize();
+
   return useQuery({
-    queryKey: [...signatoryKeys.all, 'list', page, search, isActive],
+    queryKey: [...signatoryKeys.all, 'list', page, search, isActive, pageSize],
     queryFn: () =>
-      apiFetch<PageResult<SignatoryRow>>(`/base-data/signatories?${listQuery(page, search, isActive)}`),
+      apiFetch<PageResult<SignatoryRow>>(`/base-data/signatories?${listQuery(page, search, isActive, pageSize)}`),
     placeholderData: (previous) => previous,
   });
 }
@@ -118,11 +121,13 @@ export function useDeleteSignatory() {
 // ───────────────────────── تنخواه‌داران ─────────────────────────
 
 export function usePettyCashHolders(page: number, search: string, isActive = '') {
+  const pageSize = usePageSize();
+
   return useQuery({
-    queryKey: [...holderKeys.all, 'list', page, search, isActive],
+    queryKey: [...holderKeys.all, 'list', page, search, isActive, pageSize],
     queryFn: () =>
       apiFetch<PageResult<PettyCashHolderRow>>(
-        `/base-data/petty-cash-holders?${listQuery(page, search, isActive)}`,
+        `/base-data/petty-cash-holders?${listQuery(page, search, isActive, pageSize)}`,
       ),
     placeholderData: (previous) => previous,
   });

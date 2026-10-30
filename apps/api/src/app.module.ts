@@ -4,6 +4,8 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { validateEnv } from './common/config/env';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { RateLimitGuard } from './common/throttle/rate-limit.guard';
+import { RetentionModule } from './common/retention/retention.module';
 import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
 import { BigIntSerializerInterceptor } from './common/interceptors/bigint-serializer.interceptor';
 import { IdempotencyInterceptor } from './common/idempotency/idempotency.interceptor';
@@ -37,6 +39,7 @@ import { HealthController } from './modules/health/health.controller';
     VendorsModule,
     NotificationsModule,
     PreferencesModule,
+    RetentionModule,
     DocumentsModule,
     FilesModule,
     FeedbackModule,
@@ -47,6 +50,9 @@ import { HealthController } from './modules/health/health.controller';
   controllers: [HealthController],
   providers: [
     // ترتیب مهم است: ابتدا نشست و CSRF، سپس مجوز.
+    // ترتیب مهم است: سقف نرخ پیش از هر کار دیگری، تا تلاش‌های پیاپی حتی به
+    // خواندن نشست از دیتابیس هم نرسند.
+    { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
     // ترتیب: ابتدا ضد تکرار (پیش از اجرای handler)، سپس سریالایز مبالغ.
