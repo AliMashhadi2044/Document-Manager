@@ -80,6 +80,13 @@ export interface LaidOutTable {
     readonly width: { unit: 'mm' | 'percent' | 'auto'; value?: number | undefined };
     readonly align: 'start' | 'center' | 'end';
     readonly isNumeric: boolean;
+    /**
+     * روی کاغذ نمی‌آید.
+     *
+     * در چیدمانِ `print` چنین ستونی اصلاً ساخته نشده است؛ این نشان برای چیدمانِ
+     * `screen` است، تا نمایش‌دهندهٔ صفحه هنگام چاپِ مرورگر خودش پنهانش کند.
+     */
+    readonly screenOnly: boolean;
   }[];
   readonly rows: readonly (readonly LaidOutCell[])[];
   /**
@@ -198,13 +205,51 @@ export interface LayoutOptions {
    * نمی‌شود و متن کاربر همان‌طور که هست می‌نشیند.
    */
   readonly textOverrides?: Readonly<Record<string, string>> | undefined;
+  /**
+   * این چیدمان برای **صفحه** است یا برای **کاغذ**.
+   *
+   * تنها فرقشان ستون‌های `screenOnly` است: روی صفحه هستند و روی کاغذ نه. حذف
+   * در همین‌جا و پیش از ساختِ چیدمان انجام می‌شود، پس ردیف جمع، ادغام خانه‌ها و
+   * ردیف‌های پرکننده همه با همان کدِ موجود برای ستون‌های واقعیِ همان خروجی حساب
+   * می‌شوند — نه با یک حذفِ بعدی در خروجی‌گیر که باید پهنای سلول‌ها را از نو
+   * بشمارد.
+   *
+   * پیش‌فرض `'screen'` است: خروجیِ کامل، و هر فراخوانِ موجود بدون تغییر همان را
+   * می‌گیرد.
+   */
+  readonly target?: 'screen' | 'print' | undefined;
+}
+
+/**
+ * قالب، آن‌طور که این خروجی می‌بیندش.
+ *
+ * برای کاغذ، ستون‌های «فقط صفحه» از جدول‌ها برداشته می‌شوند. جدولی که ستونی از
+ * دست نمی‌دهد، دست‌نخورده برمی‌گردد تا بی‌دلیل شیء تازه ساخته نشود.
+ */
+function templateForTarget(template: TemplateV1, target: 'screen' | 'print'): TemplateV1 {
+  if (target === 'screen') return template;
+
+  const strip = (blocks: readonly Block[]): Block[] =>
+    blocks.map((block) => {
+      if (block.type !== 'table') return block;
+      const columns = block.columns.filter((column) => !column.screenOnly);
+      return columns.length === block.columns.length ? block : { ...block, columns };
+    });
+
+  return {
+    ...template,
+    header: { ...template.header, blocks: strip(template.header.blocks) },
+    body: strip(template.body),
+    footer: { ...template.footer, blocks: strip(template.footer.blocks) },
+  };
 }
 
 export function layoutReport(
-  template: TemplateV1,
+  rawTemplate: TemplateV1,
   dataset: ReportDataset,
   options: LayoutOptions = {},
 ): LaidOutReport {
+  const template = templateForTarget(rawTemplate, options.target ?? 'screen');
   const scope = makeScope(dataset);
   const overrides = options.textOverrides ?? {};
 
@@ -531,6 +576,7 @@ function layoutTable(
       width: { unit: column.width.unit, value: column.width.value },
       align: column.align,
       isNumeric: column.format.kind === 'currency' || column.format.kind === 'integer',
+      screenOnly: column.screenOnly,
     })),
     rows,
     fillerRows,

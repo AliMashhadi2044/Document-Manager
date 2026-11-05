@@ -205,6 +205,8 @@ export class ReportsController {
       user,
       new Date(),
       body.textOverrides,
+      // کاغذ: ستون‌های «فقط صفحه» در این خروجی ساخته نمی‌شوند.
+      'print',
     );
 
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -265,6 +267,8 @@ export class ReportsController {
       user,
       new Date(),
       body.textOverrides,
+      // PDF از همان HTML چاپی ساخته می‌شود؛ پس همان چیدمان کاغذ.
+      'print',
     );
     const html = this.reports.renderHtml(result.report);
     const margins = result.report.page.margins;

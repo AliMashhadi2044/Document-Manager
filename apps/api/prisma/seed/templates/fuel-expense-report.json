@@ -187,6 +187,13 @@
         "type": "signatureRow",
         "blocks": [
           {
+            "id": "sign-procurement-lead",
+            "type": "signature",
+            "signatoryRoleKey": "PROCUREMENT_LEAD",
+            "align": "center",
+            "spaceMm": 18
+          },
+          {
             "id": "sign-admin-affairs-lead",
             "type": "signature",
             "signatoryRoleKey": "ADMIN_AFFAIRS_LEAD",

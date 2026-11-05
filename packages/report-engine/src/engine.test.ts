@@ -16,6 +16,7 @@ import {
   printableWidthMm,
   readPath,
   renderReportHtml,
+  tableWidthMm,
   templateV1Schema,
   validateTemplate,
   type Condition,
@@ -299,6 +300,9 @@ const MINIMAL_TEMPLATE: TemplateV1 = templateV1Schema.parse({
     },
   ],
 });
+
+/** شکل کمکیِ آزمون: جدولِ قالب پس از عبور از JSON. */
+type TableBlockLike = { columns: unknown[] };
 
 function datasetOf(rows: Record<string, unknown>[]): ReportDataset {
   return {
@@ -920,5 +924,112 @@ describe('ستون تکرارشونده', () => {
     expect(problems.map((problem) => problem.message)).toContain(
       'مسیر «column.key» فقط در ستون تکرارشونده معنا دارد',
     );
+  });
+});
+
+/**
+ * ستونی که روی صفحه هست و روی کاغذ نه.
+ *
+ * فرم‌های ریزهزینه شکل قانونیِ ثابتی دارند و ستون تازه در آن‌ها جا ندارد؛ ولی
+ * کسی که فرم را روی صفحه بررسی می‌کند به تاریخ صورت‌حساب نیاز دارد تا بفهمد هر
+ * ردیف کدام فاکتور است. ادعای این بخش این است که جداسازی در **چیدمان** انجام
+ * می‌شود: ستون پیش از ساخته شدن حذف می‌شود، پس پهنای ردیف جمع و ادغام خانه‌ها
+ * برای همان ستون‌هایی حساب می‌شود که واقعاً چاپ می‌شوند — نه با یک حذفِ بعدی در
+ * خروجی‌گیر که باید همهٔ آن شمارش‌ها را از نو بکند.
+ */
+describe('ستون فقط-صفحه', () => {
+  const WITH_SCREEN_ONLY: TemplateV1 = templateV1Schema.parse({
+    ...JSON.parse(JSON.stringify(MINIMAL_TEMPLATE)),
+    body: [
+      {
+        ...JSON.parse(JSON.stringify(MINIMAL_TEMPLATE.body[0])),
+        columns: [
+          ...JSON.parse(JSON.stringify(MINIMAL_TEMPLATE.body[0] as TableBlockLike)).columns.slice(
+            0,
+            2,
+          ),
+          {
+            key: 'invoiceDate',
+            titleFa: 'تاریخ صورت حساب',
+            width: { unit: 'mm', value: 22 },
+            align: 'center',
+            screenOnly: true,
+            value: { k: 'var', path: 'row.invoiceDate' },
+            format: { kind: 'jalaliDate', persianDigits: true, emptyText: '' },
+          },
+          ...JSON.parse(JSON.stringify(MINIMAL_TEMPLATE.body[0] as TableBlockLike)).columns.slice(2),
+        ],
+      },
+    ],
+  });
+
+  const rows = [
+    { index: 1, vendorName: 'الف', invoiceDate: '2026-10-04', goodsAmount: '1000', total: '1000' },
+  ];
+
+  function tableOf(target: 'screen' | 'print') {
+    const report = layoutReport(WITH_SCREEN_ONLY, datasetOf(rows), { target });
+    const table = report.body[0];
+    if (table?.kind !== 'table') throw new Error('جدول ساخته نشد');
+    return table;
+  }
+
+  it('روی صفحه هست، با مقدار قالب‌بندی‌شده', () => {
+    const table = tableOf('screen');
+    const keys = table.columns.map((column) => column.key);
+    expect(keys).toEqual(['rowNo', 'name', 'invoiceDate', 'goods', 'total']);
+
+    const index = keys.indexOf('invoiceDate');
+    expect(table.columns[index]?.screenOnly).toBe(true);
+    // تاریخ میلادیِ داده، شمسیِ فارسی روی صفحه.
+    expect(table.rows[0]?.[index]?.text).toBe('۱۴۰۵/۰۷/۱۲');
+  });
+
+  it('روی کاغذ، ستون اصلاً ساخته نمی‌شود', () => {
+    const table = tableOf('print');
+    expect(table.columns.map((column) => column.key)).toEqual([
+      'rowNo',
+      'name',
+      'goods',
+      'total',
+    ]);
+    // هیچ ردیفی هم خانهٔ اضافه ندارد — وگرنه جدول یک ستون کج می‌شد.
+    expect(table.rows[0]).toHaveLength(4);
+    expect(table.fillerRows[0]).toHaveLength(4);
+  });
+
+  /*
+    مهم‌ترین ادعا.
+
+    برچسب «جمع کل» ستون‌های ابتدایی را با هم می‌گیرد. اگر ستونِ فقط-صفحه بعد از
+    ساختِ چیدمان حذف می‌شد، این پهنا یکی بیشتر از ستون‌های موجود می‌ماند و کل
+    ردیف جمع یک خانه کج می‌افتاد.
+  */
+  it('پهنای برچسب جمع، در هر خروجی با ستون‌های همان خروجی می‌خواند', () => {
+    const screen = tableOf('screen');
+    const print = tableOf('print');
+
+    expect(screen.totalsLabelSpan).toBe(print.totalsLabelSpan + 1);
+    expect(screen.totals).toHaveLength(screen.columns.length);
+    expect(print.totals).toHaveLength(print.columns.length);
+  });
+
+  it('پیش‌فرض، چیدمانِ صفحه است', () => {
+    const table = layoutReport(WITH_SCREEN_ONLY, datasetOf(rows)).body[0];
+    if (table?.kind !== 'table') throw new Error('جدول ساخته نشد');
+    expect(table.columns.map((column) => column.key)).toContain('invoiceDate');
+  });
+
+  /*
+    عرض کاغذ.
+
+    ستونی که چاپ نمی‌شود نباید از بودجهٔ عرضِ صفحه بخورد؛ وگرنه افزودن یک ستونِ
+    کمکی به فرمی که تا لبهٔ کاغذ پر است، آن را «بیش از عرض قابل چاپ» می‌کرد.
+  */
+  it('در جمع عرض ستون‌ها شمرده نمی‌شود', () => {
+    const body = WITH_SCREEN_ONLY.body[0];
+    const plain = MINIMAL_TEMPLATE.body[0];
+    if (body?.type !== 'table' || plain?.type !== 'table') throw new Error('جدول نیست');
+    expect(tableWidthMm(body)).toBe(tableWidthMm(plain));
   });
 });

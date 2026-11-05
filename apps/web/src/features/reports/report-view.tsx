@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 import type { LaidOutReportDto, ReportBlock, ReportTableBlock } from './reports.api';
 
@@ -143,6 +143,7 @@ function ReportTable({
           {table.columns.map((column) => (
             <col
               key={column.key}
+              className={column.screenOnly ? 'no-print' : undefined}
               style={
                 column.width.unit === 'auto' || column.width.value === undefined
                   ? undefined
@@ -171,7 +172,9 @@ function ReportTable({
               <th
                 key={column.key}
                 rowSpan={hasSubtitles && column.subtitleFa === null ? 2 : undefined}
-                className="border border-border px-1.5 py-1 text-center font-bold"
+                className={`border border-border px-1.5 py-1 text-center font-bold${
+                  column.screenOnly ? ' no-print' : ''
+                }`}
               >
                 {column.titleFa}
               </th>
@@ -192,7 +195,9 @@ function ReportTable({
                 .map((column) => (
                   <th
                     key={`${column.key}-subtitle`}
-                    className="border border-border px-1.5 py-1 text-center font-bold"
+                    className={`border border-border px-1.5 py-1 text-center font-bold${
+                      column.screenOnly ? ' no-print' : ''
+                    }`}
                   >
                     {column.subtitleFa}
                   </th>
@@ -208,11 +213,12 @@ function ReportTable({
                 {row.map((cell, cellIndex) => (
                   <td
                     key={table.columns[cellIndex]?.key ?? cellIndex}
-                    className={
+                    className={[
                       cell.extraLines.length === 0
                         ? `border border-border px-1.5 py-1 align-middle ${alignClass(cell.align)}`
-                        : `border border-border align-middle ${alignClass(cell.align)}`
-                    }
+                        : `border border-border align-middle ${alignClass(cell.align)}`,
+                      table.columns[cellIndex]?.screenOnly ? 'no-print' : '',
+                    ].join(' ')}
                   >
                     {/*
                       سلولی که دو مقدار دارد، با یک خط افقی به دو نیمه تقسیم
@@ -257,7 +263,9 @@ function ReportTable({
               {row.map((cell, cellIndex) => (
                 <td
                   key={table.columns[cellIndex]?.key ?? cellIndex}
-                  className={`h-8 border border-border px-1.5 py-1 ${alignClass(cell.align)}`}
+                  className={`h-8 border border-border px-1.5 py-1 ${alignClass(cell.align)}${
+                    table.columns[cellIndex]?.screenOnly ? ' no-print' : ''
+                  }`}
                 >
                   {cell.text}
                 </td>
@@ -281,25 +289,16 @@ function ReportTable({
               */}
               {table.totals.map((cell, index) => {
                 if (table.totalsLabel === null) {
-                  return (
-                    <td
-                      key={table.columns[index]?.key ?? index}
-                      className={`border border-border px-1.5 py-1 ${alignClass(cell.align)}`}
-                    >
-                      {cell.text}
-                    </td>
-                  );
+                  return spannedCell(table, index, 1, cell.text, alignClass(cell.align));
                 }
 
                 if (index === 0) {
-                  return (
-                    <td
-                      key={table.columns[index]?.key ?? index}
-                      colSpan={table.totalsLabelSpan}
-                      className="border border-border px-1.5 py-1 text-center"
-                    >
-                      {table.totalsLabel}
-                    </td>
+                  return spannedCell(
+                    table,
+                    0,
+                    table.totalsLabelSpan,
+                    table.totalsLabel,
+                    'text-center',
                   );
                 }
 
@@ -312,15 +311,7 @@ function ReportTable({
                 const span = table.totalsSpans[index] ?? 1;
                 if (span === 0) return null;
 
-                return (
-                  <td
-                    key={table.columns[index]?.key ?? index}
-                    colSpan={span > 1 ? span : undefined}
-                    className={`border border-border px-1.5 py-1 ${alignClass(cell.align)}`}
-                  >
-                    {cell.text}
-                  </td>
-                );
+                return spannedCell(table, index, span, cell.text, alignClass(cell.align));
               })}
               {hasActions ? <td className="no-print border border-border" /> : null}
             </tr>
@@ -328,6 +319,60 @@ function ReportTable({
         ) : null}
       </table>
     </div>
+  );
+}
+
+/**
+ * یک خانهٔ ردیف جمع، که ممکن است چند ستون را با هم بگیرد.
+ *
+ * چرا این‌قدر دست‌وپا برای یک `<td>`: ستون‌های «فقط صفحه» روی کاغذ وجود ندارند،
+ * ولی `colSpan` یک ویژگی HTML است و با CSS عوض نمی‌شود. خانه‌ای که روی صفحه سه
+ * ستون را می‌گیرد، روی کاغذی که یکی از آن سه را ندارد، یک ستون پهن‌تر از بقیهٔ
+ * ردیف‌ها می‌افتد و کل جدول کج می‌شود.
+ *
+ * پس وقتی — و فقط وقتی — پوشش این خانه شامل ستونی «فقط صفحه» باشد، دو خانه
+ * ساخته می‌شود: یکی برای صفحه و یکی برای کاغذ، هر کدام با `colSpan` خودش. در
+ * حالت معمول، همان یک خانهٔ همیشگی.
+ *
+ * خودِ چاپ سرور (HTML و PDF) این حساب‌ها را ندارد: چیدمانش از اول بدون آن ستون‌ها
+ * ساخته شده. این فقط برای چاپِ مرورگر از همین صفحه است.
+ */
+function spannedCell(
+  table: ReportTableBlock,
+  index: number,
+  span: number,
+  text: string,
+  align: string,
+): JSX.Element {
+  const key = table.columns[index]?.key ?? index;
+  const className = `border border-border px-1.5 py-1 ${align}`;
+
+  const hidden = table.columns
+    .slice(index, index + span)
+    .filter((column) => column.screenOnly).length;
+
+  if (hidden === 0) {
+    return (
+      <td key={key} colSpan={span > 1 ? span : undefined} className={className}>
+        {text}
+      </td>
+    );
+  }
+
+  // تمامِ پوشش، ستون «فقط صفحه» بود: روی کاغذ خانه‌ای نمی‌ماند.
+  const printSpan = span - hidden;
+
+  return (
+    <Fragment key={key}>
+      <td colSpan={span > 1 ? span : undefined} className={`${className} no-print`}>
+        {text}
+      </td>
+      {printSpan > 0 ? (
+        <td colSpan={printSpan > 1 ? printSpan : undefined} className={`${className} print-only`}>
+          {text}
+        </td>
+      ) : null}
+    </Fragment>
   );
 }
 

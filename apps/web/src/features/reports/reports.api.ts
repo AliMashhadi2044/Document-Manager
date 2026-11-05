@@ -26,6 +26,8 @@ export interface ReportTableBlock {
     readonly width: { readonly unit: 'mm' | 'percent' | 'auto'; readonly value?: number };
     readonly align: 'start' | 'center' | 'end';
     readonly isNumeric: boolean;
+    /** روی صفحه هست و روی کاغذ نه — با `no-print` از چاپ مرورگر بیرون می‌ماند. */
+    readonly screenOnly: boolean;
   }[];
   readonly rows: readonly (readonly ReportCell[])[];
   /** ردیف‌های خالیِ فرم چاپی — فقط شمارهٔ ردیف دارند. */

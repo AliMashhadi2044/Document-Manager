@@ -10,7 +10,8 @@ import { gotoSection, login, pickOption, toAsciiDigits, unique } from './helpers
  *  ۱. ستون‌های فصل از **اطلاعات پایه** می‌آیند، با سرستون دوطبقه: عنوان بالا، کد پایین.
  *  ۲. مبلغ هر فاکتور فقط زیر فصلِ خودش می‌نشیند و خانهٔ فصل دیگر خالی می‌ماند.
  *  ۳. شرح هر ردیف ویرایش‌شدنی است و شرح خودِ فاکتور را عوض نمی‌کند.
- *  ۴. ستون تیکِ ذی‌نفع فقط در فرم جاری است و پرداخت تنخواه تیک نمی‌گیرد.
+ *  ۴. ستون «پرداخت به» فقط در فرم جاری است و مقصد پرداخت را **با واژه** می‌نویسد.
+ *  ۵. تاریخ صورت‌حساب روی صفحه هست و روی کاغذ نه.
  *
  * دو سند لازم است و نه یکی: یک سند فقط فاکتورهای **یک گروه بودجه** را می‌پذیرد، پس
  * عمرانی و جاری نمی‌توانند در یک سند کنار هم باشند.
@@ -204,12 +205,37 @@ test.describe('فرم ریزهزینه', () => {
       .first()
       .locator('th')
       .allTextContents();
-    expect(currentHeaders.join('|')).toContain('پرداخت ذی‌نفع');
+    expect(currentHeaders.join('|')).toContain('پرداخت به');
+    // خانهٔ تیکِ قبلی برنگردد: واژه جایش را گرفته است.
+    expect(currentHeaders.join('|')).not.toContain('پرداخت ذی‌نفع');
 
-    // پرداخت تنخواه است، پس خانهٔ تیک خالی می‌ماند.
-    const tickIndex = currentHeaders.indexOf('پرداخت ذی‌نفع');
+    /*
+      مقصد پرداخت، با واژه.
+
+      پیش از این یک خانهٔ تیک بود و همین ردیف — که از تنخواهِ کارپرداز پرداخت
+      شده — خانه‌اش **خالی** می‌ماند؛ یعنی فرم دربارهٔ مقصد پول چیزی نمی‌گفت و
+      خواننده نمی‌دانست خالی بودنش «کارپرداز» است یا «قبض» یا «هنوز معلوم نیست».
+    */
+    const payeeIndex = currentHeaders.indexOf('پرداخت به');
     const paperRow = current.locator('tbody tr').filter({ hasText: 'کاغذ و لوازم' });
-    expect((await paperRow.locator('td').nth(tickIndex).innerText()).trim()).toBe('');
+    expect((await paperRow.locator('td').nth(payeeIndex).innerText()).trim()).toBe('کارپرداز');
+
+    /*
+      تاریخ صورت‌حساب: روی صفحه هست، روی کاغذ نه.
+
+      فرم شکل قانونیِ ثابتی دارد و ستون تازه در آن جا ندارد؛ ولی کسی که فرم را
+      روی صفحه بررسی می‌کند باید بفهمد هر ردیف کدام فاکتور است. نشانِ `no-print`
+      همان چیزی است که این ستون را از چاپِ مرورگر بیرون می‌برد (خروجی HTML و PDF
+      سرور هم چیدمان جداگانهٔ خودشان را دارند و ستون در آن‌ها ساخته نمی‌شود).
+    */
+    const dateIndex = currentHeaders.indexOf('تاریخ صورت حساب');
+    expect(dateIndex).toBeGreaterThan(0);
+    expect(toAsciiDigits(await paperRow.locator('td').nth(dateIndex).innerText()).trim()).toBe(
+      '1405/07/12',
+    );
+    await expect(
+      current.locator('thead tr').first().locator('th').nth(dateIndex),
+    ).toHaveClass(/no-print/);
 
     /*
       کد فصل، **کد** است و نه مبلغ.

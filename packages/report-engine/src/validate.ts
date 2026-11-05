@@ -52,6 +52,8 @@ export function printableWidthMm(page: TemplateV1['page']): number {
  */
 export function tableWidthMm(block: TableBlock): number {
   return block.columns.reduce((total, column) => {
+    // ستونی که چاپ نمی‌شود، عرضِ کاغذ را هم نمی‌خورد.
+    if (column.screenOnly) return total;
     if (column.width.unit !== 'mm' || column.width.value === undefined) return total;
     // ستونِ تکرارشونده در **بدترین حالتش** شمرده می‌شود؛ عرضِ اعلام‌شده، عرض یکی
     // از ستون‌هایی است که می‌سازد.

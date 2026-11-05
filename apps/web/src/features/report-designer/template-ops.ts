@@ -249,6 +249,8 @@ export function newBlock(type: Block['type'], id: string, firstCollection: strin
             align: 'center',
             // ستون شماره: ردیف‌های خالیِ فرم هم شماره می‌گیرند.
             rowNumber: true,
+            // ستون تازه روی کاغذ هم می‌آید؛ «فقط صفحه» یک انتخاب صریح است.
+            screenOnly: false,
             value: { k: 'var', path: 'row.index' },
             format: INTEGER_FORMAT,
           },
@@ -291,6 +293,7 @@ export function newColumn(key: string): TableColumn {
     width: { unit: 'mm', value: 20 },
     align: 'start',
     rowNumber: false,
+    screenOnly: false,
     value: { k: 'const', type: 'text', v: '' },
     format: TEXT_FORMAT,
   };

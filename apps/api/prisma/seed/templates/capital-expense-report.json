@@ -134,6 +134,27 @@
           }
         },
         {
+          "key": "invoiceDate",
+          "titleFa": "تاریخ صورت حساب",
+          "width": {
+            "unit": "mm",
+            "value": 22
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.invoiceDate"
+          },
+          "format": {
+            "kind": "jalaliDate",
+            "persianDigits": true,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          },
+          "screenOnly": true
+        },
+        {
           "key": "chapter",
           "titleFa": "فصل",
           "repeatFor": {

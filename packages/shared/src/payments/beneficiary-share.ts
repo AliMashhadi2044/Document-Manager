@@ -21,3 +21,36 @@ export function beneficiaryShareKind(methodKind: string | null): BeneficiaryShar
   if (methodKind === 'SPLIT') return 'PARTIAL';
   return 'NONE';
 }
+
+/**
+ * **به کی پرداخت شد** — همان ستونی که روی فرم ریزهزینه می‌نشیند.
+ *
+ * چرا این، جدا از `beneficiaryShareKind`: آن تابع یک پرسش بله/خیر/جزئی را جواب
+ * می‌دهد («سهم ذی‌نفع چقدر بود؟») و در جوابش `PETTY_CASH` و `BILL` و «هنوز روش
+ * پرداخت ندارد» هر سه `NONE` می‌شوند. برای ستونی که باید **بنویسد** پول به کجا
+ * رفت، این سه یکی نیستند: دو تایشان دو مقصد متفاوت‌اند و سومی هیچ مقصدی نیست.
+ *
+ * برچسب‌ها اینجا هستند و نه در قالب، چون واژه‌ها خودِ دامنه‌اند — مثل عنوان فصل و
+ * نام فروشنده که آن‌ها هم آماده به گزارش می‌رسند. گذاشتنشان در قالب یعنی یک `if`
+ * چهارطبقه در JSON که هر فرم تازه باید از نو بنویسدش.
+ *
+ * فهرست عمداً از `PAYMENT_METHOD_KIND_LABELS` جدا است: آنجا «حساب ذی‌نفع» و
+ * «کارپرداز / تنخواه» نوشته می‌شود چون کاربر دارد یک روش پرداخت را **انتخاب**
+ * می‌کند؛ اینجا یک خانهٔ باریک روی کاغذ است و کوتاه‌ترین واژهٔ درست را می‌خواهد.
+ */
+const PAYEE_TITLES: Record<string, string> = {
+  BENEFICIARY_ACCOUNT: 'ذی‌نفع',
+  PETTY_CASH: 'کارپرداز',
+  SPLIT: 'کارپرداز و ذی‌نفع',
+  BILL: 'قبض',
+};
+
+/**
+ * @param methodKind مقدار `invoice_payments.method_kind`.
+ * @returns عنوان مقصد پرداخت؛ رشتهٔ خالی یعنی فاکتور هنوز روش پرداخت ندارد —
+ *   خانه روی فرم **خالی** می‌ماند و نه «نامشخص»، چون فرم جای حدس زدن نیست.
+ */
+export function paymentPayeeTitle(methodKind: string | null): string {
+  if (methodKind === null) return '';
+  return PAYEE_TITLES[methodKind] ?? '';
+}

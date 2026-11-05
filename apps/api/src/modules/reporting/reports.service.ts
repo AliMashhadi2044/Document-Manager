@@ -208,6 +208,8 @@ export class ReportsService {
     generatedAt = new Date(),
     /** متن‌های سربرگ که کاربر برای **همین خروجی** عوض کرده است. */
     textOverrides?: Readonly<Record<string, string>>,
+    /** `'print'` ستون‌های «فقط صفحه» را نمی‌سازد؛ برای HTML و PDF چاپی. */
+    layoutTarget: 'screen' | 'print' = 'screen',
   ): Promise<ReportRunResult> {
     const { definitionId, versionId, template } = await this.publishedTemplate(reportTypeKey);
     return this.execute(
@@ -217,6 +219,7 @@ export class ReportsService {
       user,
       generatedAt,
       textOverrides,
+      layoutTarget,
     );
   }
 
@@ -295,6 +298,13 @@ export class ReportsService {
     user: AuthenticatedUser,
     generatedAt: Date,
     textOverrides?: Readonly<Record<string, string>>,
+    /**
+     * این خروجی روی **کاغذ** می‌رود یا روی **صفحه**.
+     *
+     * ستون‌های «فقط صفحه» در چیدمانِ کاغذ ساخته نمی‌شوند. `outputFormat` این را
+     * نمی‌گوید: پیش‌نمایشِ صفحه هم `HTML` است، پس تفکیک باید جدا بیاید.
+     */
+    layoutTarget: 'screen' | 'print' = 'screen',
   ): Promise<ReportRunResult> {
     const started = Date.now();
 
@@ -317,7 +327,10 @@ export class ReportsService {
       عوض کردن قالب یعنی عوض کردن همهٔ گزارش‌های بعدی برای یک بار نیاز؛ اینجا
       تغییر به همین اجرا محدود است و قالب دست‌نخورده می‌ماند.
     */
-    const report = layoutReport(source.template, dataset, { textOverrides });
+    const report = layoutReport(source.template, dataset, {
+      textOverrides,
+      target: layoutTarget,
+    });
 
     /*
       ردیف‌های گزارش از **مجموعهٔ همان قالب** خوانده می‌شوند، نه از یک کلید ثابت.

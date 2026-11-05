@@ -118,7 +118,7 @@
           "titleFa": "شرح",
           "width": {
             "unit": "mm",
-            "value": 44
+            "value": 38
           },
           "align": "start",
           "value": {
@@ -132,6 +132,27 @@
             "decimals": 0,
             "emptyText": ""
           }
+        },
+        {
+          "key": "invoiceDate",
+          "titleFa": "تاریخ صورت حساب",
+          "width": {
+            "unit": "mm",
+            "value": 22
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.invoiceDate"
+          },
+          "format": {
+            "kind": "jalaliDate",
+            "persianDigits": true,
+            "thousandSeparator": false,
+            "decimals": 0,
+            "emptyText": ""
+          },
+          "screenOnly": true
         },
         {
           "key": "chapter",
@@ -203,63 +224,16 @@
           }
         },
         {
-          "key": "beneficiary",
-          "titleFa": "پرداخت ذی‌نفع",
+          "key": "payee",
+          "titleFa": "پرداخت به",
           "width": {
             "unit": "mm",
-            "value": 14
+            "value": 20
           },
           "align": "center",
           "value": {
-            "k": "if",
-            "cond": {
-              "k": "cmp",
-              "op": "eq",
-              "args": [
-                {
-                  "k": "var",
-                  "path": "row.beneficiaryShare"
-                },
-                {
-                  "k": "const",
-                  "type": "text",
-                  "v": "FULL"
-                }
-              ]
-            },
-            "then": {
-              "k": "const",
-              "type": "text",
-              "v": "✓"
-            },
-            "else": {
-              "k": "if",
-              "cond": {
-                "k": "cmp",
-                "op": "eq",
-                "args": [
-                  {
-                    "k": "var",
-                    "path": "row.beneficiaryShare"
-                  },
-                  {
-                    "k": "const",
-                    "type": "text",
-                    "v": "PARTIAL"
-                  }
-                ]
-              },
-              "then": {
-                "k": "const",
-                "type": "text",
-                "v": "✓ جزئی"
-              },
-              "else": {
-                "k": "const",
-                "type": "text",
-                "v": ""
-              }
-            }
+            "k": "var",
+            "path": "row.payeeTitle"
           },
           "format": {
             "kind": "text",

@@ -6,6 +6,7 @@ import {
   PERSON_TYPE_LABELS,
   aggregateByVendor,
   beneficiaryShareKind,
+  paymentPayeeTitle,
   groupBeneficiaries,
   type BeneficiaryInvoiceInput,
   isoDateToJalali,
@@ -290,7 +291,25 @@ export class DatasetService {
           chapterTitle: invoice.chapterTitleSnapshot,
           chapterCode: invoice.chapterCodeSnapshot ?? '',
           vendorName: invoice.vendorSnapshot?.name ?? '',
+          /*
+            تاریخ صورت‌حساب — روی صفحه، نه روی کاغذ.
+
+            فرم ریزهزینه شکل قانونی ثابتی دارد و ستون تازه در آن جا نمی‌شود؛ ولی
+            کسی که فرم را روی صفحه بررسی می‌کند باید بفهمد هر ردیف کدام فاکتور
+            است، و شرحِ ردیف به‌تنهایی این را نمی‌گوید (دو فاکتور از یک فروشنده
+            می‌توانند شرح یکسان داشته باشند). کدام خروجی ستون را دارد، در قالب
+            تعیین می‌شود و نه اینجا: داده همیشه هست.
+          */
+          invoiceDate: invoice.invoiceDate.toISOString().slice(0, 10),
           beneficiaryShare: beneficiaryShareKind(invoice.payment?.methodKind ?? null),
+          /*
+            «پرداخت به» — جانشین خانهٔ تیکِ ذی‌نفع.
+
+            تیک فقط می‌توانست بگوید «به ذی‌نفع؟ بله/جزئی/نه»، و در «نه» دو مقصدِ
+            متفاوت (کارپرداز و قبض) و «هنوز روش پرداخت ندارد» یکی می‌شدند. ستونی
+            که باید بنویسد پول به کجا رفت، به واژه نیاز دارد و نه به علامت.
+          */
+          payeeTitle: paymentPayeeTitle(invoice.payment?.methodKind ?? null),
           total: invoice.totalAmount.toString(),
         }));
 
