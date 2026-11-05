@@ -13,7 +13,7 @@ import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
 import { formatServerMessage, toPersianDigits } from '../../shared/format/money';
 import { useQuery } from '@tanstack/react-query';
-import type { InvoiceDefaults } from '@dm/shared';
+import { parseInvoiceDefaults, type InvoiceDefaults } from '@dm/shared';
 
 import { apiFetch } from '../../shared/api/client';
 import { useCurrentUser } from '../auth/auth.api';
@@ -387,7 +387,7 @@ function ChapterDialog({
 function InvoiceDefaultsCard({ canWrite }: { canWrite: boolean }): JSX.Element | null {
   const bootstrap = useQuery({
     queryKey: ['base-data', 'bootstrap'],
-    queryFn: () => apiFetch<{ invoiceDefaults: InvoiceDefaults }>('/base-data/bootstrap'),
+    queryFn: () => apiFetch<{ invoiceDefaults?: unknown }>('/base-data/bootstrap'),
     staleTime: 5 * 60_000,
   });
   const save = useSetInvoiceDefaults();
@@ -396,11 +396,20 @@ function InvoiceDefaultsCard({ canWrite }: { canWrite: boolean }): JSX.Element |
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /*
+    پاسخ سرور **خوانده** می‌شود، نه باور.
+
+    سرویسی که هنوز ارتقا نیافته این کلید را اصلاً نمی‌فرستد؛ نشاندن مستقیمِ آن
+    در حالت، `undefined` می‌گذاشت و رندر بعدی روی `taxMode` می‌افتاد — یعنی کل
+    صفحهٔ فصل‌ها با یک کلیدِ نیامده از کار می‌افتاد (مرز خطا گرفتش، ولی کاربر
+    صفحه‌اش را از دست می‌داد). `parseInvoiceDefaults` هر ورودی‌ای را به مقدار
+    معتبر برمی‌گرداند.
+  */
   useEffect(() => {
-    if (bootstrap.data) setDraft(bootstrap.data.invoiceDefaults);
+    if (bootstrap.data) setDraft(parseInvoiceDefaults(bootstrap.data.invoiceDefaults));
   }, [bootstrap.data]);
 
-  if (!canWrite || draft === null) return null;
+  if (!canWrite || !draft) return null;
 
   const percentMode = draft.taxMode === 'PERCENT';
 
