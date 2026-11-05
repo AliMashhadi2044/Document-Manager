@@ -540,6 +540,20 @@ export function CreateInvoiceForm({
       return;
     }
 
+    /*
+      روش پرداخت الزامی است.
+
+      پیامِ جدا و نه درهم با «اطلاعات فرم کامل نیست»: کاربری که فرمی با بیست
+      فیلد پر کرده باید بداند **کدام** فیلد مانده، وگرنه باید همه را از نو
+      بگردد. سرور هم مستقل همین را رد می‌کند؛ این یکی برای آن است که کاربر
+      پاسخ را همان‌جا و به فارسی ببیند.
+    */
+    const paymentPayload = paymentToPayload(payment);
+    if (paymentPayload === null) {
+      setMessage('روش پرداخت را انتخاب کنید.');
+      return;
+    }
+
     const payload: CreateInvoicePayload = {
       chapterId,
       invoiceTypeId,
@@ -549,7 +563,7 @@ export function CreateInvoiceForm({
       description: description.trim(),
       notes: notes.trim() || null,
       details,
-      payment: paymentToPayload(payment),
+      payment: paymentPayload,
       // فقط برای انشعابات معنا دارد؛ بقیه خانواده‌ها هیچ‌وقت تکراری اعلام نمی‌شوند.
       acknowledgeDuplicate: kind === 'UTILITY' ? utilityDraft.acknowledgeDuplicate : false,
     };

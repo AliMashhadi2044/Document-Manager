@@ -29,6 +29,7 @@ export interface CreateInvoiceInput {
   readonly notes: string | null;
   /** ساختار ردیف‌ها، وابسته به خانواده فاکتور (فاز ۴). */
   readonly details: InvoiceDetailsBody;
+  /** روش پرداخت — الزامی؛ فاکتور بدون مقصد پرداخت ثبت نمی‌شود. */
   readonly payment: {
     readonly paymentMethodId: string;
     readonly vendorBankAccountId: string | null;
@@ -41,7 +42,7 @@ export interface CreateInvoiceInput {
     readonly beneficiaryAmount: string | null;
     readonly pettyCashAmount: string | null;
     readonly notes: string | null;
-  } | null;
+  };
   /** تأیید صریح ثبت با وجود هشدار تکرار (فقط انشعابات). */
   readonly acknowledgeDuplicate?: boolean;
 }
@@ -267,7 +268,7 @@ export class InvoicesService {
                 totalAmount: item.totalAmount,
               })),
             },
-            ...(paymentData ? { payment: { create: paymentData } } : {}),
+            payment: { create: paymentData },
           },
           // شناسه ردیف‌ها لازم است: ردیف تاریخ سوخت به ردیف مالی خودش گره می‌خورد.
           include: { items: { select: { id: true, rowNo: true } } },
@@ -573,7 +574,7 @@ export class InvoicesService {
                 totalAmount: item.totalAmount,
               })),
             },
-            ...(paymentData ? { payment: { create: paymentData } } : {}),
+            payment: { create: paymentData },
           },
           include: { items: { select: { id: true, rowNo: true } } },
         });
@@ -686,9 +687,7 @@ export class InvoicesService {
     vendorId: string | null,
     /** مبلغ کل همین فاکتور؛ مرجع تقسیم در پرداخت ترکیبی. */
     totalAmount: bigint,
-  ): Promise<Prisma.InvoicePaymentCreateWithoutInvoiceInput | null> {
-    if (!input.payment) return null;
-
+  ): Promise<Prisma.InvoicePaymentCreateWithoutInvoiceInput> {
     const method = await this.prisma.paymentMethod.findUnique({
       where: { id: input.payment.paymentMethodId },
     });

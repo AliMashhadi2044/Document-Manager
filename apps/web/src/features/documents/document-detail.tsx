@@ -808,7 +808,14 @@ function InvoiceCard({
               ? `${PAYMENT_METHOD_KIND_LABELS[invoice.payment.methodKind as PaymentMethodKind]}${
                   invoice.payment.bankTitleSnapshot ? ` · ${invoice.payment.bankTitleSnapshot}` : ''
                 }`
-              : 'انتخاب نشده'
+              : /*
+                   فقط فاکتورهای پیش از الزامی شدن روش پرداخت به اینجا می‌رسند.
+
+                   «انتخاب نشده» به‌تنهایی یک حالتِ عادی به نظر می‌رسید، در حالی
+                   که حالا یک کارِ نیمه‌تمام است: ثبت نهایی سند روی همین فاکتور
+                   می‌ایستد تا روش پرداختش معلوم شود.
+                 */
+                'انتخاب نشده — برای ثبت نهایی الزامی است'
           }
         />
         {/*

@@ -69,8 +69,15 @@ export const invoiceItemSchema = z
   })
   .superRefine(refineTaxFields);
 
-export const invoicePaymentSchema = z.object({
-  paymentMethodId: z.string().uuid(),
+/**
+ * فیلدهای روش پرداخت، جدا از خودِ schema.
+ *
+ * چون در دو جا با **پیام خطای متفاوت** ساخته می‌شود: اینجا به‌تنهایی، و در
+ * فاکتور به‌شکل یک فیلد الزامی که نبودنش باید پیام فارسی بدهد و نه
+ * «expected object, received undefined».
+ */
+const invoicePaymentShape = {
+  paymentMethodId: z.string({ error: 'روش پرداخت را انتخاب کنید' }).uuid(),
   vendorBankAccountId: z.string().uuid().nullable().default(null),
   paymentIdentifier: z.string().trim().max(100).nullable().default(null),
   billIdentifier: z.string().trim().max(100).nullable().default(null),
@@ -93,7 +100,9 @@ export const invoicePaymentSchema = z.object({
   beneficiaryAmount: moneyString.nullable().default(null),
   pettyCashAmount: moneyString.nullable().default(null),
   notes: z.string().trim().max(1000).nullable().default(null),
-});
+};
+
+export const invoicePaymentSchema = z.object(invoicePaymentShape);
 
 /**
  * خانواده `ITEMS` — فاکتور عادی و ستاد: ردیف‌های کالا/خدمت.
@@ -186,7 +195,20 @@ export const createInvoiceSchema = z.object({
   /** توضیحات اختصاصی همان فاکتور (§۱۲ پرامپت). */
   notes: z.string().trim().max(2000).nullable().default(null),
   details: invoiceDetailsSchema,
-  payment: invoicePaymentSchema.nullable().default(null),
+  /**
+   * روش پرداخت — **الزامی**.
+   *
+   * پیش از این اختیاری بود و فرم حتی گزینهٔ صریحِ «ثبت نشود» داشت. نتیجه،
+   * فاکتورهایی بود که نمی‌شد گفت پولشان به کجا رفت: در فرم ریزهزینه خانهٔ
+   * «پرداخت به» خالی می‌ماند و از گزارش شبای ذی‌نفعان بیرون می‌افتادند. ثبت
+   * نهایی سند از قبل جلویشان را می‌گرفت، ولی آن‌قدر دیر که کاربر باید به هر
+   * فاکتور برمی‌گشت.
+   *
+   * پس همان‌جا که فاکتور نوشته می‌شود الزامی است؛ «ثبت نشده» دیگر یک حالت
+   * نیست. فاکتورهای قدیمی‌ترِ بدون روش پرداخت دست‌نخورده می‌مانند و همان گیرِ
+   * ثبت نهایی سرِ جایش است، پس اصلاحشان لازم است و ممکن.
+   */
+  payment: z.object(invoicePaymentShape, { error: 'روش پرداخت فاکتور الزامی است' }),
   /**
    * تأیید صریح کاربر که این فاکتور با وجود تکراری بودن ثبت شود.
    *

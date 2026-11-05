@@ -83,6 +83,18 @@ test.describe('گروه بودجه سند', () => {
       await request.get(`/api/v1/base-data/chapters/${chapter.id}/invoice-types`, { headers })
     ).json();
 
+    /*
+      روش پرداخت هم لازم است.
+
+      مثل شرح فاکتور: بدون آن پاسخ ۴۲۲ می‌شود و ادعای این آزمون — ردِ گروه
+      بودجهٔ مخالف با ۴۰۹ — اصلاً سنجیده نمی‌شود. بدنه باید **در هر چیز دیگری
+      معتبر** باشد تا بشود گفت ۴۰۹ دربارهٔ گروه بودجه است.
+    */
+    const bootstrap = await (
+      await request.get('/api/v1/base-data/bootstrap', { headers })
+    ).json();
+    const paymentMethodId = (bootstrap.paymentMethods as { id: string }[])[0]!.id;
+
     const attempt = await request.post(`/api/v1/documents/${documentId}/invoices`, {
       headers,
       data: {
@@ -92,6 +104,7 @@ test.describe('گروه بودجه سند', () => {
         // شرح فاکتور اجباری است؛ بدون آن، پاسخ ۴۲۲ می‌شود و ادعای این آزمون
         // (ردِ گروه بودجهٔ مخالف با ۴۰۹) اصلاً سنجیده نمی‌شود.
         description: 'فاکتور آزمایشی گروه عمرانی',
+        payment: { paymentMethodId },
         details: {
           kind: types.options[0].kind,
           taxMode: 'PERCENT',

@@ -177,6 +177,7 @@ export interface CreateInvoicePayload {
   readonly description: string | null;
   readonly notes: string | null;
   readonly details: InvoiceDetailsPayload;
+  /** روش پرداخت — الزامی؛ سرور فاکتور بدون مقصد پرداخت را رد می‌کند. */
   readonly payment: {
     readonly paymentMethodId: string;
     readonly vendorBankAccountId: string | null;
@@ -189,7 +190,7 @@ export interface CreateInvoicePayload {
     readonly beneficiaryAmount: string | null;
     readonly pettyCashAmount: string | null;
     readonly notes: string | null;
-  } | null;
+  };
   /** تأیید صریح ثبت با وجود هشدار پرداخت تکراری (فقط انشعابات). */
   readonly acknowledgeDuplicate?: boolean;
 }
@@ -221,6 +222,13 @@ export interface InvoiceDraft {
     readonly payeeName: string | null;
     readonly beneficiaryAmount: string | null;
     readonly pettyCashAmount: string | null;
+    /*
+      اینجا `null` می‌ماند و نه در ورودیِ ساخت.
+
+      روش پرداخت از این پس الزامی است، ولی فاکتورهایی که **پیش از** این قاعده
+      ثبت شده‌اند ممکن است نداشته باشند؛ فرم ویرایش باید بتواند بازشان کند تا
+      کاربر همان روش را انتخاب کند. خواندن سهل‌گیر است، نوشتن نه.
+    */
     readonly notes: string | null;
   } | null;
 }
