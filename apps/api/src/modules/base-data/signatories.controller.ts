@@ -46,9 +46,7 @@ import {
 const signatoryInputSchema = z.object({
   fullName: z.string().trim().min(1, 'نام و نام خانوادگی الزامی است').max(200),
   positionTitle: z.string().trim().min(1, 'سمت الزامی است').max(200),
-  roleKey: z.enum(SIGNATORY_ROLE_KEYS, {
-    errorMap: () => ({ message: 'نقش انتخاب‌شده معتبر نیست' }),
-  }),
+  roleKey: z.enum(SIGNATORY_ROLE_KEYS, { error: () => 'نقش انتخاب‌شده معتبر نیست' }),
   isActive: z.boolean().default(true),
   sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
 });

@@ -22,7 +22,14 @@ const identitySchema = z
   .optional()
   .transform((value) => (value === undefined || value === '' ? null : value));
 
-export const vendorInputSchema = z
+/**
+ * شکل خامِ فروشنده، بدون قاعدهٔ «نماینده فقط برای حقوقی».
+ *
+ * جدا نگه داشته شده چون مسیر **اصلاح**، نسخهٔ `partial` همین را می‌خواهد و
+ * zod روی شیءِ دارای refinement اجازهٔ `partial` نمی‌دهد — به‌درستی، چون قاعده‌ای
+ * که روی همهٔ فیلدها نوشته شده، روی شیءِ ناقص معنای دیگری پیدا می‌کند.
+ */
+export const vendorFieldsSchema = z
   .object({
     personType: z.enum(['NATURAL', 'LEGAL']),
     name: z.string().trim().min(1, 'نام یا عنوان الزامی است').max(300),
@@ -42,7 +49,9 @@ export const vendorInputSchema = z
     fax: z.string().trim().max(30).optional().transform(emptyToNull),
     isActive: z.boolean().default(true),
     notes: z.string().trim().max(2000).optional().transform(emptyToNull),
-  })
+  });
+
+export const vendorInputSchema = vendorFieldsSchema
   .superRefine((value, ctx) => {
     // نماینده فقط برای شخص حقوقی معنا دارد؛ برای حقیقی فرم آن را نشان نمی‌دهد.
     if (value.personType === 'NATURAL' && value.representativeName !== null) {

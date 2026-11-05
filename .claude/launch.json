@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "api-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "-w", "@dm/api", "dev"],
+      "port": 3100
+    },
+    {
       "name": "web-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "-w", "@dm/web", "dev"],

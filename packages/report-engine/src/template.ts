@@ -183,7 +183,7 @@ const tableBlockSchema = z.object({
       enabled: z.boolean(),
       labelFa: z.string().max(100),
       /** برای هر کلید ستون: چه چیزی در ردیف جمع بنشیند. */
-      cells: z.record(aggregateSchema),
+      cells: z.record(z.string(), aggregateSchema),
     })
     .optional(),
   /** حداقل تعداد ردیف چاپی؛ کمبود با ردیف خالی پر می‌شود (docs/15 §۳). */

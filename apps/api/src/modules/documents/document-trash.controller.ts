@@ -28,9 +28,7 @@ import { DocumentTrashService } from './document-trash.service';
  * داشته باشد، پس یک تماس تصادفی یا یک دکمهٔ اشتباه‌کلیک‌شده کاری نمی‌کند.
  */
 const confirmSchema = z.object({
-  confirm: z.literal('DELETE', {
-    errorMap: () => ({ message: 'برای حذف دائمی، تأیید صریح لازم است' }),
-  }),
+  confirm: z.literal('DELETE', { error: () => 'برای حذف دائمی، تأیید صریح لازم است' }),
 });
 
 /**

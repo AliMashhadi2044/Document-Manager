@@ -14,13 +14,16 @@ import { listQuerySchema } from '../../common/query/list-query';
 import {
   VendorsService,
   bankAccountInputSchema,
+  vendorFieldsSchema,
   vendorInputSchema,
   type BankAccountInput,
   type VendorInput,
 } from './vendors.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
-const vendorUpdateSchema = vendorInputSchema.innerType().partial();
+// نسخهٔ `partial` از شکل **خام** ساخته می‌شود: قاعدهٔ «نماینده فقط برای حقوقی» روی
+// شیءِ ناقص معنا ندارد و zod هم اجازه‌اش را نمی‌دهد.
+const vendorUpdateSchema = vendorFieldsSchema.partial();
 const bankAccountUpdateSchema = bankAccountInputSchema.omit({ iban: true }).partial();
 
 const duplicateCheckSchema = z.object({

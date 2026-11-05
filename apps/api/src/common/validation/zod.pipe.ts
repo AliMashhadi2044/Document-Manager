@@ -1,5 +1,5 @@
 import { ArgumentMetadata, Injectable, PipeTransform } from '@nestjs/common';
-import type { ZodType, ZodTypeDef } from 'zod';
+import type { ZodType } from 'zod';
 
 import { AppError } from '../errors/app-error';
 
@@ -15,7 +15,7 @@ export class ZodBody<TOut, TIn = unknown> implements PipeTransform<unknown, TOut
    * نوع ورودی و خروجی جدا هستند: schemaهایی که `default` یا `transform` دارند،
    * ورودی و خروجی متفاوتی دارند و یکی گرفتنشان تایپ را می‌شکند.
    */
-  constructor(private readonly schema: ZodType<TOut, ZodTypeDef, TIn>) {}
+  constructor(private readonly schema: ZodType<TOut, TIn>) {}
 
   transform(value: unknown, _metadata: ArgumentMetadata): TOut {
     const result = this.schema.safeParse(value);
