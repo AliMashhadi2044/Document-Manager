@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import {
   EMPTY_PLATE,
   PLATE_LETTERS,
+  plateLetterFor,
   formatPlate,
   isPlateComplete,
   parsePlate,
@@ -159,10 +160,10 @@ function LetterCell({
         onClick={() => setOpen((previous) => !previous)}
         onKeyDown={(event) => {
           // تایپ مستقیم حرف: کاربری که پلاک را از رو می‌خواند، دستش روی صفحه‌کلید است.
-          const match = PLATE_LETTERS.find((item) => item.char === event.key);
-          if (match) {
+          const match = plateLetterFor(event.key);
+          if (match !== null) {
             event.preventDefault();
-            pick(match.char);
+            pick(match);
           }
         }}
         className={cn(

@@ -348,6 +348,8 @@ model PettyCashHolder {
 
   isActive  Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
+  /// تنخواه‌دار پیش‌فرض — در فرم فاکتور از پیش انتخاب می‌شود.
+  isDefault Boolean @default(false) @map("is_default")
   notes     String? @db.Text
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -633,6 +635,9 @@ model District {
   code      String? @db.VarChar(50)
   isActive  Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
+  /// پیش‌فرض — هر جا این فهرست استفاده می‌شود از پیش انتخاب می‌شود.
+  /// یک ایندکس جزئی یکتا تضمین می‌کند حداکثر یک ردیف این علامت را دارد.
+  isDefault Boolean @default(false) @map("is_default")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -669,6 +674,9 @@ model UtilityType {
   title     String  @unique @db.VarChar(150)
   isActive  Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
+  /// پیش‌فرض — هر جا این فهرست استفاده می‌شود از پیش انتخاب می‌شود.
+  /// یک ایندکس جزئی یکتا تضمین می‌کند حداکثر یک ردیف این علامت را دارد.
+  isDefault Boolean @default(false) @map("is_default")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -686,6 +694,9 @@ model VehicleType {
   title     String  @unique @db.VarChar(150)
   isActive  Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
+  /// پیش‌فرض — هر جا این فهرست استفاده می‌شود از پیش انتخاب می‌شود.
+  /// یک ایندکس جزئی یکتا تضمین می‌کند حداکثر یک ردیف این علامت را دارد.
+  isDefault Boolean @default(false) @map("is_default")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -724,6 +735,9 @@ model FuelType {
   title     String  @unique @db.VarChar(100)
   isActive  Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
+  /// پیش‌فرض — هر جا این فهرست استفاده می‌شود از پیش انتخاب می‌شود.
+  /// یک ایندکس جزئی یکتا تضمین می‌کند حداکثر یک ردیف این علامت را دارد.
+  isDefault Boolean @default(false) @map("is_default")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -741,6 +755,9 @@ model StadRequestType {
   title     String  @unique @db.VarChar(150)
   isActive  Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
+  /// پیش‌فرض — هر جا این فهرست استفاده می‌شود از پیش انتخاب می‌شود.
+  /// یک ایندکس جزئی یکتا تضمین می‌کند حداکثر یک ردیف این علامت را دارد.
+  isDefault Boolean @default(false) @map("is_default")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -756,6 +773,9 @@ model ProductType {
   title     String  @unique @db.VarChar(200)
   isActive  Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
+  /// پیش‌فرض — هر جا این فهرست استفاده می‌شود از پیش انتخاب می‌شود.
+  /// یک ایندکس جزئی یکتا تضمین می‌کند حداکثر یک ردیف این علامت را دارد.
+  isDefault Boolean @default(false) @map("is_default")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -773,6 +793,9 @@ model MeasurementUnit {
   title     String  @unique @db.VarChar(50)
   isActive  Boolean @default(true) @map("is_active")
   sortOrder Int     @default(0) @map("sort_order")
+  /// پیش‌فرض — هر جا این فهرست استفاده می‌شود از پیش انتخاب می‌شود.
+  /// یک ایندکس جزئی یکتا تضمین می‌کند حداکثر یک ردیف این علامت را دارد.
+  isDefault Boolean @default(false) @map("is_default")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

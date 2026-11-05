@@ -1,8 +1,22 @@
-import { Controller, Get } from '@nestjs/common';
+import { Body, Controller, Get, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  invoiceDefaultsSchema,
+  parseInvoiceDefaults,
+  type InvoiceDefaults,
+} from '@dm/shared';
 
-import { RequirePermission } from '../../common/auth/auth.decorators';
+import {
+  CurrentUser,
+  RequirePermission,
+  type AuthenticatedUser,
+} from '../../common/auth/auth.decorators';
+import { ZodBody } from '../../common/validation/zod.pipe';
+import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+
+/** کلید تنظیمِ پیش‌فرض‌های فاکتور در `system_settings`. */
+const INVOICE_DEFAULTS_KEY = 'invoice_defaults';
 
 /**
  * داده‌های مرجع که فرم‌ها برای پر کردن فهرست‌هایشان لازم دارند.
@@ -13,7 +27,10 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 @ApiTags('base-data')
 @Controller('base-data')
 export class ReferenceController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   @RequirePermission('base_data:read')
   @Get('bootstrap')
@@ -30,6 +47,7 @@ export class ReferenceController {
       measurementUnits,
       districts,
       vehicleTypes,
+      invoiceDefaultsRow,
     ] = await Promise.all([
       this.prisma.organizationSettings.findUnique({ where: { id: 1 } }),
       this.prisma.paymentMethod.findMany({
@@ -58,6 +76,7 @@ export class ReferenceController {
         where: { isActive: true },
         orderBy: { sortOrder: 'asc' },
       }),
+      this.prisma.systemSetting.findUnique({ where: { key: INVOICE_DEFAULTS_KEY } }),
     ]);
 
     return {
@@ -72,7 +91,51 @@ export class ReferenceController {
       measurementUnits,
       districts,
       vehicleTypes,
+      /*
+        پیش‌فرض‌های فاکتور، در همین پاسخ.
+
+        فرم فاکتور همین حالا این پاسخ را می‌گیرد؛ یک درخواست جدا فقط برای سه عدد،
+        یک رفت‌وبرگشت اضافه در مسیری بود که کاربر منتظرش می‌ماند.
+      */
+      invoiceDefaults: parseInvoiceDefaults(invoiceDefaultsRow?.value),
     };
+  }
+
+  /**
+   * پیش‌فرض‌های فاکتور.
+   *
+   * مجوزش `financial_settings:write` است و نه `base_data:write`: این عدد به
+   * محاسبهٔ مالیات می‌رسد، و کسی که اطلاعات پایه را نگه می‌دارد لزوماً اختیار
+   * تصمیم مالی ندارد.
+   */
+  @RequirePermission('financial_settings:write')
+  @Put('invoice-defaults')
+  @ApiOperation({ summary: 'ذخیرهٔ پیش‌فرض‌های فرم فاکتور' })
+  async setInvoiceDefaults(
+    @Body(new ZodBody(invoiceDefaultsSchema)) body: InvoiceDefaults,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<InvoiceDefaults> {
+    const before = await this.prisma.systemSetting.findUnique({
+      where: { key: INVOICE_DEFAULTS_KEY },
+    });
+
+    await this.prisma.systemSetting.upsert({
+      where: { key: INVOICE_DEFAULTS_KEY },
+      create: { key: INVOICE_DEFAULTS_KEY, value: body, updatedBy: user.id },
+      update: { value: body, updatedBy: user.id },
+      select: { key: true },
+    });
+
+    await this.audit.record({
+      actorId: user.id,
+      action: 'INVOICE_DEFAULTS_SET',
+      entityType: 'systemSetting',
+      entityId: INVOICE_DEFAULTS_KEY,
+      before: parseInvoiceDefaults(before?.value),
+      after: body,
+    });
+
+    return body;
   }
 
   @RequirePermission('base_data:read')

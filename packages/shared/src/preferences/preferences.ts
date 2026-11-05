@@ -85,6 +85,23 @@ export const userPreferencesSchema = z.object({
   density: z.enum(TABLE_DENSITIES).default('comfortable'),
 
   /**
+   * فهرست‌های انتخاب با فوکوس باز شوند؟
+   *
+   * کاربری که فرم را با Tab پر می‌کند، با `true` هر فهرست را همان لحظه باز و
+   * آمادهٔ تایپ می‌بیند — یک کلید کمتر در هر فیلد. ولی برای کسی که فقط از فرم
+   * رد می‌شود، باز شدنِ ناخواسته مزاحم است؛ پس انتخابش با خودِ کاربر است.
+   */
+  selectOpensOnFocus: z.boolean().default(false),
+
+  /**
+   * فاصلهٔ فیلدِ فوکوس‌شده از بالای صفحه (پیکسل)؛ صفر یعنی خاموش.
+   *
+   * فرم فاکتور نوار جمعِ چسبان دارد و ردیف‌هایش بلندند؛ بدون این، فیلدی که با
+   * Tab فوکوس می‌گیرد می‌تواند زیر نوار یا لبهٔ صفحه بماند.
+   */
+  focusScrollOffset: z.coerce.number().int().min(0).max(400).default(200),
+
+  /**
    * تعداد ردیف در هر صفحه.
    *
    * سقفش با سقف سرور یکی است؛ عدد بزرگ‌تر از آن، همان‌جا رد می‌شود و رابط نباید
@@ -118,6 +135,8 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   primaryColor: 'default',
   lastSection: null,
   density: 'comfortable',
+  selectOpensOnFocus: false,
+  focusScrollOffset: 200,
   pageSize: 25,
   hiddenColumns: {},
   select: {},
@@ -142,6 +161,8 @@ export function parsePreferences(input: unknown): UserPreferences {
         ? record.lastSection.slice(0, 60)
         : null,
     density: pick(record.density, TABLE_DENSITIES, 'comfortable'),
+    selectOpensOnFocus: record.selectOpensOnFocus === true,
+    focusScrollOffset: salvageOffset(record.focusScrollOffset),
     pageSize: salvagePageSize(record.pageSize),
     hiddenColumns: salvageHiddenColumns(record.hiddenColumns),
     select: salvageSelect(record.select),
@@ -159,6 +180,11 @@ function salvagePageSize(value: unknown): number {
   // رابط است و عدد دیگری که از قبل ذخیره شده نباید بی‌دلیل دور ریخته شود.
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= 10 && parsed <= 100 ? parsed : 25;
+}
+
+function salvageOffset(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 400 ? parsed : 200;
 }
 
 function salvageHiddenColumns(input: unknown): Record<string, string[]> {

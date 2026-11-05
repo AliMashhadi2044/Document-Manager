@@ -113,6 +113,8 @@ test.describe('پرداخت ترکیبی', () => {
     await pettyCashField.fill('500000');
     await expect(page.getByText('بیشتر از مبلغ فاکتور است')).toHaveCount(0);
 
+    // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+    await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
     await expect(page.getByText('فاکتور ثبت شد.')).toBeVisible();
 

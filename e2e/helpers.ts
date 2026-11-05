@@ -28,7 +28,9 @@ export async function login(page: Page, who: UserKey): Promise<void> {
 }
 
 export async function logout(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'خروج' }).click();
+  // `exact` لازم است: صفحهٔ «حساب من» دکمهٔ «خروج از همهٔ دستگاه‌ها» هم دارد و
+  // بدون آن، این انتخابگر به دو دکمه می‌رسد.
+  await page.getByRole('button', { name: 'خروج', exact: true }).click();
   await expect(page.getByRole('button', { name: 'ورود' })).toBeVisible();
 }
 

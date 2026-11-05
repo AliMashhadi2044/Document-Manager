@@ -25,6 +25,8 @@ const FULL = {
   primaryColor: 'amber' as const,
   lastSection: 'documents',
   density: 'compact' as const,
+  selectOpensOnFocus: true,
+  focusScrollOffset: 200,
   pageSize: 50,
   hiddenColumns: { documents: ['createdAt'] },
   select: { k: { pinned: ['a'], order: ['a'], labels: { a: 'آب' } } },

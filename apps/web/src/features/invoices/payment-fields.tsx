@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { splitDifference, type PaymentMethodKind } from '@dm/shared';
 
 import { Input } from '../../shared/ui/input';
@@ -101,6 +101,58 @@ export function PaymentFields({
   const holders = useActivePettyCashHolders();
   const [newHolder, setNewHolder] = useState(false);
 
+  /*
+    شبای ذی‌نفع: یکی که باشد، همان؛ چند تا که باشد، پیش‌فرضِ همان فروشنده.
+
+    انتخابِ تک‌گزینه‌ای یک کلیک است که هیچ تصمیمی در آن نیست. و وقتی فروشنده چند
+    شبا دارد، شبایی که در «فروشندگان» پیش‌فرض علامت خورده همان است که کارپرداز
+    معمولاً می‌خواهد.
+
+    فقط وقتی می‌نشیند که فیلد **خالی** باشد: در ویرایش، شبای ذخیره‌شده حرف آخر را
+    می‌زند، حتی اگر دیگر پیش‌فرض نباشد.
+  */
+  const accountItems = accounts.data;
+  /*
+    برای هر «فروشنده + روش پرداخت»، **یک بار**.
+
+    بدون این نشانه، پاک کردنِ عمدیِ شبا توسط کاربر همان لحظه دوباره پر می‌شد و
+    کاربر با فیلدی طرف بود که حرف او را پس می‌زند.
+  */
+  const autoAccountFor = useRef('');
+
+  useEffect(() => {
+    const scope = `${vendorId}:${draft.paymentMethodId}`;
+    if (!needsBeneficiary || !accountItems || autoAccountFor.current === scope) return;
+    autoAccountFor.current = scope;
+    if (draft.vendorBankAccountId !== '') return;
+
+    const pick =
+      accountItems.length === 1
+        ? accountItems[0]
+        : accountItems.find((account) => account.isDefault);
+
+    if (pick) onChange({ ...draft, vendorBankAccountId: pick.id });
+  }, [needsBeneficiary, accountItems, vendorId, draft, onChange]);
+
+  /*
+    تنخواه‌دار پیش‌فرض، به‌محض انتخاب روشی که تنخواه‌دار می‌خواهد.
+
+    در عمل همیشه یک تنخواه‌دار غالب است؛ بدون این، کاربر در هر فاکتور یک انتخاب
+    تکراری انجام می‌داد.
+  */
+  const holderItems = holders.data?.items;
+  const needsHolder = selected?.kind === 'PETTY_CASH' || isSplit;
+  const autoHolderFor = useRef('');
+
+  useEffect(() => {
+    if (!needsHolder || !holderItems || autoHolderFor.current === draft.paymentMethodId) return;
+    autoHolderFor.current = draft.paymentMethodId;
+    if (draft.pettyCashHolderId !== '') return;
+
+    const preferred = holderItems.find((holder) => holder.isDefault);
+    if (preferred) onChange({ ...draft, pettyCashHolderId: preferred.id });
+  }, [needsHolder, holderItems, draft, onChange]);
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
@@ -164,16 +216,24 @@ export function PaymentFields({
         {/*
           تنخواه‌دار.
 
-          اختیاری است — فاکتورهای قدیمی بدون او ثبت شده‌اند — ولی با انتخابش، نام و
-          اطلاعات حسابش در لحظهٔ ثبت snapshot می‌شوند و گزارش‌ها از همان می‌خوانند.
+          نام و اطلاعات حسابش در لحظهٔ ثبت snapshot می‌شود و گزارش‌ها از همان
+          می‌خوانند. فاکتورهای قدیمی بدون او ثبت شده‌اند و دست‌نخورده می‌مانند، ولی
+          از این پس انتخابش لازم است.
         */}
-        {selected?.kind === 'PETTY_CASH' || isSplit ? (
+        {needsHolder ? (
           <Select
             label={isSplit ? 'کارپرداز' : 'تنخواه‌دار'}
-            required={isSplit}
+            /*
+              ضروری است، نه اختیاری.
+
+              نامِ تنخواه‌دار در لحظهٔ ثبت snapshot می‌شود و گزارش‌ها از همان
+              می‌خوانند؛ فاکتور تنخواهی بدون تنخواه‌دار، ردیفی است که در گزارش
+              پرداخت‌ها بی‌صاحب می‌ماند.
+            */
+            required
             value={draft.pettyCashHolderId}
             onChange={(nextValue) => onChange({ ...draft, pettyCashHolderId: nextValue })}
-            placeholder="ثبت نشود"
+            placeholder="انتخاب کنید…"
             options={(holders.data?.items ?? []).map((holder) => ({
               value: holder.id,
               label: holder.fullName,
@@ -210,6 +270,7 @@ export function PaymentFields({
             */}
             <Input
               label="نام صاحب حساب"
+              required
               maxLength={200}
               value={draft.payeeName}
               onChange={(event) => onChange({ ...draft, payeeName: event.target.value })}

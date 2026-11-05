@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatPlate, isPlateComplete, parsePlate, plateDigits } from './plate-format.js';
+import {
+  formatPlate,
+  isPlateComplete,
+  parsePlate,
+  plateDigits,
+  plateLetterFor,
+} from './plate-format.js';
 
 describe('قالب پلاک ایران', () => {
   it('متن نمایشی را با ارقام لاتین و واژه ایران می‌سازد', () => {
@@ -49,5 +55,34 @@ describe('قالب پلاک ایران', () => {
     expect(plateDigits('1a2b3', 3)).toBe('123');
     expect(plateDigits('12345', 3)).toBe('123');
     expect(plateDigits('ب', 2)).toBe('');
+  });
+});
+
+/**
+ * تایپ مستقیم حرف پلاک.
+ *
+ * «الف» سه نویسه است و هیچ‌وقت با یک فشردن کلید برابر نمی‌شود؛ کاربری که «ا»
+ * می‌زد هیچ سری‌ای انتخاب نمی‌شد و فکر می‌کرد صفحه‌کلید کار نمی‌کند.
+ */
+describe('حرف پلاک از کلید تایپ‌شده', () => {
+  it('«ا» سری «الف» را می‌دهد', () => {
+    expect(plateLetterFor('ا')).toBe('الف');
+  });
+
+  it('حرف‌های تک‌نویسه‌ای همان خودشان‌اند', () => {
+    expect(plateLetterFor('ب')).toBe('ب');
+    expect(plateLetterFor('ژ')).toBe('ژ');
+  });
+
+  it('شکل عربی همان حرف هم پذیرفته می‌شود', () => {
+    // روی صفحه‌کلیدهای مختلف «ي» جای «ی» و «أ» جای «ا» تایپ می‌شود.
+    expect(plateLetterFor('ي')).toBe('ی');
+    expect(plateLetterFor('أ')).toBe('الف');
+  });
+
+  it('کلیدی که سری نیست، چیزی برنمی‌گرداند', () => {
+    expect(plateLetterFor('Enter')).toBeNull();
+    expect(plateLetterFor('خ')).toBeNull();
+    expect(plateLetterFor('5')).toBeNull();
   });
 });

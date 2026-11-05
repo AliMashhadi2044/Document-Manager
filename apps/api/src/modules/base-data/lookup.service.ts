@@ -21,6 +21,14 @@ export const lookupInputSchema = z.object({
   title: z.string().trim().min(1, 'عنوان الزامی است').max(200),
   isActive: z.boolean().default(true),
   sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
+  /**
+   * پیش‌فرض این فهرست.
+   *
+   * هر جا این فهرست در فرمی دیده می‌شود، پیش‌فرض از پیش انتخاب است. فقط یک ردیف
+   * می‌تواند پیش‌فرض باشد و همین را ایندکس جزئی یکتا در پایگاه داده هم تضمین
+   * می‌کند — نه فقط کد.
+   */
+  isDefault: z.boolean().default(false),
 });
 
 export type LookupInput = z.infer<typeof lookupInputSchema>;
@@ -37,6 +45,7 @@ export interface LookupRecord {
   title: string;
   isActive: boolean;
   sortOrder: number;
+  isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
   /** تعداد رکوردهایی که به این مورد ارجاع می‌دهند. */
@@ -45,6 +54,7 @@ export interface LookupRecord {
 
 interface Delegate {
   findMany(args: unknown): Promise<LookupRecord[]>;
+  updateMany(args: unknown): Promise<{ count: number }>;
   findUnique(args: unknown): Promise<LookupRecord | null>;
   count(args?: unknown): Promise<number>;
   create(args: unknown): Promise<LookupRecord>;
@@ -81,7 +91,12 @@ export class LookupService {
     const [items, total] = await Promise.all([
       delegate.findMany({
         where,
-        orderBy: orderByArg(query, LOOKUP_SORTABLE, [{ sortOrder: 'asc' }, { title: 'asc' }]),
+        // پیش‌فرض همیشه بالای فهرست می‌آید، مگر کاربر خودش مرتب‌سازی دیگری خواسته باشد.
+        orderBy: orderByArg(query, LOOKUP_SORTABLE, [
+          { isDefault: 'desc' },
+          { sortOrder: 'asc' },
+          { title: 'asc' },
+        ]),
         ...paginationArgs(query),
       }),
       delegate.count({ where }),
@@ -104,7 +119,14 @@ export class LookupService {
     input: LookupInput,
     actorId: string,
   ): Promise<LookupRecord> {
-    const created = await this.delegate(resource).create({ data: input });
+    const delegate = this.delegate(resource);
+
+    // پیش‌فرضِ تازه باید پیش‌فرض قبلی را بردارد، وگرنه ایندکس یکتا نوشتن را رد
+    // می‌کند و کاربر یک خطای پایگاه داده می‌بیند به‌جای جابه‌جا شدن پیش‌فرض.
+    const created = await this.prisma.$transaction(async () => {
+      if (input.isDefault) await this.clearDefault(delegate, null);
+      return delegate.create({ data: input });
+    });
 
     await this.audit.record({
       actorId,
@@ -127,7 +149,18 @@ export class LookupService {
     const before = await delegate.findUnique({ where: { id } });
     if (!before) throw AppError.notFound();
 
-    const updated = await delegate.update({ where: { id }, data: input });
+    /*
+      پیش‌فرض و «غیرفعال» با هم نمی‌خوانند.
+
+      ردیف غیرفعال در هیچ فرمی دیده نمی‌شود؛ پیش‌فرض ماندنش یعنی فرم مقداری را از
+      پیش انتخاب می‌کند که در فهرست گزینه‌هایش نیست.
+    */
+    const wantsDefault = (input.isDefault ?? before.isDefault) && (input.isActive ?? before.isActive);
+
+    const updated = await this.prisma.$transaction(async () => {
+      if (wantsDefault) await this.clearDefault(delegate, id);
+      return delegate.update({ where: { id }, data: { ...input, isDefault: wantsDefault } });
+    });
 
     await this.audit.record({
       actorId,
@@ -139,6 +172,14 @@ export class LookupService {
     });
 
     return updated;
+  }
+
+  /** برداشتن علامت پیش‌فرض از بقیهٔ ردیف‌ها. */
+  private async clearDefault(delegate: Delegate, keepId: string | null): Promise<void> {
+    await delegate.updateMany({
+      where: { isDefault: true, ...(keepId === null ? {} : { id: { not: keepId } }) },
+      data: { isDefault: false },
+    });
   }
 
   /**

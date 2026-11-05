@@ -338,14 +338,27 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
     نوشتنِ نشانی فقط وقتی انجام می‌شود که با وضعیت فرق داشته باشد؛ وگرنه هر
     نوشتن یک `hashchange` می‌ساخت و آن هم دوباره وضعیت را می‌نوشت.
   */
+  const writtenHash = useRef<string | null>(null);
+
   useEffect(() => {
     const next = buildHash(section, section === 'documents' ? openDocumentId : null);
-    if (window.location.hash !== next) window.location.hash = next;
+    if (window.location.hash === next) return;
+
+    // نشانیِ نوشتهٔ خودمان، رویداد `hashchange` هم می‌سازد؛ بدون این نشانه، آن
+    // رویداد وضعیت را دوباره از روی نشانی می‌خواند و با مقدار نیمه‌کارهٔ همان
+    // لحظه بازنویسی‌اش می‌کرد.
+    writtenHash.current = next;
+    window.location.hash = next;
   }, [section, openDocumentId]);
 
   // دکمهٔ «برگشت» مرورگر، و لینکی که کاربر در همان برگه باز می‌کند.
   useEffect(() => {
     const onHashChange = (): void => {
+      if (writtenHash.current === window.location.hash) {
+        writtenHash.current = null;
+        return;
+      }
+
       const route = parseHash(window.location.hash);
       if (!route) return;
 

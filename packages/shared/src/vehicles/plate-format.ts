@@ -71,6 +71,31 @@ export const PLATE_LETTERS: readonly PlateLetter[] = [
   { char: 'S', usage: 'سیاسی' },
 ];
 
+/**
+ * پیدا کردن سری پلاک از روی یک نویسهٔ تایپ‌شده.
+ *
+ * «الف» سه نویسه است و هیچ‌وقت با یک فشردن کلید برابر نمی‌شود؛ کاربری که «ا»
+ * می‌زد، هیچ سری‌ای انتخاب نمی‌شد و فکر می‌کرد صفحه‌کلید کار نمی‌کند.
+ *
+ * شکل‌های عربیِ همان حرف هم پذیرفته می‌شوند: روی صفحه‌کلیدهای مختلف «ي» و «ك» جای
+ * «ی» و «ک» تایپ می‌شوند.
+ */
+export function plateLetterFor(typed: string): string | null {
+  if (typed.length !== 1) return null;
+
+  const key = typed
+    .replace(/[يى]/u, 'ی')
+    .replace(/ك/u, 'ک')
+    .replace(/[أإآ]/u, 'ا');
+
+  const exact = PLATE_LETTERS.find((item) => item.char === key);
+  if (exact) return exact.char;
+
+  // «ا» ⇒ «الف»: تنها سری‌ای که نامش بیش از یک نویسه است.
+  const byFirst = PLATE_LETTERS.filter((item) => item.char.startsWith(key));
+  return byFirst.length === 1 ? (byFirst[0] as PlateLetter).char : null;
+}
+
 const PLATE_SHAPE = /^(\d{2})([^\d]{1,8}?)(\d{3})(\d{2})$/u;
 
 /** بخش‌های خالی — نقطهٔ شروع فرم. */

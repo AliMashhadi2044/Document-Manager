@@ -41,6 +41,8 @@ async function finalizedDocumentWithReport(page: Page, title: string): Promise<v
   await pickOption(page, 'واحد');
   await page.getByLabel('مبلغ واحد').fill('1000000');
   await pickOption(page, 'روش پرداخت', { text: 'تنخواه' });
+  // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+  await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
   await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
   await expect(page.getByText('فاکتور ثبت شد.')).toBeVisible();
 

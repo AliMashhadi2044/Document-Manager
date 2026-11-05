@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   DOCUMENT_STATUS_LABELS,
   DOCUMENT_TYPE_LABELS,
@@ -10,6 +10,7 @@ import {
 } from '@dm/shared';
 
 import { Button } from '../../shared/ui/button';
+import { ConfirmDialog } from '../../shared/ui/confirm-dialog';
 import { Icon } from '../../shared/ui/icon';
 import { PlateBadge } from '../../shared/ui/plate-input';
 import { SettlementBadge } from '../archive/payment-status-panel';
@@ -42,6 +43,14 @@ import { FeedbackPanel } from '../feedback/feedback-panel';
 import { useCurrentUser } from '../auth/auth.api';
 import { ReportPreview } from '../reports/report-preview';
 
+/** حالت فرم فاکتور: بسته، افزودن، یا ویرایشِ یک فاکتور مشخص. */
+type InvoiceFormState = null | { readonly mode: 'create' } | { readonly mode: 'edit'; readonly id: string };
+
+interface InvoiceRef {
+  readonly id: string;
+  readonly label: string;
+}
+
 export function DocumentDetailView({
   documentId,
   onBack,
@@ -63,13 +72,54 @@ export function DocumentDetailView({
   const [sendBackReason, setSendBackReason] = useState('');
   /** کدام گزارش باز است؛ `null` یعنی هیچ‌کدام. */
   const [showReport, setShowReport] = useState<string | null>(null);
-  const [showAddInvoice, setShowAddInvoice] = useState(false);
+  /*
+    فرم فاکتور: یکی، با دو حالت.
+
+    پیش از این «افزودن» و «ویرایش» دو وضعیت جدا بودند و هر دو می‌توانستند
+    هم‌زمان باز باشند؛ بدتر از آن، رفتن از ویرایش فاکتور A به B همان کامپوننت را
+    نگه می‌داشت و داده‌های A روی B می‌ماند (فرم یک‌بار پر می‌شود و دوباره نه).
+
+    حالا یک وضعیت است و `key` روی کامپوننت، پس هر بار فرمی **تازه** ساخته می‌شود.
+  */
+  const [invoiceForm, setInvoiceForm] = useState<InvoiceFormState>(null);
+  /** درخواستی که منتظر پاسخ کاربر است: «فرم باز را ببندم؟» */
+  const [pendingForm, setPendingForm] = useState<InvoiceFormState>(null);
+  const [formDirty, setFormDirty] = useState(false);
+  /** فاکتوری که کاربر خواسته حذف شود — تا تأیید نگیرد، حذف نمی‌شود. */
+  const [removingInvoice, setRemovingInvoice] = useState<InvoiceRef | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  /*
+    رفتن روی فرم، به‌جای رها کردن کاربر وسط فهرست.
+
+    سندی با پنجاه فاکتور، فرمِ بازشده را جایی بیرون از دید می‌گذاشت و کاربر فکر
+    می‌کرد دکمه کار نکرده است.
+  */
+  useEffect(() => {
+    if (invoiceForm === null) return;
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [invoiceForm]);
+
+  /**
+   * درخواست باز کردن فرم.
+   *
+   * اگر فرمِ بازی دست‌خورده باشد، اول می‌پرسیم؛ وگرنه همان‌جا عوض می‌شود. هیچ
+   * مسیری نیست که نوشتهٔ کاربر بی‌خبر از بین برود.
+   */
+  const requestForm = (next: InvoiceFormState): void => {
+    if (invoiceForm !== null && formDirty) {
+      setPendingForm(next);
+      return;
+    }
+    setFormDirty(false);
+    setInvoiceForm(next);
+  };
   const removeInvoice = useDeleteInvoice();
   const [notice, setNotice] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   /** فاکتوری که ویرایش می‌شود؛ همان فرمِ افزودن، در حالت ویرایش. */
-  const [editingInvoice, setEditingInvoice] = useState<string | null>(null);
+
 
   if (isPending) return <LoadingState label="در حال بارگذاری سند…" />;
   if (isError) {
@@ -141,7 +191,8 @@ export function DocumentDetailView({
                   return;
                 }
                 setNotice(null);
-                setShowAddInvoice((value) => !value);
+                // دکمه، هم باز می‌کند و هم می‌بندد — مگر فرمِ بازی دست‌خورده باشد.
+                requestForm(invoiceForm?.mode === 'create' ? null : { mode: 'create' });
               }}
             >
               افزودن فاکتور
@@ -495,32 +546,98 @@ export function DocumentDetailView({
         />
       ) : null}
 
-      {editingInvoice !== null && editable ? (
-        <CreateInvoiceForm
-          documentId={documentId}
-          invoiceId={editingInvoice}
-          documentJalaliYear={data.jalaliYear}
-          policy={data.roundingPolicy}
-          lockedCategoryKey={data.invoices[0]?.chapter.category.key ?? null}
-          onClose={() => setEditingInvoice(null)}
-          onCreated={() => {
-            void refetch();
-            setNotice({ kind: 'success', text: 'فاکتور اصلاح شد.' });
+      {/*
+        یک فرم، با `key`.
+
+        `key` همان چیزی است که باگ «اطلاعات فاکتور قبلی روی فاکتور تازه» را
+        می‌بندد: رفتن از ویرایش A به B یک کامپوننت تازه می‌سازد، پس هیچ وضعیتی
+        از A باقی نمی‌ماند.
+      */}
+      <div ref={formRef}>
+        {invoiceForm !== null && editable ? (
+          <CreateInvoiceForm
+            key={invoiceForm.mode === 'edit' ? `edit-${invoiceForm.id}` : 'create'}
+            documentId={documentId}
+            {...(invoiceForm.mode === 'edit' ? { invoiceId: invoiceForm.id } : {})}
+            documentJalaliYear={data.jalaliYear}
+            policy={data.roundingPolicy}
+            // گروه بودجهٔ سند را اولین فاکتورش تعیین می‌کند؛ بعد از آن قفل است.
+            lockedCategoryKey={data.invoices[0]?.chapter.category.key ?? null}
+            onDirtyChange={setFormDirty}
+            onClose={() => {
+              setFormDirty(false);
+              setInvoiceForm(null);
+            }}
+            onCreated={() => {
+              void refetch();
+              setNotice({
+                kind: 'success',
+                text: invoiceForm.mode === 'edit' ? 'فاکتور اصلاح شد.' : 'فاکتور ثبت شد.',
+              });
+            }}
+          />
+        ) : null}
+      </div>
+
+      {/*
+        پرسش پیش از جایگزینی فرم.
+
+        متنش به حالت بستگی دارد، چون آنچه از دست می‌رود فرق می‌کند: در ویرایش،
+        اصلاحاتِ ثبت‌نشده؛ در فاکتور تازه، خودِ فاکتوری که کاربر داشت می‌نوشت.
+      */}
+      {pendingForm !== null ? (
+        <ConfirmDialog
+          title={invoiceForm?.mode === 'edit' ? 'ویرایش باز است' : 'فاکتور ناتمام است'}
+          tone="primary"
+          confirmLabel={invoiceForm?.mode === 'edit' ? 'بله، ببند' : 'بله، رها کن'}
+          cancelLabel="نه، برگرد"
+          message={
+            invoiceForm?.mode === 'edit'
+              ? 'اصلاحاتی که روی این فاکتور انجام داده‌اید ثبت نشده است. با ادامه، آن اصلاحات از بین می‌رود و فاکتور انتخاب‌شده باز می‌شود.'
+              : 'فاکتوری که در حال نوشتنش بودید هنوز ثبت نشده است. با ادامه، آنچه وارد کرده‌اید از بین می‌رود.'
+          }
+          onCancel={() => setPendingForm(null)}
+          onConfirm={() => {
+            setFormDirty(false);
+            setInvoiceForm(pendingForm);
+            setPendingForm(null);
           }}
         />
       ) : null}
 
-      {showAddInvoice && editable ? (
-        <CreateInvoiceForm
-          documentId={documentId}
-          documentJalaliYear={data.jalaliYear}
-          policy={data.roundingPolicy}
-          // گروه بودجهٔ سند را اولین فاکتورش تعیین می‌کند؛ بعد از آن قفل است.
-          lockedCategoryKey={data.invoices[0]?.chapter.category.key ?? null}
-          onClose={() => setShowAddInvoice(false)}
-          onCreated={() => {
-            void refetch();
-            setNotice({ kind: 'success', text: 'فاکتور ثبت شد.' });
+      {removingInvoice !== null ? (
+        <ConfirmDialog
+          title="حذف فاکتور"
+          confirmLabel="حذف فاکتور"
+          busy={removeInvoice.isPending}
+          message={
+            <>
+              <p>
+                فاکتور «{removingInvoice.label}» از این سند برداشته می‌شود و جمع سند دوباره
+                محاسبه خواهد شد.
+              </p>
+              <p className="mt-2">این کار برگشت‌پذیر نیست.</p>
+            </>
+          }
+          onCancel={() => setRemovingInvoice(null)}
+          onConfirm={() => {
+            setNotice(null);
+            removeInvoice.mutate(removingInvoice.id, {
+              onSuccess: () => {
+                setRemovingInvoice(null);
+                void refetch();
+              },
+              onError: (error) => {
+                setRemovingInvoice(null);
+                setNotice({
+                  kind: 'error',
+                  text:
+                    error instanceof ApiError
+                      ? formatServerMessage(error.message)
+                      : 'خطا در حذف فاکتور',
+                });
+              },
+            });
           }}
         />
       ) : null}
@@ -539,35 +656,15 @@ export function DocumentDetailView({
           <InvoiceCard
             key={invoice.id}
             invoice={invoice}
-            onEdit={editable ? () => setEditingInvoice(invoice.id) : undefined}
+            onEdit={editable ? () => requestForm({ mode: 'edit', id: invoice.id }) : undefined}
             onRemove={
               editable
-                ? () => {
-                    /*
-                      یک پنجرهٔ تأیید ساده.
-
-                      برخلاف حذف سند، فاکتور واقعاً از سند برداشته می‌شود و راه
-                      برگشتی ندارد؛ پس دست‌کم باید یک «مطمئنی؟» میانش باشد. متن،
-                      خودِ فاکتور را نام می‌برد نه «این مورد» را.
-                    */
-                    const label = `${invoice.invoiceType.titleFa} — ${formatMoney(
-                      invoice.totalAmount,
-                    )}`;
-                    if (!window.confirm(`فاکتور «${label}» از این سند حذف شود؟`)) return;
-
-                    setNotice(null);
-                    removeInvoice.mutate(invoice.id, {
-                      onSuccess: () => void refetch(),
-                      onError: (error) =>
-                        setNotice({
-                          kind: 'error',
-                          text:
-                            error instanceof ApiError
-                              ? formatServerMessage(error.message)
-                              : 'خطا در حذف فاکتور',
-                        }),
-                    });
-                  }
+                ? () =>
+                    setRemovingInvoice({
+                      id: invoice.id,
+                      // متن تأیید، خودِ فاکتور را نام می‌برد، نه «این مورد» را.
+                      label: `${invoice.invoiceType.titleFa} — ${formatMoney(invoice.totalAmount)}`,
+                    })
                 : undefined
             }
           />

@@ -25,6 +25,8 @@ describe('خواندن ترجیح', () => {
       primaryColor: 'amber',
       lastSection: 'documents',
       density: 'compact',
+      selectOpensOnFocus: true,
+      focusScrollOffset: 160,
       pageSize: 50,
       hiddenColumns: { documents: ['createdAt'] },
       select: { 'نوع کالا': { pinned: ['a'], order: ['a', 'b'], labels: { a: 'آب' } } },

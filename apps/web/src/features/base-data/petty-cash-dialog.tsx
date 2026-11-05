@@ -44,6 +44,7 @@ export function PettyCashDialog({
   const [accountNumber, setAccountNumber] = useState(holder?.accountNumber ?? '');
   const [notes, setNotes] = useState(holder?.notes ?? '');
   const [isActive, setIsActive] = useState(holder?.isActive ?? true);
+  const [isDefault, setIsDefault] = useState(holder?.isDefault ?? false);
   const [error, setError] = useState<string | null>(null);
 
   const busy = create.isPending || update.isPending;
@@ -63,6 +64,7 @@ export function PettyCashDialog({
       accountNumber: accountNumber.trim(),
       notes: notes.trim(),
       isActive,
+      isDefault,
     };
 
     const action = holder
@@ -151,6 +153,22 @@ export function PettyCashDialog({
             checked={isActive}
             onChange={setIsActive}
             label="فعال — در فهرست تنخواه‌داران فرم پرداخت دیده می‌شود"
+          />
+        </div>
+
+        {/*
+          پیش‌فرض.
+
+          فقط یک تنخواه‌دار می‌تواند پیش‌فرض باشد؛ انتخاب این یکی، علامت را از
+          قبلی برمی‌دارد و این را همان‌جا می‌گوییم تا کاربر دنبال «چرا آن یکی
+          عوض شد» نگردد.
+        */}
+        <div className="flex items-center md:col-span-2">
+          <Toggle
+            checked={isDefault}
+            onChange={setIsDefault}
+            disabled={!isActive}
+            label="پیش‌فرض — در فرم فاکتور از پیش انتخاب می‌شود (تنها یک تنخواه‌دار)"
           />
         </div>
 

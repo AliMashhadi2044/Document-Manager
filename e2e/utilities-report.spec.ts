@@ -49,6 +49,8 @@ test.describe('گزارش انشعابات', () => {
     await pickOption(page, 'نوع انشعاب');
     await page.getByRole('textbox', { name: 'مبلغ', exact: true }).fill('1500000');
     await pickOption(page, 'روش پرداخت', { text: 'تنخواه' });
+    // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+    await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
     await expect(page.getByRole('button', { name: 'ثبت فاکتور' })).toHaveCount(0);
 

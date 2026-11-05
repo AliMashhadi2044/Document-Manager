@@ -66,6 +66,8 @@ async function addFuelInvoice(
   await pickOption(page, 'روش پرداخت', { text: 'تنخواه' });
   await pickOption(page, 'تنخواه‌دار', { text: options.holder });
 
+  // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+  await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
   await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
   await expect(page.getByRole('button', { name: 'ثبت فاکتور' })).toHaveCount(0);
 }

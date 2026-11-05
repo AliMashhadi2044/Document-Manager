@@ -24,6 +24,13 @@ const chapterInputSchema = z.object({
 /** فهرست مجاز؛ خالی یعنی «محدودیتی نیست». */
 const allowedMethodsSchema = z.object({
   paymentMethodIds: z.array(z.string().uuid()).max(50),
+  /**
+   * روش پیش‌فرض همین نوع فاکتور — `null` یعنی پیش‌فرضی نیست.
+   *
+   * در همین بدنه می‌آید و نه در مسیری جدا: پیش‌فرض باید میان مجازها باشد و دو
+   * درخواست جدا یعنی لحظه‌ای که پیش‌فرض از فهرست افتاده و جایگزینش نیامده.
+   */
+  defaultPaymentMethodId: z.string().uuid().nullable().optional(),
 });
 
 const linkInputSchema = z.object({
@@ -209,6 +216,26 @@ export class ChaptersController {
 
     const ids = [...new Set(body.paymentMethodIds)];
 
+    /*
+      پیش‌فرضِ تازه، یا همان قبلی اگر بدنه چیزی نگفته باشد.
+
+      `undefined` و `null` اینجا دو چیزند: اولی یعنی «دست نزن» و دومی یعنی
+      «پیش‌فرض را بردار».
+    */
+    const nextDefault =
+      body.defaultPaymentMethodId === undefined
+        ? invoiceType.defaultPaymentMethodId
+        : body.defaultPaymentMethodId;
+
+    if (nextDefault !== null) {
+      const exists = await this.prisma.paymentMethod.count({
+        where: { id: nextDefault, isActive: true },
+      });
+      if (exists === 0) {
+        throw AppError.validation('روش پرداخت پیش‌فرض یافت نشد یا غیرفعال است');
+      }
+    }
+
     if (ids.length > 0) {
       const found = await this.prisma.paymentMethod.count({
         where: { id: { in: ids }, isActive: true },
@@ -223,10 +250,7 @@ export class ChaptersController {
         وگرنه فرم فاکتور روشی را از پیش انتخاب می‌کرد که در فهرست گزینه‌هایش نیست —
         همان دسته باگی که یک‌بار با «روش پیش‌فرض نوع قبلی» دیده شد.
       */
-      if (
-        invoiceType.defaultPaymentMethodId !== null &&
-        !ids.includes(invoiceType.defaultPaymentMethodId)
-      ) {
+      if (nextDefault !== null && !ids.includes(nextDefault)) {
         throw AppError.conflict(
           'DEFAULT_METHOD_NOT_ALLOWED',
           'روش پیش‌فرض این نوع فاکتور باید در فهرست مجاز بماند',
@@ -235,6 +259,13 @@ export class ChaptersController {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      if (nextDefault !== invoiceType.defaultPaymentMethodId) {
+        await tx.invoiceType.update({
+          where: { id: invoiceTypeId },
+          data: { defaultPaymentMethodId: nextDefault },
+        });
+      }
+
       await tx.invoiceTypePaymentMethod.deleteMany({ where: { invoiceTypeId } });
       if (ids.length > 0) {
         await tx.invoiceTypePaymentMethod.createMany({
@@ -252,8 +283,11 @@ export class ChaptersController {
       action: 'INVOICE_TYPE_PAYMENT_METHODS_SET',
       entityType: 'invoiceType',
       entityId: invoiceTypeId,
-      before: { paymentMethodIds: invoiceType.paymentMethods.map((row) => row.paymentMethodId) },
-      after: { paymentMethodIds: ids },
+      before: {
+        paymentMethodIds: invoiceType.paymentMethods.map((row) => row.paymentMethodId),
+        defaultPaymentMethodId: invoiceType.defaultPaymentMethodId,
+      },
+      after: { paymentMethodIds: ids, defaultPaymentMethodId: nextDefault },
     });
 
     return this.paymentMethods(invoiceTypeId);

@@ -103,9 +103,12 @@ export function PettyCashPage(): JSX.Element {
       align: 'center',
       width: '6rem',
       cell: (row) => (
-        <Badge tone={row.isActive ? 'success' : 'neutral'} dot>
-          {row.isActive ? 'فعال' : 'غیرفعال'}
-        </Badge>
+        <div className="flex flex-wrap items-center justify-center gap-1">
+          <Badge tone={row.isActive ? 'success' : 'neutral'} dot>
+            {row.isActive ? 'فعال' : 'غیرفعال'}
+          </Badge>
+          {row.isDefault ? <Badge tone="primary">پیش‌فرض</Badge> : null}
+        </div>
       ),
     },
     {

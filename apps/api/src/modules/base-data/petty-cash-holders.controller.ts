@@ -11,6 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Prisma } from '@prisma/client';
 import { validateIban } from '@dm/shared';
 import { z } from 'zod';
 
@@ -61,6 +62,8 @@ const holderInputSchema = z.object({
   notes: optionalText(1000),
   isActive: z.boolean().default(true),
   sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
+  /** تنخواه‌دار پیش‌فرض — در فرم فاکتور از پیش انتخاب می‌شود. */
+  isDefault: z.boolean().default(false),
 });
 
 const SORTABLE = ['fullName', 'sortOrder', 'createdAt', 'updatedAt'] as const;
@@ -91,7 +94,11 @@ export class PettyCashHoldersController {
     const [items, total] = await Promise.all([
       this.prisma.pettyCashHolder.findMany({
         where,
-        orderBy: orderByArg(query, SORTABLE, [{ sortOrder: 'asc' }, { fullName: 'asc' }]),
+        orderBy: orderByArg(query, SORTABLE, [
+          { isDefault: 'desc' },
+          { sortOrder: 'asc' },
+          { fullName: 'asc' },
+        ]),
         ...paginationArgs(query),
         include: { bank: { select: { code: true, titleFa: true } } },
       }),
@@ -107,9 +114,15 @@ export class PettyCashHoldersController {
     @Body(new ZodBody(holderInputSchema)) body: z.infer<typeof holderInputSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    const created = await this.prisma.pettyCashHolder.create({
-      data: { ...body, ...this.ibanFields(body.iban) },
-      include: { bank: { select: { code: true, titleFa: true } } },
+    const created = await this.prisma.$transaction(async (tx) => {
+      // پیش‌فرضِ تازه باید پیش‌فرض قبلی را بردارد؛ ایندکس یکتا دو پیش‌فرض را رد
+      // می‌کند و کاربر به‌جای جابه‌جا شدن، خطای پایگاه داده می‌دید.
+      if (body.isDefault) await this.clearDefault(tx, null);
+
+      return tx.pettyCashHolder.create({
+        data: { ...body, ...this.ibanFields(body.iban) },
+        include: { bank: { select: { code: true, titleFa: true } } },
+      });
     });
 
     await this.audit.record({
@@ -134,11 +147,23 @@ export class PettyCashHoldersController {
     const before = await this.prisma.pettyCashHolder.findUnique({ where: { id } });
     if (!before) throw AppError.notFound('تنخواه‌دار یافت نشد');
 
-    const updated = await this.prisma.pettyCashHolder.update({
-      where: { id },
-      // شبا که در بدنه نیامده دست‌نخورده می‌ماند؛ آمده و خالی یعنی برداشته شود.
-      data: { ...body, ...('iban' in body ? this.ibanFields(body.iban ?? null) : {}) },
-      include: { bank: { select: { code: true, titleFa: true } } },
+    // تنخواه‌دارِ غیرفعال در فرم دیده نمی‌شود؛ پیش‌فرض ماندنش یعنی انتخابی که در
+    // فهرست گزینه‌ها نیست.
+    const wantsDefault = (body.isDefault ?? before.isDefault) && (body.isActive ?? before.isActive);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (wantsDefault) await this.clearDefault(tx, id);
+
+      return tx.pettyCashHolder.update({
+        where: { id },
+        // شبا که در بدنه نیامده دست‌نخورده می‌ماند؛ آمده و خالی یعنی برداشته شود.
+        data: {
+          ...body,
+          isDefault: wantsDefault,
+          ...('iban' in body ? this.ibanFields(body.iban ?? null) : {}),
+        },
+        include: { bank: { select: { code: true, titleFa: true } } },
+      });
     });
 
     await this.audit.record({
@@ -151,6 +176,14 @@ export class PettyCashHoldersController {
     });
 
     return updated;
+  }
+
+  /** برداشتن علامت پیش‌فرض از بقیه. */
+  private async clearDefault(tx: Prisma.TransactionClient, keepId: string | null): Promise<void> {
+    await tx.pettyCashHolder.updateMany({
+      where: { isDefault: true, ...(keepId === null ? {} : { id: { not: keepId } }) },
+      data: { isDefault: false },
+    });
   }
 
   @RequirePermission('base_data:write')

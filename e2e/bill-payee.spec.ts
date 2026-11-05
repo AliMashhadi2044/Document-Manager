@@ -76,6 +76,8 @@ test.describe('نام صاحب حساب قبض', () => {
     // روش «قبض» شناسهٔ پرداخت را هم الزامی می‌داند؛ بدونش ثبت نهایی رد می‌شود.
     await page.getByLabel('شناسه پرداخت').fill('654321');
 
+    // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+    await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
     await expect(page.getByRole('button', { name: 'ثبت فاکتور' })).toHaveCount(0);
 

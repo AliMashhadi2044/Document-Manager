@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import type { InvoiceDefaults } from '@dm/shared';
+
 import { apiFetch } from '../../shared/api/client';
 
 export interface LookupItem {
@@ -7,6 +9,8 @@ export interface LookupItem {
   readonly title: string;
   readonly isActive: boolean;
   readonly sortOrder: number;
+  /** پیش‌فرض این فهرست — هر جا استفاده شود، از پیش انتخاب است. */
+  readonly isDefault: boolean;
   readonly usageCount: number;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -126,7 +130,15 @@ export function useCreateLookup(resource: string) {
 export function useUpdateLookup(resource: string) {
   const invalidate = useInvalidateLookups();
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string; title?: string; isActive?: boolean }) =>
+    mutationFn: ({
+      id,
+      ...input
+    }: {
+      id: string;
+      title?: string;
+      isActive?: boolean;
+      isDefault?: boolean;
+    }) =>
       apiFetch<LookupItem>(`/base-data/lookups/${resource}/${id}`, {
         method: 'PATCH',
         json: input,
@@ -273,13 +285,15 @@ export function useSetInvoiceTypePaymentMethods() {
     mutationFn: ({
       invoiceTypeId,
       paymentMethodIds,
+      defaultPaymentMethodId,
     }: {
       invoiceTypeId: string;
       paymentMethodIds: readonly string[];
+      defaultPaymentMethodId: string | null;
     }) =>
       apiFetch<InvoiceTypePaymentMethods>(
         `/base-data/chapters/invoice-types/${invoiceTypeId}/payment-methods`,
-        { method: 'PUT', json: { paymentMethodIds } },
+        { method: 'PUT', json: { paymentMethodIds, defaultPaymentMethodId } },
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['base-data', 'invoice-types'] });
@@ -361,5 +375,22 @@ export function useUnlinkInvoiceType() {
         method: 'DELETE',
       }),
     onSuccess: invalidate,
+  });
+}
+
+
+/**
+ * پیش‌فرض‌های فرم فاکتور — تنظیم سازمانی.
+ *
+ * خواندنش از همان `bootstrap` می‌آید (یک درخواست کمتر در مسیری که کاربر منتظرش
+ * است)؛ این فقط نوشتن است.
+ */
+export function useSetInvoiceDefaults() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: InvoiceDefaults) =>
+      apiFetch<InvoiceDefaults>('/base-data/invoice-defaults', { method: 'PUT', json: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['base-data', 'bootstrap'] }),
   });
 }

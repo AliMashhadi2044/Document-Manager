@@ -12,6 +12,10 @@ import { Card, CardBody, CardHeader } from '../../shared/ui/card';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
 import { formatServerMessage, toPersianDigits } from '../../shared/format/money';
+import { useQuery } from '@tanstack/react-query';
+import type { InvoiceDefaults } from '@dm/shared';
+
+import { apiFetch } from '../../shared/api/client';
 import { useCurrentUser } from '../auth/auth.api';
 import {
   useBudgetCategories,
@@ -26,6 +30,7 @@ import {
   type CategoryRow,
   type ChapterRow,
   type InvoiceTypeRef,
+  useSetInvoiceDefaults,
 } from './base-data.api';
 
 /**
@@ -235,6 +240,9 @@ export function ChaptersView(): JSX.Element {
       ))}
 
       <PaymentMethodsCard canWrite={canWrite} />
+      <InvoiceDefaultsCard
+        canWrite={user?.permissions.includes('financial_settings:write') ?? false}
+      />
 
       {editing ? (
         <ChapterDialog
@@ -366,6 +374,128 @@ function ChapterDialog({
  * چرا اصلاً: «قبض» برای انشعابات معنا دارد و برای خرید کالا نه. بدون این فهرست،
  * جلوگیری از انتخاب اشتباه فقط به حواس کاربر بند بود.
  */
+/**
+ * پیش‌فرض مالیات ردیف‌های فاکتور.
+ *
+ * تا دیروز هر ردیف تازه با «درصدی، ۱۰٪» شروع می‌شد و سازمانی که فاکتورهایش
+ * معاف است، همان عدد را در هر ردیف دستی صفر می‌کرد.
+ *
+ * مجوزش `financial_settings:write` است و نه `base_data:write`: این عدد به
+ * محاسبهٔ مالیات می‌رسد و کسی که فهرست‌ها را نگه می‌دارد لزوماً اختیار تصمیم
+ * مالی ندارد.
+ */
+function InvoiceDefaultsCard({ canWrite }: { canWrite: boolean }): JSX.Element | null {
+  const bootstrap = useQuery({
+    queryKey: ['base-data', 'bootstrap'],
+    queryFn: () => apiFetch<{ invoiceDefaults: InvoiceDefaults }>('/base-data/bootstrap'),
+    staleTime: 5 * 60_000,
+  });
+  const save = useSetInvoiceDefaults();
+
+  const [draft, setDraft] = useState<InvoiceDefaults | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (bootstrap.data) setDraft(bootstrap.data.invoiceDefaults);
+  }, [bootstrap.data]);
+
+  if (!canWrite || draft === null) return null;
+
+  const percentMode = draft.taxMode === 'PERCENT';
+
+  return (
+    <Card>
+      <CardHeader
+        icon="money"
+        title="پیش‌فرض مالیات ردیف‌ها"
+        description="ردیف تازهٔ هر فاکتور با همین مقدار شروع می‌شود؛ کاربر می‌تواند در همان ردیف عوضش کند."
+      />
+      <CardBody className="space-y-4">
+        {message ? (
+          <p role="status" className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+            {message}
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-end gap-3">
+          <Select
+            label="حالت"
+            className="min-w-44"
+            value={draft.taxMode}
+            onChange={(value) =>
+              setDraft({ ...draft, taxMode: value as InvoiceDefaults['taxMode'] })
+            }
+            options={[
+              { value: 'PERCENT', label: 'درصدی' },
+              { value: 'AMOUNT', label: 'مبلغ ثابت (ریال)' },
+            ]}
+          />
+
+          {percentMode ? (
+            <Input
+              label="نرخ پیش‌فرض (درصد)"
+              dir="ltr"
+              inputMode="decimal"
+              className="max-w-40"
+              value={draft.taxRateBp === null ? '' : String(draft.taxRateBp / 100)}
+              onChange={(event) => {
+                const text = event.target.value.trim();
+                if (text === '') {
+                  setDraft({ ...draft, taxRateBp: null });
+                  return;
+                }
+                const percent = Number(text.replace(/[٪%]/gu, ''));
+                if (!Number.isFinite(percent) || percent < 0 || percent > 100) return;
+                // نرخ به basis point صحیح نگه داشته می‌شود، نه اعشار (ADR-0003).
+                setDraft({ ...draft, taxRateBp: Math.round(percent * 100) });
+              }}
+              hint="خالی یعنی «نرخ سال مالی». صفر یعنی ردیف‌ها بدون مالیات شروع شوند."
+            />
+          ) : (
+            <Input
+              label="مبلغ پیش‌فرض (ریال)"
+              dir="ltr"
+              inputMode="numeric"
+              className="max-w-52"
+              value={draft.taxAmount}
+              onChange={(event) =>
+                setDraft({ ...draft, taxAmount: event.target.value.replace(/\D/gu, '') })
+              }
+              hint="خالی یعنی مبلغ در هر ردیف دستی وارد شود."
+            />
+          )}
+
+          <Button
+            loading={save.isPending}
+            onClick={() => {
+              setError(null);
+              setMessage(null);
+              void save.mutateAsync(draft).then(
+                () => setMessage('پیش‌فرض مالیات ذخیره شد.'),
+                (failure: unknown) =>
+                  setError(
+                    failure instanceof ApiError
+                      ? formatServerMessage(failure.message)
+                      : 'ذخیره ناموفق بود',
+                  ),
+              );
+            }}
+          >
+            ذخیره
+          </Button>
+        </div>
+
+        {error ? (
+          <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+      </CardBody>
+    </Card>
+  );
+}
+
 function PaymentMethodsCard({ canWrite }: { canWrite: boolean }): JSX.Element | null {
   const types = useInvoiceTypes();
   const [editing, setEditing] = useState<InvoiceTypeRef | null>(null);
@@ -436,6 +566,8 @@ function PaymentMethodsDialog({
     می‌شود تا کاربر چند تیک را با هم عوض کند و یک‌بار ذخیره شود.
   */
   const [picked, setPicked] = useState<Set<string> | null>(null);
+  /** روش پیش‌فرض؛ `''` یعنی پیش‌فرضی نیست. */
+  const [preferred, setPreferred] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -447,6 +579,7 @@ function PaymentMethodsDialog({
           : detail.data.methods.filter((method) => method.allowed).map((method) => method.id),
       ),
     );
+    setPreferred(detail.data.defaultPaymentMethodId ?? '');
   }, [detail.data]);
 
   const toggle = (id: string): void =>
@@ -457,12 +590,28 @@ function PaymentMethodsDialog({
       return next;
     });
 
+  /*
+    برداشتن تیکِ روشی که پیش‌فرض است، پیش‌فرض را هم برمی‌دارد.
+
+    وگرنه ذخیره با خطای سرور رد می‌شد («پیش‌فرض باید میان مجازها بماند») و کاربر
+    باید خودش می‌فهمید کدام تیک مقصر است.
+  */
+  useEffect(() => {
+    if (preferred !== '' && picked !== null && picked.size > 0 && !picked.has(preferred)) {
+      setPreferred('');
+    }
+  }, [picked, preferred]);
+
   const submit = (event: FormEvent): void => {
     event.preventDefault();
     setError(null);
 
     void save
-      .mutateAsync({ invoiceTypeId: invoiceType.id, paymentMethodIds: [...(picked ?? [])] })
+      .mutateAsync({
+        invoiceTypeId: invoiceType.id,
+        paymentMethodIds: [...(picked ?? [])],
+        defaultPaymentMethodId: preferred === '' ? null : preferred,
+      })
       .then(
         () =>
           onSaved(
@@ -490,20 +639,49 @@ function PaymentMethodsDialog({
           <>
             <ul className="space-y-1">
               {(detail.data?.methods ?? []).map((method) => {
-                const isDefault = method.id === detail.data?.defaultPaymentMethodId;
+                // بی‌محدودیت بودن یعنی همه مجازند؛ پس همه می‌توانند پیش‌فرض شوند.
+                const allowed = (picked?.size ?? 0) === 0 || (picked?.has(method.id) ?? false);
 
                 return (
                   <li key={method.id}>
-                    <label className="flex cursor-pointer items-center gap-2.5 rounded-lg p-2 text-sm hover:bg-muted/50">
-                      <input
-                        type="checkbox"
-                        checked={picked?.has(method.id) ?? false}
-                        onChange={() => toggle(method.id)}
-                        className="size-4 rounded border-input accent-[var(--color-primary)]"
-                      />
-                      <span className="flex-1 truncate">{method.titleFa}</span>
-                      {isDefault ? <Badge tone="primary">پیش‌فرض این نوع</Badge> : null}
-                    </label>
+                    <div className="flex items-center gap-2.5 rounded-lg p-2 text-sm hover:bg-muted/50">
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={picked?.has(method.id) ?? false}
+                          onChange={() => toggle(method.id)}
+                          className="size-4 rounded border-input accent-[var(--color-primary)]"
+                        />
+                        <span className="truncate">{method.titleFa}</span>
+                      </label>
+
+                      {/*
+                        پیش‌فرض، یک دکمهٔ جدا کنار هر روش.
+
+                        تیک «مجاز است» و «پیش‌فرض است» دو چیزند و با یک کنترل قابل
+                        بیان نبودند: روشی می‌تواند مجاز باشد و پیش‌فرض نباشد، ولی
+                        پیش‌فرضی که مجاز نباشد بی‌معناست.
+                      */}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={preferred === method.id ? 'secondary' : 'ghost'}
+                        disabled={!allowed}
+                        aria-pressed={preferred === method.id}
+                        title={
+                          allowed
+                            ? preferred === method.id
+                              ? 'پیش‌فرض است؛ برای برداشتن دوباره بزنید'
+                              : 'این روش پیش‌فرض این نوع فاکتور شود'
+                            : 'روشی که مجاز نیست نمی‌تواند پیش‌فرض باشد'
+                        }
+                        onClick={() =>
+                          setPreferred((current) => (current === method.id ? '' : method.id))
+                        }
+                      >
+                        {preferred === method.id ? '★ پیش‌فرض' : '☆'}
+                      </Button>
+                    </div>
                   </li>
                 );
               })}
@@ -512,7 +690,11 @@ function PaymentMethodsDialog({
             <p className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
               {(picked?.size ?? 0) === 0
                 ? 'هیچ روشی تیک نخورده است: یعنی محدودیتی اعمال نمی‌شود و همهٔ روش‌های فعال در فرم دیده می‌شوند.'
-                : 'فقط روش‌های تیک‌خورده در فرم این نوع فاکتور دیده می‌شوند. روش پیش‌فرض این نوع باید میانشان بماند.'}
+                : 'فقط روش‌های تیک‌خورده در فرم این نوع فاکتور دیده می‌شوند.'}
+              {' '}
+              {preferred === ''
+                ? 'بدون پیش‌فرض، فرم فاکتور روش پرداخت را خالی باز می‌کند.'
+                : 'روش پیش‌فرض، در فرم این نوع فاکتور از پیش انتخاب می‌شود و کاربر می‌تواند عوضش کند.'}
             </p>
           </>
         )}

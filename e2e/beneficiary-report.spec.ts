@@ -80,6 +80,8 @@ async function addInvoice(
   }
   if (options.pettyShare) await page.getByLabel('سهم کارپرداز').fill(options.pettyShare);
 
+  // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+  await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
   await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
 
   /*

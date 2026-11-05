@@ -113,6 +113,8 @@ test.describe('تنخواه‌دار', () => {
     await expect(page.getByRole('main').getByText('مدیریت کاربران')).toHaveCount(0);
     await pickOption(page, 'تنخواه‌دار', { text: holder });
 
+    // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+    await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
     await expect(page.getByText('فاکتور ثبت شد.')).toBeVisible();
 

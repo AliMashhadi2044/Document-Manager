@@ -13,7 +13,7 @@ import { createPortal } from 'react-dom';
 import { cn } from './cn';
 import { useAnchoredPosition } from './use-anchored-position';
 import { useDebouncedValue } from '../hooks/use-debounced-value';
-import { useSelectPrefs } from '../preferences/preferences';
+import { usePreferences, useSelectPrefs } from '../preferences/preferences';
 import { Icon } from './icon';
 import { CONTROL_CLASS, HELP_CLASS, LABEL_CLASS, borderClass } from './field';
 import {
@@ -137,6 +137,15 @@ export function Select({
   }, [prefsKey, label, ariaLabel]);
 
   const { prefs, save: savePrefs } = useSelectPrefs(storageKey);
+  /*
+    باز شدن با فوکوس — ترجیح کاربر.
+
+    با Tab در فرمی بلند، باز شدنِ خودکار یعنی یک کلید کمتر در هر فیلد. ولی فقط
+    وقتی که فوکوس با **صفحه‌کلید** آمده باشد؛ باز شدن با کلیک همان کار قبلی است
+    و `onClick` خودش آن را انجام می‌دهد.
+  */
+  const { prefs: userPrefs } = usePreferences();
+  const openOnFocus = userPrefs.selectOpensOnFocus;
   const [open, setOpen] = useState(false);
   const [manage, setManage] = useState(false);
   /*
@@ -420,6 +429,12 @@ export function Select({
           }
           disabled={disabled}
           onClick={() => (open ? close(false) : setOpen(true))}
+          onFocus={(event) => {
+            // `:focus-visible` یعنی فوکوس از صفحه‌کلید آمده، نه از کلیک.
+            if (!openOnFocus || open || disabled) return;
+            if (!event.currentTarget.matches(':focus-visible')) return;
+            setOpen(true);
+          }}
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();

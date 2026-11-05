@@ -90,6 +90,49 @@ export function LookupManager(): JSX.Element {
       cell: (row) => row.usageCount.toLocaleString('fa-IR'),
     },
     {
+      /*
+        پیش‌فرض.
+
+        یک دکمهٔ ستاره‌مانند و نه یک تیک در فرم ویرایش: کاربر پیش‌فرض را در همین
+        فهرست و در مقایسه با بقیه انتخاب می‌کند، نه در یک پنجرهٔ جدا.
+      */
+      key: 'default',
+      header: 'پیش‌فرض',
+      align: 'center',
+      width: '7rem',
+      cell: (row) => (
+        <Button
+          size="sm"
+          variant={row.isDefault ? 'secondary' : 'ghost'}
+          disabled={!row.isActive && !row.isDefault}
+          aria-pressed={row.isDefault}
+          title={
+            row.isActive
+              ? row.isDefault
+                ? 'پیش‌فرض است؛ برای برداشتن دوباره بزنید'
+                : 'این مورد پیش‌فرض شود'
+              : 'مورد غیرفعال نمی‌تواند پیش‌فرض باشد'
+          }
+          onClick={() => {
+            setMessage(null);
+            update.mutate(
+              { id: row.id, isDefault: !row.isDefault },
+              {
+                onSuccess: () =>
+                  setMessage({
+                    kind: 'success',
+                    text: row.isDefault ? 'پیش‌فرض برداشته شد' : `«${row.title}» پیش‌فرض شد`,
+                  }),
+                onError: report,
+              },
+            );
+          }}
+        >
+          {row.isDefault ? '★ پیش‌فرض' : '☆'}
+        </Button>
+      ),
+    },
+    {
       key: 'status',
       header: 'وضعیت',
       align: 'center',

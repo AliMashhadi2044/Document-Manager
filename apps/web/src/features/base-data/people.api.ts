@@ -28,6 +28,7 @@ export interface SignatoryInput {
   readonly roleKey: SignatoryRoleKey;
   readonly isActive?: boolean;
   readonly sortOrder?: number;
+  readonly isDefault?: boolean;
 }
 
 export interface PettyCashHolderRow {
@@ -43,6 +44,8 @@ export interface PettyCashHolderRow {
   readonly notes: string | null;
   readonly isActive: boolean;
   readonly sortOrder: number;
+  /** تنخواه‌دار پیش‌فرض — در فرم فاکتور از پیش انتخاب می‌شود. */
+  readonly isDefault: boolean;
   readonly bank: { readonly code: string; readonly titleFa: string } | null;
 }
 

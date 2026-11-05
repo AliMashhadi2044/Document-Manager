@@ -42,6 +42,8 @@ async function addUtilityInvoice(page: Page, school: string, amount: string): Pr
   await pickOption(page, 'نوع انشعاب');
   await page.getByRole('textbox', { name: 'مبلغ', exact: true }).fill(amount);
   await pickOption(page, 'روش پرداخت', { text: 'تنخواه' });
+  // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+  await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
   await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
   await expect(page.getByText('فاکتور ثبت شد.')).toBeVisible();
 }
@@ -106,6 +108,8 @@ test.describe('سطل زباله', () => {
     // همان فاکتور در سند تازه ثبت می‌شود.
     await page.getByRole('textbox', { name: 'مبلغ', exact: true }).fill('4000000');
     await pickOption(page, 'روش پرداخت', { text: 'تنخواه' });
+    // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+    await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
     await expect(page.getByText('فاکتور ثبت شد.')).toBeVisible();
 
@@ -217,6 +221,8 @@ test.describe('سطل زباله', () => {
     await pickOption(page, 'واحد');
     await page.getByLabel('مبلغ واحد').fill('1000000');
     await pickOption(page, 'روش پرداخت', { text: 'تنخواه' });
+    // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+    await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
     await expect(page.getByText('فاکتور ثبت شد.')).toBeVisible();
 

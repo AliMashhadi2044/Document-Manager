@@ -47,6 +47,8 @@ test.describe('گروه بودجه سند', () => {
     await pickOption(page, 'واحد');
     await page.getByLabel('مبلغ واحد').fill('1000000');
     await pickOption(page, 'روش پرداخت', { text: 'تنخواه' });
+    // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+    await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
     await expect(page.getByText('فاکتور ثبت شد.')).toBeVisible();
 
@@ -87,6 +89,9 @@ test.describe('گروه بودجه سند', () => {
         chapterId: chapter.id,
         invoiceTypeId: types.options[0].invoiceTypeId,
         invoiceDate: '2026-10-04',
+        // شرح فاکتور اجباری است؛ بدون آن، پاسخ ۴۲۲ می‌شود و ادعای این آزمون
+        // (ردِ گروه بودجهٔ مخالف با ۴۰۹) اصلاً سنجیده نمی‌شود.
+        description: 'فاکتور آزمایشی گروه عمرانی',
         details: {
           kind: types.options[0].kind,
           taxMode: 'PERCENT',

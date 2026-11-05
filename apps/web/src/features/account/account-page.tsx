@@ -244,6 +244,37 @@ function AppearanceCard(): JSX.Element {
           }))}
         />
 
+        {/*
+          رفتار فهرست‌های انتخاب و فوکوس — تنظیم کسی که با صفحه‌کلید کار می‌کند.
+        */}
+        <Segmented
+          label="فهرست‌های انتخاب با Tab"
+          name="account-select-open"
+          value={prefs.selectOpensOnFocus ? 'open' : 'manual'}
+          onChange={(value) =>
+            update((previous) => ({ ...previous, selectOpensOnFocus: value === 'open' }))
+          }
+          options={[
+            { value: 'manual', label: 'با Enter باز شود' },
+            { value: 'open', label: 'با رسیدن فوکوس باز شود' },
+          ]}
+        />
+
+        <Segmented
+          label="آوردن فیلدِ فوکوس‌شده به بالای صفحه"
+          name="account-focus-scroll"
+          value={String(prefs.focusScrollOffset)}
+          onChange={(value) =>
+            update((previous) => ({ ...previous, focusScrollOffset: Number(value) }))
+          }
+          options={[
+            { value: '0', label: 'خاموش' },
+            { value: '120', label: 'کم' },
+            { value: '200', label: 'متوسط' },
+            { value: '320', label: 'زیاد' },
+          ]}
+        />
+
         <div className="border-t border-border pt-4">
           <p className="text-xs text-muted-foreground">
             {hiddenCount > 0

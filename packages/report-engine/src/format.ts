@@ -74,10 +74,24 @@ function formatDate(value: Value, format: FormatSpec): string {
   }
 }
 
-/** شماره اقتصادی: گروه‌های چهارتایی با خط تیره (docs/15 §۴). */
+/**
+ * شماره اقتصادی: گروه‌های چهارتایی با خط تیره (docs/15 §۴).
+ *
+ * **ولی فقط وقتی که عدد واقعاً شمارهٔ اقتصادی باشد.** همین ستون گاهی کد ملی
+ * (ده رقم) یا شناسهٔ ملی (یازده رقم) را نشان می‌دهد — فروشندهٔ حقوقی‌ای که
+ * شمارهٔ اقتصادی ندارد. جدا کردنِ آن‌ها چهارتا‌چهارتا، عددی می‌سازد که در هیچ
+ * سامانه‌ای به آن شکل نوشته نمی‌شود.
+ *
+ * مرز، خودِ شکل عدد است و نه یک پرچم کنار داده: شمارهٔ اقتصادی دوازده‌رقمی است و
+ * بر چهار بخش‌پذیر؛ کد و شناسهٔ ملی نیستند.
+ */
 function formatEconomicCode(raw: string, format: FormatSpec): string {
   const digits = raw.replace(/\D/gu, '');
   if (digits === '') return format.emptyText;
+
+  if (digits.length % 4 !== 0) {
+    return format.persianDigits ? toPersianDigits(digits) : digits;
+  }
 
   const groups: string[] = [];
   for (let index = 0; index < digits.length; index += 4) {

@@ -182,7 +182,7 @@ export const createInvoiceSchema = z.object({
    * جدا از `notes` است: آن یادداشت آزاد است، این یک **عنوان**، و همین است که در
    * گزارش مالیات پیش‌فرضِ ستون «نوع کالا» می‌شود.
    */
-  description: z.string().trim().max(500).nullable().default(null),
+  description: z.string().trim().min(1, 'شرح فاکتور الزامی است').max(500),
   /** توضیحات اختصاصی همان فاکتور (§۱۲ پرامپت). */
   notes: z.string().trim().max(2000).nullable().default(null),
   details: invoiceDetailsSchema,

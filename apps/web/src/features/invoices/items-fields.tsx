@@ -36,24 +36,47 @@ export interface ItemsDraft {
   readonly items: readonly ItemDraft[];
 }
 
-export function emptyItemsDraft(defaultRateBp: number | null): ItemsDraft {
-  const rateBp = defaultRateBp ?? 1000;
+/**
+ * نقطهٔ شروع ردیف‌ها.
+ *
+ * پیش‌فرض مالیات و واحد از **تنظیمات سازمان و اطلاعات پایه** می‌آید، نه از عدد
+ * ثابت در کد: سازمانی که فاکتورهایش معاف است، تا دیروز در هر ردیف ۱۰٪ را دستی
+ * صفر می‌کرد.
+ */
+export interface ItemsDefaults {
+  readonly tax: TaxDraft;
+  readonly unitId: string;
+}
+
+export function invoiceTaxDefaults(
+  defaults: { taxMode: TaxMode; taxRateBp: number | null; taxAmount: string },
+  fiscalRateBp: number | null,
+): TaxDraft {
   return {
-    invoiceTax: { mode: 'PERCENT', rateBp, amount: '' },
-    items: [newItem(rateBp)],
+    mode: defaults.taxMode,
+    // نرخِ تنظیم‌شده، وگرنه نرخ سال مالی، وگرنه ۱۰٪ — همان ترتیبی که کاربر انتظار دارد.
+    rateBp: defaults.taxRateBp ?? fiscalRateBp ?? 1000,
+    amount: defaults.taxMode === 'AMOUNT' ? defaults.taxAmount : '',
   };
 }
 
-function newItem(rateBp: number): ItemDraft {
+export function emptyItemsDraft(defaults: ItemsDefaults): ItemsDraft {
+  return {
+    invoiceTax: defaults.tax,
+    items: [newItem(defaults)],
+  };
+}
+
+function newItem(defaults: ItemsDefaults): ItemDraft {
   return {
     key: crypto.randomUUID(),
     description: '',
     productCode: '',
     quantity: '1',
-    unitId: '',
+    unitId: defaults.unitId,
     unitPrice: '',
     discountAmount: '0',
-    tax: { mode: 'PERCENT', rateBp, amount: '' },
+    tax: defaults.tax,
   };
 }
 
@@ -75,11 +98,14 @@ export function ItemsFields({
   onChange,
   units,
   policy,
+  defaults,
 }: {
   draft: ItemsDraft;
   onChange: (next: ItemsDraft) => void;
   units: ReadonlyArray<{ id: string; title: string }>;
   policy: RoundingPolicyRef;
+  /** پیش‌فرض ردیف تازه — همان که ردیف اول با آن ساخته شد. */
+  defaults: ItemsDefaults;
 }): JSX.Element {
   const perLineTax = policy.scope === 'LINE';
   const preview = safePreview(() => computePreview(draft, policy));
@@ -125,7 +151,9 @@ export function ItemsFields({
               onClick={() =>
                 onChange({
                   ...draft,
-                  items: [...draft.items, newItem(draft.invoiceTax.rateBp ?? 1000)],
+                  // ردیف تازه همان پیش‌فرض را می‌گیرد، نه مالیاتِ ردیف قبلی:
+                  // تغییرِ یک ردیف، تصمیم همان ردیف است.
+                  items: [...draft.items, newItem(defaults)],
                 })
               }
             >
@@ -155,6 +183,15 @@ export function ItemsFields({
 
                   <button
                     type="button"
+                    /*
+                      بیرون از مسیر Tab.
+
+                      کاربر ردیف‌ها را با Tab پر می‌کند و در پایان هر ردیف به
+                      دکمهٔ حذف می‌رسید — یک ایستگاه اضافه، درست کنار کاری که
+                      برگشت‌پذیر نیست. با ماوس و با صفحه‌خوان همچنان در دسترس
+                      است؛ فقط در مسیر تایپِ پیاپی نمی‌نشیند.
+                    */
+                    tabIndex={-1}
                     disabled={draft.items.length === 1}
                     aria-label={`حذف ردیف ${toPersianDigits(String(index + 1))}`}
                     title={

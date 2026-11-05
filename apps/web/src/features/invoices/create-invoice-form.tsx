@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
+  DEFAULT_INVOICE_DEFAULTS,
   INVOICE_KIND_REGISTRY,
   formatJalali,
   isoDateToJalali,
   jalaliToIsoDate,
   parseJalali,
+  type InvoiceDefaults,
   type InvoiceKind,
   type InvoiceLineModel,
 } from '@dm/shared';
@@ -31,18 +33,40 @@ import {
   type CreateInvoicePayload,
   type InvoiceDetailsPayload,
 } from './invoices.api';
-import { ItemsFields, emptyItemsDraft, invoiceTaxToPayload, itemsToPayload, type ItemsDraft } from './items-fields';
+import {
+  ItemsFields,
+  emptyItemsDraft,
+  invoiceTaxDefaults,
+  invoiceTaxToPayload,
+  itemsToPayload,
+  type ItemsDefaults,
+  type ItemsDraft,
+} from './items-fields';
 import { UtilityFields, EMPTY_UTILITY, type UtilityDraft } from './utility-fields';
 import { FuelFields, emptyFuelDraft, type FuelDraft } from './fuel-fields';
 import { PaymentFields, EMPTY_PAYMENT, paymentToPayload, type PaymentDraft, type PaymentMethodRef } from './payment-fields';
 import { detailsTotal, type RoundingPolicyRef } from './invoice-preview';
+import { useFocusScroll } from '../../shared/ui/use-focus-scroll';
+
+/** فهرست ساده‌ای که می‌تواند یک پیش‌فرض داشته باشد. */
+interface LookupRef {
+  readonly id: string;
+  readonly title: string;
+  readonly isDefault: boolean;
+}
 
 interface BootstrapData {
   readonly paymentMethods: readonly PaymentMethodRef[];
-  readonly utilityTypes: ReadonlyArray<{ id: string; title: string }>;
-  readonly fuelTypes: ReadonlyArray<{ id: string; title: string }>;
-  readonly vehicleTypes: ReadonlyArray<{ id: string; title: string }>;
-  readonly measurementUnits: ReadonlyArray<{ id: string; title: string }>;
+  readonly utilityTypes: readonly LookupRef[];
+  readonly fuelTypes: readonly LookupRef[];
+  readonly vehicleTypes: readonly LookupRef[];
+  readonly measurementUnits: readonly LookupRef[];
+  readonly invoiceDefaults: InvoiceDefaults;
+}
+
+/** شناسهٔ ردیفِ پیش‌فرض یک فهرست؛ `''` یعنی پیش‌فرضی تعریف نشده. */
+function defaultIdOf(items: readonly LookupRef[] | undefined): string {
+  return items?.find((item) => item.isDefault)?.id ?? '';
 }
 
 /**
@@ -65,6 +89,7 @@ export function CreateInvoiceForm({
   invoiceId = null,
   onClose,
   onCreated,
+  onDirtyChange,
 }: {
   documentId: string;
   /**
@@ -85,7 +110,16 @@ export function CreateInvoiceForm({
   lockedCategoryKey: 'CURRENT' | 'CAPITAL' | null;
   onClose: () => void;
   onCreated: () => void;
+  /**
+   * آیا کاربر چیزی در این فرم نوشته که با بستنش از دست می‌رود؟
+   *
+   * صفحهٔ سند با همین تصمیم می‌گیرد که پیش از باز کردن فاکتور دیگری بپرسد یا نه.
+   * مقایسه با **وضعیت آغازین همین فرم** است، نه با خالی بودن فیلدها: در ویرایش،
+   * فرم از ابتدا پر است و پیش‌فرض‌ها هم نوشتهٔ کاربر نیستند.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
 }): JSX.Element {
+  const focusScroll = useFocusScroll();
   const categories = useBudgetCategories();
   const bootstrap = useQuery({
     queryKey: ['base-data', 'bootstrap'],
@@ -116,7 +150,24 @@ export function CreateInvoiceForm({
   /** گفت‌وگوی ساخت فروشنده، از داخل همین فرم. */
   const [newVendor, setNewVendor] = useState(false);
 
-  const [itemsDraft, setItemsDraft] = useState<ItemsDraft>(() => emptyItemsDraft(null));
+  /*
+    پیش‌فرض ردیف‌ها — مالیات از تنظیمات سازمان و واحد از اطلاعات پایه.
+
+    تا رسیدن `bootstrap` مقدارش همان پیش‌فرضِ خنثی است؛ اثر پایین‌تر، فرمِ **خالی**
+    را با مقدار واقعی دوباره می‌سازد. فرمِ دست‌خورده را دست نمی‌زند، وگرنه نوشتهٔ
+    کاربر با رسیدن یک پاسخ شبکه پاک می‌شد.
+  */
+  const itemsDefaults: ItemsDefaults = useMemo(
+    () => ({
+      tax: invoiceTaxDefaults(bootstrap.data?.invoiceDefaults ?? DEFAULT_INVOICE_DEFAULTS, null),
+      unitId: defaultIdOf(bootstrap.data?.measurementUnits),
+    }),
+    [bootstrap.data],
+  );
+
+  const [itemsDraft, setItemsDraft] = useState<ItemsDraft>(() =>
+    emptyItemsDraft({ tax: { mode: 'PERCENT', rateBp: 1000, amount: '' }, unitId: '' }),
+  );
   const [utilityDraft, setUtilityDraft] = useState<UtilityDraft>(EMPTY_UTILITY);
   const [fuelDraft, setFuelDraft] = useState<FuelDraft>(() => emptyFuelDraft(documentJalaliYear));
 
@@ -228,6 +279,47 @@ export function CreateInvoiceForm({
 
     setHydrated(true);
   }, [draft.data, hydrated]);
+
+  /*
+    نشاندن پیش‌فرض‌ها روی فرمِ **دست‌نخورده**.
+
+    `bootstrap` چند صد میلی‌ثانیه بعد از نخستین رندر می‌رسد؛ تا آن لحظه ردیف اول
+    با مقدار خنثی ساخته شده است. این اثر فقط وقتی آن را بازمی‌سازد که کاربر هنوز
+    چیزی ننوشته باشد — یک ردیفِ خالی، با همان شکلی که ساخته شد.
+  */
+  const defaultsApplied = useRef(false);
+  useEffect(() => {
+    if (editing || defaultsApplied.current || !bootstrap.data) return;
+    defaultsApplied.current = true;
+
+    setItemsDraft((current) => {
+      const only = current.items[0];
+      const untouched =
+        current.items.length === 1 &&
+        only !== undefined &&
+        only.description === '' &&
+        only.unitPrice === '' &&
+        only.unitId === '';
+
+      return untouched ? emptyItemsDraft(itemsDefaults) : current;
+    });
+
+    setUtilityDraft((current) =>
+      current.utilityTypeId === ''
+        ? { ...current, utilityTypeId: defaultIdOf(bootstrap.data?.utilityTypes) }
+        : current,
+    );
+
+    setFuelDraft((current) => ({
+      ...current,
+      vehicleTypeId:
+        current.vehicleTypeId === ''
+          ? defaultIdOf(bootstrap.data?.vehicleTypes)
+          : current.vehicleTypeId,
+      fuelTypeId:
+        current.fuelTypeId === '' ? defaultIdOf(bootstrap.data?.fuelTypes) : current.fuelTypeId,
+    }));
+  }, [bootstrap.data, editing, itemsDefaults]);
 
   const invoiceTypes = useChapterInvoiceTypes(chapterId);
   const vendors = useVendorSearch(vendorSearch);
@@ -378,6 +470,62 @@ export function CreateInvoiceForm({
     return details === null ? null : detailsTotal(details, policy);
   }, [kind, itemsDraft, utilityDraft, fuelDraft, policy]);
 
+  /*
+    «دست‌خورده» بودنِ فرم.
+
+    امضای وضعیت با وضعیتِ آغازین مقایسه می‌شود: در ویرایش، آغازین یعنی همان
+    مقادیر فاکتور؛ در فاکتور تازه، یعنی فرم با پیش‌فرض‌هایش. پس نه پیش‌فرض‌ها
+    «تغییر» شمرده می‌شوند و نه نوشتهٔ کاربر نادیده می‌ماند.
+
+    امضا رشته است و نه مقایسهٔ عمیقِ دستی: فیلدها زیادند و هر فیلدِ تازه‌ای که
+    فردا اضافه شود، بدون اینکه کسی یادش بیفتد، خودبه‌خود در امضا می‌آید.
+  */
+  const signature = JSON.stringify({
+    categoryId,
+    chapterId,
+    invoiceTypeId,
+    vendorId,
+    invoiceNumber,
+    invoiceDate,
+    description,
+    notes,
+    payment,
+    itemsDraft,
+    utilityDraft,
+    fuelDraft,
+  });
+
+  const baseline = useRef<string | null>(null);
+  const settled = editing ? hydrated : bootstrap.data !== undefined;
+
+  /*
+    «دست‌خورده» یعنی **کاربر** چیزی عوض کرده، نه اینکه وضعیت عوض شده.
+
+    فرم پس از باز شدن چند بار خودش می‌نشیند: نوع فاکتور پیش‌فرض، روش پرداخت آن
+    نوع، پلاکی که با جست‌وجوی سمت سرور می‌رسد. اگر تنها معیار «تغییر امضا» بود،
+    فرمِ دست‌نخورده هم دست‌خورده اعلام می‌شد — و کاربر برای رفتن به فاکتور بعدی
+    یک پرسشِ بی‌مورد می‌دید. (همین در آزمون زنده دیده شد.)
+
+    پس تا نخستین کلید یا کلیکِ کاربر **درون فرم**، مبنا با هر تغییر به‌روز می‌شود؛
+    از آن لحظه به بعد، مقایسه معنا دارد.
+  */
+  const interacted = useRef(false);
+
+  useEffect(() => {
+    if (!settled) return;
+
+    if (!interacted.current) {
+      baseline.current = signature;
+      onDirtyChange?.(false);
+      return;
+    }
+
+    onDirtyChange?.(signature !== baseline.current);
+  }, [settled, signature, onDirtyChange]);
+
+  // بسته شدن فرم، هر ادعایی دربارهٔ دست‌خوردگی را پس می‌گیرد.
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+
   const submit = (): void => {
     setMessage(null);
 
@@ -398,7 +546,7 @@ export function CreateInvoiceForm({
       vendorId: vendorId || null,
       invoiceNumber: invoiceNumber.trim() || null,
       invoiceDate: isoInvoiceDate,
-      description: description.trim() || null,
+      description: description.trim(),
       notes: notes.trim() || null,
       details,
       payment: paymentToPayload(payment),
@@ -424,6 +572,21 @@ export function CreateInvoiceForm({
 
   return (
     <Card>
+      {/*
+        فوکوس، فیلد را به ناحیهٔ امن می‌آورد.
+
+        `onFocusCapture` روی کل کارت است و نه روی تک‌تک فیلدها: فرم ده‌ها ورودی
+        دارد و هر فیلدِ تازه‌ای که فردا اضافه شود، خودبه‌خود همین رفتار را دارد.
+      */}
+      <div
+        onFocusCapture={focusScroll}
+        onPointerDownCapture={() => {
+          interacted.current = true;
+        }}
+        onKeyDownCapture={() => {
+          interacted.current = true;
+        }}
+      >
       <CardHeader
         icon={editing ? 'edit' : 'plus'}
         title={editing ? 'ویرایش فاکتور' : 'افزودن فاکتور'}
@@ -533,7 +696,23 @@ export function CreateInvoiceForm({
                   label: vendor.name,
                   description: vendor.representativeName ?? undefined,
                 }))}
-                onChange={setVendorId}
+                /*
+                  عوض شدن فروشنده، شبای انتخاب‌شده را برمی‌دارد.
+
+                  شبا به فروشنده تعلق دارد؛ ماندنش پس از تعویض یعنی فاکتوری که
+                  پولش به حساب فروشندهٔ دیگری می‌رود — خطایی که سرور هم می‌گیرد،
+                  ولی کاربر باید همان لحظه ببیند، نه پای ثبت.
+                */
+                onChange={(nextVendorId) => {
+                  setVendorId(nextVendorId);
+                  if (nextVendorId !== vendorId) {
+                    setPayment((current) =>
+                      current.vendorBankAccountId === ''
+                        ? current
+                        : { ...current, vendorBankAccountId: '' },
+                    );
+                  }
+                }}
                 onCreate={() => setNewVendor(true)}
                 createLabel="افزودن فروشنده"
                 hint="اگر فروشنده ثبت نشده، از پایین همین فهرست بسازیدش."
@@ -564,6 +743,7 @@ export function CreateInvoiceForm({
                 onChange={setItemsDraft}
                 units={reference.measurementUnits}
                 policy={policy}
+                defaults={itemsDefaults}
               />
             ) : null}
 
@@ -611,6 +791,7 @@ export function CreateInvoiceForm({
             */}
             <Input
               label="شرح فاکتور"
+              required
               maxLength={500}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
@@ -666,6 +847,7 @@ export function CreateInvoiceForm({
           }}
         />
       ) : null}
+      </div>
     </Card>
   );
 }

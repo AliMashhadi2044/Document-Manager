@@ -42,7 +42,14 @@ export const envSchema = z.object({
    */
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(5),
-  GENERAL_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(600),
+  /**
+   * سقف عمومی، به‌ازای هر نشانی در دقیقه.
+   *
+   * عدد بالاست و عمداً: این سقف برای **سیل درخواست** است، نه تنظیم ظریفِ سهم
+   * کاربران. اگر سرویس پشت proxy باشد و `TRUST_PROXY` خاموش بماند، کل اداره یک
+   * نشانی دیده می‌شود و همین عدد باید جا داشته باشد.
+   */
+  GENERAL_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(1_200),
 
   /**
    * آیا سرویس پشت یک proxy معکوس (nginx و مانندش) است؟

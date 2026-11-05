@@ -64,6 +64,8 @@ test.describe('پرداخت تکراری انشعاب', () => {
 
     await page.getByRole('textbox', { name: 'مبلغ', exact: true }).fill('5000000');
     await pickOption(page, 'روش پرداخت', { text: 'تنخواه' });
+    // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+    await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
     await expect(page.getByText('جمع سند').locator('..')).toContainText('۵٬۵۰۰٬۰۰۰');
 
@@ -88,11 +90,15 @@ test.describe('پرداخت تکراری انشعاب', () => {
      * بدون تأیید، سرور باید رد کند — و پیام خطا هم باید همان جزئیات را داشته باشد،
      * نه یک «خطای نامشخص».
      */
+    // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+    await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
     await expect(page.getByText(/پیش از این برای/).first()).toBeVisible();
 
     // با تأیید صریح، ثبت انجام می‌شود.
     await warning.getByRole('checkbox').check();
+    // شرح فاکتور اجباری است؛ همان جمله‌ای که در گزارش مالیات هم می‌نشیند.
+    await page.getByLabel('شرح فاکتور').fill(unique('شرح'));
     await page.getByRole('button', { name: 'ثبت فاکتور' }).click();
     await expect(page.getByText('جمع سند').locator('..')).toContainText('۳٬۳۰۰٬۰۰۰');
   });
