@@ -238,8 +238,10 @@ export class LookupService {
     await this.audit.record({
       actorId,
       action: 'BASE_DATA_REORDER',
+      // نام منبع در `entityType` می‌آید؛ `entityId` ستون UUID است و رشته‌ای
+      // مثل «districts» نوشتن کل ردپا را خاموشانه شکست می‌داد.
       entityType: LOOKUP_RESOURCES[resource].model,
-      entityId: resource,
+      entityId: null,
       after: { order: next.map((record) => record.id) },
     });
   }

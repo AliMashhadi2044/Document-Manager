@@ -12,6 +12,7 @@ import {
   evaluateExpression,
   formatValue,
   layoutReport,
+  toValue,
   printableWidthMm,
   readPath,
   renderReportHtml,
@@ -72,6 +73,35 @@ describe('قالب‌بندی مقدار', () => {
     expect(
       formatValue('10101234561', { ...TEXT_FORMAT, kind: 'economicCode', persianDigits: false }),
     ).toBe('10101234561');
+  });
+
+  /*
+    صفرِ ابتدایی، جایی می‌افتاد که هیچ قالبی نمی‌دیدش.
+
+    آزمون بالا سال‌ها سبز بود چون `formatValue` را مستقیم با **رشته** صدا می‌زد؛
+    ولی در مسیر واقعی، مقدار اول از `toValue` رد می‌شود و آنجا هر رشتهٔ تماماً
+    رقمی `bigint` می‌شد. کد ملیِ «۰۴۹۹۳۷۰۸۹۹» پیش از رسیدن به قالب‌بندی،
+    «۴۹۹۳۷۰۸۹۹» شده بود — نه بدقواره، که **عدد دیگری**. پس ادعا باید روی همان
+    مرزی بنشیند که داده از آن می‌گذرد.
+  */
+  it('شناسهٔ با صفرِ ابتدایی، عدد نمی‌شود', () => {
+    expect(toValue('0499370899')).toBe('0499370899');
+    expect(toValue('00123456789')).toBe('00123456789');
+    // کدپستی و تلفن شهری هم همین‌اند.
+    expect(toValue('0371234567')).toBe('0371234567');
+  });
+
+  it('عددِ واقعی همچنان عدد می‌ماند', () => {
+    // مبالغ از API رشتهٔ عددی‌اند (ADR-0003) و باید bigint شوند، وگرنه جمع‌ها می‌شکند.
+    expect(toValue('2950481510')).toBe(2_950_481_510n);
+    expect(toValue('0')).toBe(0n);
+    expect(toValue('-4500')).toBe(-4500n);
+    expect(toValue('')).toBe('');
+  });
+
+  it('کد ملیِ با صفر، از داده تا چاپ سالم می‌رسد', () => {
+    const format = { ...TEXT_FORMAT, kind: 'economicCode' as const, persianDigits: true };
+    expect(formatValue(toValue('0499370899'), format)).toBe('۰۴۹۹۳۷۰۸۹۹');
   });
 
   it('تاریخ میلادی به شمسی تبدیل می‌شود', () => {

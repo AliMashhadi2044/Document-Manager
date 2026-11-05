@@ -266,7 +266,7 @@ export function toValue(raw: unknown): Value {
   if (typeof raw === 'boolean') return raw;
   if (typeof raw === 'number') return Number.isInteger(raw) ? BigInt(raw) : String(raw);
   if (typeof raw === 'string') {
-    if (/^-?\d+$/.test(raw)) {
+    if (/^-?\d+$/.test(raw) && !hasLeadingZero(raw)) {
       try {
         return BigInt(raw);
       } catch {
@@ -276,6 +276,20 @@ export function toValue(raw: unknown): Value {
     return raw;
   }
   return String(raw);
+}
+
+/**
+ * «۰» ابتدایی یعنی این رشته عدد نیست — شناسه است.
+ *
+ * کد ملی `0123456789`، کدپستی و شمارهٔ تلفن شهری، همه با صفر شروع می‌شوند و
+ * همان صفر بخشی از خودِ شناسه است. اگر اینجا `bigint` شوند، صفر پیش از هر
+ * قالب‌بندی‌ای از بین رفته است و هیچ ستونی دیگر نمی‌تواند برش گرداند: در گزارش
+ * مالیات، کد ملیِ یک طرف قرارداد نه‌فقط بدقواره، که **اشتباه** چاپ می‌شود.
+ *
+ * مبلغ هیچ‌وقت این شکل را ندارد؛ عددِ متعارف یا «۰» است یا بی‌صفرِ ابتدایی.
+ */
+function hasLeadingZero(raw: string): boolean {
+  return /^-?0\d/u.test(raw);
 }
 
 /** خواندن مسیر نقطه‌ای از یک شیء ساده؛ بدون prototype chain و بدون تابع. */

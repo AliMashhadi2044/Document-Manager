@@ -12,6 +12,9 @@ import { PrismaService } from '../prisma/prisma.service';
  *    شود ولی ردپایش گم شود.
  */
 
+/** شکل UUID؛ `entity_id` در دیتابیس همین را می‌پذیرد و نه هر رشته‌ای. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
 /** فیلدهایی که هرگز در audit ثبت نمی‌شوند. */
 const REDACTED_FIELDS = new Set([
   'passwordHash',
@@ -51,13 +54,37 @@ export class AuditService {
     const after = sanitize(input.after);
     const changedFields = diffFields(before, after);
 
+    /*
+      شناسهٔ غیر-UUID، ردپا را از بین نمی‌برد.
+
+      `entity_id` ستونی از نوع UUID است، ولی در تایپ‌اسکریپت فقط `string` است —
+      پس فرستادن کلیدی مثل «invoice_defaults» یا «districts» کامپایل می‌شود و
+      بعد در دیتابیس می‌شکند. بیرون از تراکنش، خطا فقط لاگ می‌شد و رکورد audit
+      هرگز نوشته نمی‌شد: دو مسیر در این سامانه ماه‌ها بدون هیچ ردپایی کار کردند
+      و یکی‌شان نرخ مالیات را عوض می‌کرد.
+
+      پس شناسهٔ بدشکل **دور ریخته نمی‌شود، جابه‌جا می‌شود**: به `entityType`
+      می‌چسبد تا هم ردپا نوشته شود و هم معلوم باشد چه چیزی عوض شده. این یک
+      شبکهٔ اطمینان است و نه مجوز: هشدار لاگ می‌شود تا خودِ فراخوان درست شود.
+    */
+    let entityType = input.entityType;
+    let entityId = input.entityId ?? null;
+    if (entityId !== null && !UUID_PATTERN.test(entityId)) {
+      this.logger.warn(
+        { action: input.action, entityType, entityId },
+        'شناسهٔ موجودیت در audit، UUID نیست و به entityType منتقل شد',
+      );
+      entityType = `${entityType}.${entityId}`.slice(0, 100);
+      entityId = null;
+    }
+
     try {
       await client.auditLog.create({
         data: {
           actorId: input.actorId,
           action: input.action,
-          entityType: input.entityType,
-          entityId: input.entityId ?? null,
+          entityType,
+          entityId,
           documentId: input.documentId ?? null,
           before: (before ?? null) as Prisma.InputJsonValue,
           after: (after ?? null) as Prisma.InputJsonValue,

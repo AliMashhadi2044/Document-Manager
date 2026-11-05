@@ -129,8 +129,16 @@ export class ReferenceController {
     await this.audit.record({
       actorId: user.id,
       action: 'INVOICE_DEFAULTS_SET',
-      entityType: 'systemSetting',
-      entityId: INVOICE_DEFAULTS_KEY,
+      /*
+        کلید تنظیم در `entityType` می‌نشیند، نه در `entityId`.
+
+        `audit_logs.entity_id` ستونی از نوع UUID است و کلید این تنظیم یک رشته
+        («invoice_defaults»). فرستادنش به آن ستون، نوشتن در رد حسابرسی را
+        **خاموشانه** شکست می‌داد: خطا بیرون از تراکنش فقط لاگ می‌شد و درخواست
+        ۲۰۰ برمی‌گرداند — یعنی نرخ مالیاتِ سازمان عوض می‌شد و هیچ ردی نمی‌ماند.
+      */
+      entityType: `systemSetting.${INVOICE_DEFAULTS_KEY}`,
+      entityId: null,
       before: parseInvoiceDefaults(before?.value),
       after: body,
     });
