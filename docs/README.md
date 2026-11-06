@@ -25,6 +25,11 @@
 | 15 | [tax-report-reference](15-tax-report-reference.md) | تحلیل تصویر مرجع گزارش مالیات |
 | 16 | [local-development](16-local-development.md) | راهنمای اجرای محلی و عیب‌یابی |
 | 17 | [query-plans](17-query-plans.md) | پلن اجرای کوئری‌های گزارش‌گیری (خروجی خودکار) |
+| 18 | [operations](18-operations.md) | راهنمای بهره‌برداری و انتشار |
+| 19 | [performance](19-performance.md) | سنجش کارایی (خروجی خودکار) |
+| 20 | [ui-design-system](20-ui-design-system.md) | سیستم طراحی رابط |
+| 21 | [upgrade-1405-08](21-upgrade-1405-08.md) | ارتقای نسخهٔ مستقر بدون از دست رفتن داده (تا `2cd0dd7`) |
+| 22 | [upgrade-1405-08-b](22-upgrade-1405-08-b.md) | ارتقای دوم: مجوز تازه، قالب‌های گزارش و الزامی شدن روش پرداخت |
 | — | [adr/](adr/) | تصمیم‌های معماری (Architecture Decision Records) |
 
 ## مستندات هنوز نوشته‌نشده

@@ -44,3 +44,7 @@ Compose تأمین می‌شود. دستورها و آزمون‌های زنده
 
 **تمام مبالغ سامانه بر حسب ریال و از نوع عدد صحیح هستند.** هیچ تبدیل خودکاری به تومان
 انجام نمی‌شود. جزئیات در [docs/08-financial-rules.md](docs/08-financial-rules.md).
+
+
+npm run dev -w @dm/web
+npm run dev -w @dm/api
