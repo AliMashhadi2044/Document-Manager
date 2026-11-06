@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Put,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
@@ -14,7 +24,15 @@ import {
   type AuthenticatedUser,
 } from '../../common/auth/auth.decorators';
 import { ZodBody } from '../../common/validation/zod.pipe';
-import { PASSWORD_MAX_LENGTH } from '@dm/shared';
+import {
+  PASSWORD_MAX_LENGTH,
+  parseSessionPolicy,
+  sessionPolicySchema,
+  type SessionPolicy,
+} from '@dm/shared';
+import { AuditService } from '../../common/audit/audit.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { SESSION_POLICY_KEY, SessionPolicyService } from './session-policy.service';
 import type { Env } from '../../common/config/env';
 
 const loginSchema = z.object({
@@ -40,6 +58,9 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly sessions: SessionService,
     private readonly config: ConfigService<Env, true>,
+    private readonly policy: SessionPolicyService,
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
   ) {}
 
   @Public()
@@ -87,14 +108,14 @@ export class AuthController {
   @RequirePermission()
   @Get('me')
   @ApiOperation({ summary: 'اطلاعات کاربر جاری و مجوزهای او' })
-  me(@CurrentUser() user: AuthenticatedUser): {
+  async me(@CurrentUser() user: AuthenticatedUser): Promise<{
     id: string;
     username: string;
     fullName: string;
     roles: readonly string[];
     permissions: readonly string[];
     sessionIdleMinutes: number;
-  } {
+  }> {
     return {
       id: user.id,
       username: user.username,
@@ -107,7 +128,74 @@ export class AuthController {
         بدون این عدد، کلاینت باید حدس می‌زد؛ و کسی که وسط فرم فاکتور است، بی‌خبر
         بیرون می‌افتاد و کارِ نیمه‌تمامش را از دست می‌داد.
       */
-      sessionIdleMinutes: this.config.get('SESSION_IDLE_TTL_MINUTES', { infer: true }),
+      sessionIdleMinutes: await this.policy.effectiveIdleMinutes(),
+    };
+  }
+
+  /**
+   * سیاست نشست — خواندن و نوشتن.
+   *
+   * مجوزش `security_settings:write` است و نه `role:write`: کوتاه یا بلند کردن
+   * مهلتِ همهٔ نشست‌ها یک کنترل امنیتی است، نه بخشی از چیدن نقش‌ها.
+   *
+   * `effectiveIdleMinutes` هم برگردانده می‌شود تا رابط بتواند بگوید «اکنون چه
+   * عددی حاکم است» — وقتی مقدار ذخیره‌نشده باشد، عددِ محیطی حاکم است.
+   */
+  @RequirePermission('security_settings:write')
+  @Get('session-policy')
+  @ApiOperation({ summary: 'خواندن سیاست نشست' })
+  async readSessionPolicy(): Promise<{
+    policy: SessionPolicy;
+    envIdleMinutes: number;
+    effectiveIdleMinutes: number;
+  }> {
+    const policy = await this.policy.read();
+    return {
+      policy,
+      envIdleMinutes: this.policy.envIdleMinutes,
+      effectiveIdleMinutes: policy.idleMinutes ?? this.policy.envIdleMinutes,
+    };
+  }
+
+  @RequirePermission('security_settings:write')
+  @Put('session-policy')
+  @ApiOperation({ summary: 'ذخیرهٔ سیاست نشست' })
+  async setSessionPolicy(
+    @Body(new ZodBody(sessionPolicySchema)) body: SessionPolicy,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<{
+    policy: SessionPolicy;
+    envIdleMinutes: number;
+    effectiveIdleMinutes: number;
+  }> {
+    const before = await this.prisma.systemSetting.findUnique({
+      where: { key: SESSION_POLICY_KEY },
+    });
+
+    await this.prisma.systemSetting.upsert({
+      where: { key: SESSION_POLICY_KEY },
+      create: { key: SESSION_POLICY_KEY, value: body, updatedBy: user.id },
+      update: { value: body, updatedBy: user.id },
+      select: { key: true },
+    });
+
+    // کش چند ثانیه‌ای است؛ بی‌اعتبار کردنش یعنی تغییر از همین درخواست اثر دارد.
+    this.policy.invalidate();
+
+    await this.audit.record({
+      actorId: user.id,
+      action: 'SESSION_POLICY_SET',
+      // کلید تنظیم رشته است و `audit_logs.entity_id` ستون UUID؛ پس در entityType می‌نشیند.
+      entityType: `systemSetting.${SESSION_POLICY_KEY}`,
+      entityId: null,
+      before: parseSessionPolicy(before?.value),
+      after: body,
+    });
+
+    return {
+      policy: body,
+      envIdleMinutes: this.policy.envIdleMinutes,
+      effectiveIdleMinutes: body.idleMinutes ?? this.policy.envIdleMinutes,
     };
   }
 

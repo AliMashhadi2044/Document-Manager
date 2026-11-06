@@ -21,6 +21,7 @@ import { formatIsoAsJalali, formatServerMessage, toPersianDigits } from '../../s
 import { useCurrentUser } from '../auth/auth.api';
 import { RowAction } from '../base-data/row-action';
 import { PasswordDialog, UserDialog } from './user-dialog';
+import { SessionPolicyCard } from './session-policy-card';
 import {
   useRevokeSessions,
   useRoles,
@@ -43,29 +44,43 @@ import {
  * بررسی می‌کند. پنهان کردن دکمه فقط برای این است که کاربر دنبال کاری نرود که
  * نتیجه‌اش خطا است.
  */
+type UsersTabKey = 'users' | 'roles' | 'security';
+
 export function UsersPage(): JSX.Element {
-  const [tab, setTab] = useState<'users' | 'roles'>('users');
+  const [tab, setTab] = useState<UsersTabKey>('users');
 
   const { data: me } = useCurrentUser();
   const canWrite = me?.permissions.includes('user:write') ?? false;
   const canEditRoles = me?.permissions.includes('role:write') ?? false;
+  const canEditSecurity = me?.permissions.includes('security_settings:write') ?? false;
+
+  /*
+    زبانهٔ «امنیت نشست» فقط برای دارندهٔ مجوزش دیده می‌شود — ولی این پنهان‌سازی
+    کنترل دسترسی نیست: مسیر سرور خودش مجوز را می‌سنجد.
+  */
+  const active: UsersTabKey = tab === 'security' && !canEditSecurity ? 'users' : tab;
 
   return (
     <div className="space-y-4">
       <Segmented
         label="بخش"
-        value={tab}
-        onChange={(next) => setTab(next as 'users' | 'roles')}
+        value={active}
+        onChange={(next) => setTab(next as UsersTabKey)}
         options={[
           { value: 'users', label: 'کاربران', icon: 'users' },
           { value: 'roles', label: 'نقش‌ها و دسترسی‌ها', icon: 'settings' },
+          ...(canEditSecurity
+            ? [{ value: 'security', label: 'امنیت نشست', icon: 'clock' as const }]
+            : []),
         ]}
       />
 
-      {tab === 'users' ? (
+      {active === 'users' ? (
         <UsersTab canWrite={canWrite} currentUserId={me?.id ?? null} />
-      ) : (
+      ) : active === 'roles' ? (
         <RolesTab canEdit={canEditRoles} />
+      ) : (
+        <SessionPolicyCard />
       )}
     </div>
   );

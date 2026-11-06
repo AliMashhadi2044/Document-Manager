@@ -6,6 +6,7 @@ import type { Permission } from '@dm/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { AuthenticatedUser } from '../../common/auth/auth.decorators';
 import type { Env } from '../../common/config/env';
+import { SessionPolicyService } from './session-policy.service';
 
 export const SESSION_COOKIE = 'dm_session';
 export const CSRF_COOKIE = 'dm_csrf';
@@ -28,6 +29,7 @@ export class SessionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService<Env, true>,
+    private readonly policy: SessionPolicyService,
   ) {}
 
   /** ساخت نشست تازه. شناسه نشست پس از ورود بازتولید می‌شود (ضد session fixation). */
@@ -75,7 +77,11 @@ export class SessionService {
     const now = Date.now();
     if (session.expiresAt.getTime() <= now) return null;
 
-    const idleLimit = this.config.get('SESSION_IDLE_TTL_MINUTES', { infer: true }) * 60_000;
+    /*
+      مهلت بی‌تحرکی از تنظیم سازمانی می‌آید و نه فقط از متغیر محیطی؛ مدیر سامانه
+      می‌تواند عوضش کند و اثرش بر همین مسیر است — همان جایی که نشست باطل می‌شود.
+    */
+    const idleLimit = (await this.policy.effectiveIdleMinutes()) * 60_000;
     if (now - session.lastSeenAt.getTime() > idleLimit) {
       await this.revokeById(session.id);
       return null;

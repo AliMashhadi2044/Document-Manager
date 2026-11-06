@@ -60,6 +60,7 @@ export const PERMISSIONS = [
   'user:read',
   'user:write',
   'role:write',
+  'security_settings:write',
   'audit:read',
 ] as const;
 
@@ -120,6 +121,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'user:read': 'مشاهده کاربران',
   'user:write': 'مدیریت کاربران',
   'role:write': 'مدیریت نقش‌ها',
+  'security_settings:write': 'مدیریت تنظیمات امنیتی نشست',
   'audit:read': 'مشاهده رویدادهای سامانه',
 };
 
@@ -238,6 +240,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'user:read',
     'user:write',
     'role:write',
+    /*
+      مهلت بی‌تحرکی نشست، مجوز خودش را دارد و نه `role:write`.
+
+      این عدد یک کنترل امنیتی است: کسی که نقش‌ها را می‌چیند لزوماً اختیار
+      کوتاه یا بلند کردن مهلتِ همهٔ نشست‌ها را ندارد.
+    */
+    'security_settings:write',
     'audit:read',
     'base_data:read',
     'document:read',

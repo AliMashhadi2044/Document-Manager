@@ -368,7 +368,23 @@ export function Select({
         close(true);
         break;
       case 'Tab':
+        /*
+          Tab از داخل فهرست باید به کنترل **بعدیِ فرم** برود.
+
+          فهرست در یک پورتال و در انتهای `document.body` رندر می‌شود، پس جست‌وجو
+          — که فوکوس روی آن است — در ترتیب DOM آخرین عنصر صفحه است. بستن تنها،
+          فوکوس را به دست مرورگر می‌سپرد و مرورگر از همان جای آخر جلو می‌رفت:
+          کاربر که فهرست را با «ظاهر و شخصی‌سازی ← باز شدن با فوکوس» باز کرده
+          بود و نمی‌خواست چیزی انتخاب کند، با یک Tab از فرم بیرون می‌افتاد و سر
+          از منوی کنار صفحه درمی‌آورد.
+
+          پس خودمان جابه‌جا می‌کنیم: فهرست بسته می‌شود و فوکوس به عنصرِ بعدی
+          (یا با Shift، قبلیِ) **دکمهٔ همین کنترل** می‌رود — همان جایی که اگر
+          فهرست هرگز باز نشده بود، Tab می‌رفت.
+        */
+        event.preventDefault();
         close(false);
+        focusNeighbor(triggerRef.current, event.shiftKey, panelRef.current);
         break;
       default:
         break;
@@ -842,4 +858,42 @@ function ManageButton({
       <Icon name={icon} size={14} />
     </button>
   );
+}
+
+/** انتخاب‌گرِ عناصری که مرورگر در ترتیب Tab می‌شمارد. */
+const FOCUSABLE =
+  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),' +
+  'textarea:not([disabled]),[tabindex]';
+
+/**
+ * فوکوس را به همسایهٔ بعدی (یا قبلی) `anchor` در ترتیب Tab صفحه می‌برد.
+ *
+ * چرا دستی: فهرست در پورتال است و ترتیب DOM آن با ترتیب دیداری فرم یکی نیست؛
+ * سپردن کار به مرورگر، کاربر را از فرم بیرون می‌انداخت.
+ */
+function focusNeighbor(
+  anchor: HTMLElement | null,
+  backwards: boolean,
+  panel: HTMLElement | null,
+): void {
+  if (anchor === null) return;
+
+  const all = [...document.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) => {
+    if (element.tabIndex < 0) return false;
+    if (element.getAttribute('aria-hidden') === 'true') return false;
+    /*
+      فهرست همین لحظه هنوز در DOM است (بسته شدنش در رندر بعدی اتفاق می‌افتد)،
+      پس عناصر خودش باید از شمارش بیرون بمانند؛ وگرنه Tab می‌توانست به جست‌وجوی
+      همان فهرستِ در حال بسته شدن برگردد.
+    */
+    if (panel !== null && panel.contains(element)) return false;
+    // عنصر پنهان (یا داخل ظرف پنهان) در ترتیب Tab نیست.
+    return element.offsetParent !== null || element === anchor;
+  });
+
+  const index = all.indexOf(anchor);
+  if (index === -1) return;
+
+  const next = all[index + (backwards ? -1 : 1)];
+  next?.focus();
 }

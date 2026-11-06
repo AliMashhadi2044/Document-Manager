@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import type { Permission } from '@dm/shared';
+import type { Permission, SessionPolicy } from '@dm/shared';
 
 import { apiFetch, ApiError, onUnauthorized } from '../../shared/api/client';
 import { clearPreferencesCache } from '../../shared/preferences/preferences';
@@ -17,7 +17,40 @@ export interface CurrentUser {
 
 export const authKeys = {
   me: ['auth', 'me'] as const,
+  sessionPolicy: ['auth', 'session-policy'] as const,
 };
+
+export interface SessionPolicyView {
+  readonly policy: SessionPolicy;
+  /** مقدار تنظیم‌شده در محیط سرور — مرجعِ «پیش‌فرض». */
+  readonly envIdleMinutes: number;
+  /** عددی که همین حالا اعمال می‌شود. */
+  readonly effectiveIdleMinutes: number;
+}
+
+/** سیاست نشست؛ فقط برای دارندهٔ `security_settings:write` خواندنی است. */
+export function useSessionPolicy(enabled: boolean) {
+  return useQuery({
+    queryKey: authKeys.sessionPolicy,
+    queryFn: () => apiFetch<SessionPolicyView>('/auth/session-policy'),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useSetSessionPolicy() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: SessionPolicy) =>
+      apiFetch<SessionPolicyView>('/auth/session-policy', { method: 'PUT', json: input }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(authKeys.sessionPolicy, data);
+      // هشدار پیش از پایان نشست روی `sessionIdleMinutes` کاربر جاری سوار است.
+      void queryClient.invalidateQueries({ queryKey: authKeys.me });
+    },
+  });
+}
 
 /**
  * کاربر جاری.
