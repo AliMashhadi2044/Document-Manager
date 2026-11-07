@@ -88,6 +88,16 @@ const updateDocumentSchema = z
     fiscalYear: z.coerce.number().int().min(1300).max(1500),
     jalaliYear: z.coerce.number().int().min(1300).max(1500),
     buyerEntityId: z.string().uuid('مجموعه خریدار را انتخاب کنید'),
+    /*
+      شماره و تاریخ گردش — مثل فرم ایجاد، بیرون از `stad` و برای هر دو نوع سند.
+
+      نبودنشان در این schema، ویرایش گردش را **خاموشانه** بی‌اثر می‌کرد: zod کلیدِ
+      ناشناخته را دور می‌اندازد، سرویس آن‌ها را `undefined` می‌دید، و پاسخ ۲۰۰
+      برمی‌گشت با پیام «مشخصات سند اصلاح شد» — در حالی که هیچ‌چیز عوض نشده بود.
+      سرویس از روز اول هر دو را می‌پذیرفت؛ فقط دروازه بسته بود.
+    */
+    workflowNumber: optionalText(100),
+    workflowDate: optionalIsoDate,
     stad: stadSchema.nullable(),
   })
   .partial();

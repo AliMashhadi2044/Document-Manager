@@ -22,13 +22,19 @@ export interface SignatoryRow {
   readonly sortOrder: number;
 }
 
+/*
+  `isDefault` اینجا **نیست**.
+
+  امضاکننده پیش‌فرض ندارد: نه ستونی در پایگاه داده دارد و نه schema سرور
+  می‌پذیردش. وجودِ این کلید در تایپ، یک وعدهٔ دروغ بود — کسی که به آن تکیه
+  می‌کرد مقداری می‌فرستاد که zod خاموشانه دور می‌انداخت و پاسخ ۲۰۰ برمی‌گشت.
+*/
 export interface SignatoryInput {
   readonly fullName: string;
   readonly positionTitle: string;
   readonly roleKey: SignatoryRoleKey;
   readonly isActive?: boolean;
   readonly sortOrder?: number;
-  readonly isDefault?: boolean;
 }
 
 export interface PettyCashHolderRow {
