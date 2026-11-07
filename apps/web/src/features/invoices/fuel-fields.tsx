@@ -3,6 +3,7 @@ import {
   calculateFuelInvoice,
   daysInJalaliMonth,
   formatJalali,
+  parsePlate,
   resolveFuelEntries,
   type Money,
 } from '@dm/shared';
@@ -131,7 +132,7 @@ export function FuelFields({
           options={(vehicles.data?.items ?? []).map((vehicle) => ({
             value: vehicle.id,
             // پلاک هم مثل بقیهٔ ارقام سامانه با ارقام فارسی دیده می‌شود.
-            label: toPersianDigits(vehicle.plateNumber),
+            label:`${parsePlate(vehicle.plateNumber)?.right}-${parsePlate(vehicle.plateNumber)?.letter}-${parsePlate(vehicle.plateNumber)?.left}-ایران${parsePlate(vehicle.plateNumber)?.iran}`,
             description: vehicle.notes ?? undefined,
           }))}
           onChange={(vehicleId) => onChange({ ...draft, vehicleId })}

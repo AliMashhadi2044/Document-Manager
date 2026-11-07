@@ -468,7 +468,6 @@ function InvoiceDefaultsCard({ canWrite }: { canWrite: boolean }): JSX.Element |
                 // نرخ به basis point صحیح نگه داشته می‌شود، نه اعشار (ADR-0003).
                 setDraft({ ...draft, taxRateBp: Math.round(percent * 100) });
               }}
-              hint="خالی یعنی «نرخ سال مالی». صفر یعنی ردیف‌ها بدون مالیات شروع شوند."
             />
           ) : (
             <Input
@@ -569,8 +568,7 @@ function ReportSettingsCard({ canWrite }: { canWrite: boolean }): JSX.Element | 
             onChange={(event) =>
               setDraft({ taxHighlightAbove: event.target.value.replace(/\D/gu, '') })
             }
-            hint="خالی یعنی خاموش؛ هیچ سلولی علامت نمی‌خورد."
-          />
+             />
 
           <Button
             loading={save.isPending}
