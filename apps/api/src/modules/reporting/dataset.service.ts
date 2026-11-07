@@ -12,6 +12,7 @@ import {
   isoDateToJalali,
   formatJalali,
   moneyToString,
+  parseReportSettings,
   type AggregatableInvoice,
   type Money,
 } from '@dm/shared';
@@ -82,7 +83,8 @@ export class DatasetService {
   > {
     const document = await this.access.assertDocumentVisible(documentId, user);
 
-    const [full, organization, signatories, productTypes, chapters] = await Promise.all([
+    const [full, organization, signatories, productTypes, chapters, reportSettingsRow] =
+      await Promise.all([
       this.prisma.financialDocument.findUniqueOrThrow({
         where: { id: documentId },
         include: {
@@ -129,7 +131,10 @@ export class DatasetService {
         orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
         select: { id: true, title: true, code: true, category: { select: { key: true } } },
       }),
+      this.prisma.systemSetting.findUnique({ where: { key: 'report_settings' } }),
     ]);
+
+    const reportSettings = parseReportSettings(reportSettingsRow?.value);
 
     const aggregatable: AggregatableInvoice[] = full.invoices.map((invoice) => ({
       id: invoice.id,
@@ -353,6 +358,16 @@ export class DatasetService {
           economicCode: '',
           addressLine: organization?.addressLine ?? '',
           phone: organization?.phone ?? '',
+        },
+        /*
+          آستانه، در هر اجرا از تنظیم‌ها خوانده می‌شود و در خروجی ذخیره نمی‌شود.
+
+          رشتهٔ خالی یعنی خاموش، و شرطِ قالب خودش با `empty` همین را می‌سنجد؛
+          فرستادن `null` همان معنا را داشت ولی `empty` را به حدسِ خروجی‌گیر وابسته
+          می‌کرد.
+        */
+        settings: {
+          taxHighlightAbove: reportSettings.taxHighlightAbove,
         },
         document: {
           title: document.title,

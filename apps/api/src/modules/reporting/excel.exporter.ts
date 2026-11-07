@@ -128,6 +128,16 @@ export class ExcelExporter {
           target.alignment = { wrapText: true, vertical: 'middle' };
         }
         target.border = thinBorder();
+        /*
+          همان علامتی که روی کاغذ خاکستری است، در Excel هم باشد.
+
+          Excel یک فایل کار است و کسی که در آن مرتب‌سازی و فیلتر می‌کند هم باید
+          ببیند کدام ردیف از آستانه گذشته؛ بدون این، علامت فقط در چاپ بود. رنگِ
+          قلم دست نمی‌خورد — پس‌زمینه علامت است و نه کم‌رنگ کردن عدد.
+        */
+        if (cell.shaded) {
+          target.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD4D4D4' } };
+        }
       });
       sheetRow.commit();
       cursor += 1;

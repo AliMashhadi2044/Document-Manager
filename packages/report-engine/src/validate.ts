@@ -201,6 +201,18 @@ export function validateTemplate(
               repeat !== undefined,
             );
           }
+          // شرطِ رنگ هم مثل هر عبارت دیگر: مسیرهایش باید در Data Dictionary باشند،
+          // وگرنه قالبی ذخیره می‌شد که سر اجرا خطا می‌دهد.
+          if (column.shadeWhen) {
+            checkCondition(
+              column.shadeWhen,
+              `${at}.columns.${column.key}.shadeWhen`,
+              dictionary,
+              rowSource,
+              problems,
+              repeat !== undefined,
+            );
+          }
         }
 
         /**

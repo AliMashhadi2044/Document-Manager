@@ -27,5 +27,6 @@ export * from './files/page-rotation.js';
 export * from './auth/password-policy.js';
 export * from './preferences/preferences.js';
 export * from './financial/invoice-defaults.js';
+export * from './reports/report-settings.js';
 export * from './identity/national-id.js';
 export * from './auth/session-policy.js';

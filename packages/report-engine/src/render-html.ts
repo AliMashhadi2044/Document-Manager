@@ -137,12 +137,26 @@ function renderTable(table: LaidOutTable): string {
         .map((column) => `<th class="align-center">${escapeHtml(column.titleFa)}</th>`)
         .join('')}</tr>`;
 
-  const body = table.rows.map((row) => `<tr>${row.map(renderCell).join('')}</tr>`).join('\n');
+  /*
+    `(cell) => renderCell(cell)` و نه `renderCell`.
+
+    `Array.map` شاخص را هم به تابع می‌دهد، و پارامتر دومِ `renderCell` همان
+    `colspan` است. پس `row.map(renderCell)` به سلولِ شمارهٔ ۲ `colspan="2"` می‌داد،
+    به سومی `colspan="3"` و همین‌طور تا آخر: جدولِ دوازده‌ستونیِ گزارش مالیات روی
+    کاغذ ده‌ها ستون می‌شد و خانه‌هایش روی هم می‌افتادند.
+
+    پارامتر `colspan` بعداً و برای ردیف جمع اضافه شد؛ همان لحظه این دو خط — که
+    پیش از آن درست بودند — **خاموشانه** معنایشان عوض شد. آزمون‌های HTML تا امروز
+    فقط سرستون‌ها را می‌سنجیدند و هیچ‌کدام قرمز نشد.
+  */
+  const body = table.rows
+    .map((row) => `<tr>${row.map((cell) => renderCell(cell)).join('')}</tr>`)
+    .join('\n');
 
   // ردیف‌های خالی پرکننده: فرم چاپی تعداد ردیف ثابت دارد. محتوایشان را چیدمان
   // ساخته است — فقط شمارهٔ ردیف دارند، نه «۰» در ستون‌های عددی.
   const fillers = table.fillerRows
-    .map((row) => `<tr class="filler-row">${row.map(renderCell).join('')}</tr>`)
+    .map((row) => `<tr class="filler-row">${row.map((cell) => renderCell(cell)).join('')}</tr>`)
     .join('\n');
 
   /**
@@ -206,9 +220,18 @@ ${totals}
  */
 function renderCell(cell: LaidOutCell, colspan = 1): string {
   const span = colspan > 1 ? ` colspan="${colspan}"` : '';
+  /*
+    سلولِ علامت‌خورده، فقط پس‌زمینه می‌گیرد.
+
+    رنگِ متن دست نمی‌خورد: علامت باید در یک نگاه دیده شود، ولی عددی که علامت
+    خورده همان عددی است که باید خوانده شود — خاکستری کردنِ متن، مهم‌ترین رقمِ
+    گزارش را کم‌کنتراست‌ترینش می‌کرد. برای چاپِ سیاه‌وسفید هم خاکستریِ روشن
+    انتخاب شده و نه پررنگ.
+  */
+  const shaded = cell.shaded ? ' shaded' : '';
 
   if (cell.extraLines.length === 0) {
-    return `<td class="align-${cell.align}"${span}><span class="cell-line">${escapeHtml(
+    return `<td class="align-${cell.align}${shaded}"${span}><span class="cell-line">${escapeHtml(
       cell.text,
     )}</span></td>`;
   }
@@ -221,7 +244,7 @@ function renderCell(cell: LaidOutCell, colspan = 1): string {
     ),
   ].join('');
 
-  return `<td class="align-${cell.align} split-cell"${span}>${parts}</td>`;
+  return `<td class="align-${cell.align} split-cell${shaded}"${span}>${parts}</td>`;
 }
 
 function buildCss(report: LaidOutReport, fontFaceCss: string): string {
@@ -274,6 +297,14 @@ html, body {
   overflow-wrap: anywhere;
 }
 .report-table th { font-weight: 700; background: #ffffff; }
+/* سلولی که از آستانه گذشته: پس‌زمینهٔ خاکستری، متن با همان رنگ همیشگی.
+   print-color-adjust لازم است وگرنه مرورگر در چاپ پس‌زمینه را حذف می‌کند و
+   علامت فقط روی صفحه دیده می‌شد. */
+.report-table td.shaded {
+  background: #d4d4d4;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
 .report-table .cell-line { display: block; line-height: 1.6; }
 /* سلول دوبخشی: خط افقی میانش، مثل فرم کاغذی. */
 .report-table .split-cell { padding: 0; }

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { InvoiceDefaults } from '@dm/shared';
+import type { InvoiceDefaults, ReportSettings } from '@dm/shared';
 
 import { apiFetch } from '../../shared/api/client';
 
@@ -391,6 +391,21 @@ export function useSetInvoiceDefaults() {
   return useMutation({
     mutationFn: (input: InvoiceDefaults) =>
       apiFetch<InvoiceDefaults>('/base-data/invoice-defaults', { method: 'PUT', json: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['base-data', 'bootstrap'] }),
+  });
+}
+
+/**
+ * تنظیم‌های گزارش — فعلاً آستانهٔ علامت‌گذاری مبلغ در گزارش مالیات.
+ *
+ * مثل پیش‌فرض‌های فاکتور، خواندنش از `bootstrap` می‌آید و این فقط نوشتن است.
+ */
+export function useSetReportSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: ReportSettings) =>
+      apiFetch<ReportSettings>('/base-data/report-settings', { method: 'PUT', json: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['base-data', 'bootstrap'] }),
   });
 }

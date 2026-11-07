@@ -107,6 +107,21 @@ export const DATA_SOURCES: readonly DataSourceDefinition[] = [
       text('phone', 'تلفن'),
     ],
   },
+  /*
+    تنظیم‌های سازمانی گزارش.
+
+    منبع دادهٔ جدایی است و نه فیلدی از `organization`: اطلاعات سازمان دربارهٔ
+    **کیستیِ** سازمان است (نام، نشانی، شماره اقتصادی) و این‌ها دربارهٔ **تصمیم‌های**
+    آن. مجوزش هم `base_data:read` است و نه بیشتر: آستانه‌ای که روی سرستون گزارش
+    اثر می‌گذارد، داده‌ای محرمانه نیست.
+  */
+  {
+    key: 'settings',
+    titleFa: 'تنظیم‌های گزارش',
+    cardinality: 'single',
+    requiredPermissions: ['base_data:read'],
+    fields: [money('taxHighlightAbove', 'آستانهٔ علامت‌گذاری مبلغ (گزارش مالیات)')],
+  },
   {
     key: 'document',
     titleFa: 'سند',

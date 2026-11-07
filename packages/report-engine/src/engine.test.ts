@@ -884,6 +884,198 @@ describe('ستون تکرارشونده', () => {
   });
 
   /*
+    ───── حذف ستونِ صفر ─────
+
+    سازمانی که ده فصل تعریف کرده، روی هر فرم ده ستون می‌گیرد؛ سندی که در دو فصل
+    خرج داشته، هشت ستونِ صفر چاپ می‌کند. این نشان اجازه می‌دهد آن هشت ستون نیایند.
+  */
+  describe('حذف ستون صفر', () => {
+    /** همان قالب، با اجازهٔ حذفِ ستون فصلِ صفر. */
+    const dropping = (): TemplateV1 => {
+      const next = structuredClone(TEMPLATE) as TemplateV1;
+      const table = next.body[0];
+      if (table?.type !== 'table') throw new Error('جدول نیست');
+      const chapter = table.columns[1];
+      if (!chapter) throw new Error('ستون فصل نیست');
+      (chapter as { dropWhenAllZero: boolean }).dropWhenAllZero = true;
+      return next;
+    };
+
+    const droppedTableOf = (
+      chapters?: Record<string, unknown>[],
+      rows?: Record<string, unknown>[],
+    ) => {
+      const data = dataset(chapters);
+      const block = layoutReport(dropping(), {
+        ...data,
+        collections: { ...data.collections, 'document.capitalExpenses': rows ?? EXPENSES },
+      }).body[0];
+      if (block?.kind !== 'table') throw new Error('جدول ساخته نشد');
+      return block;
+    };
+
+    it('فصلی که در این سند خرجی ندارد، ستونش نمی‌آید', () => {
+      const withEmpty = [...CHAPTERS, { key: 'ch-9', title: 'ورزشی', code: 'فصل ۹' }];
+      // بدون نشان، ستون می‌ماند — همان ادعای آزمون بالاتر.
+      expect(tableOf(withEmpty).columns).toHaveLength(5);
+      // با نشان، فقط «ورزشی» می‌رود و دو فصلِ دیگر سر جایشان می‌مانند.
+      expect(droppedTableOf(withEmpty).columns.map((column) => column.titleFa)).toEqual([
+        'شرح',
+        'تعمیرات',
+        'تجهیزات',
+        'جمع',
+      ]);
+    });
+
+    /*
+      حذف، فقط ستون را برنمی‌دارد: ردیف جمع و پهنای خانه‌هایش هم باید با
+      ستون‌های **مانده** حساب شوند. اگر حذف پس از ساختِ جمع انجام می‌شد، جمعِ هر
+      ستون یکی به چپ می‌افتاد — یعنی مبلغِ «تجهیزات» زیر «تعمیرات».
+    */
+    it('ردیف جمع با ستون‌های مانده می‌خواند', () => {
+      const table = droppedTableOf([
+        { key: 'ch-0', title: 'خالی', code: 'فصل ۰' },
+        ...CHAPTERS,
+      ]);
+      expect(table.columns.map((column) => column.titleFa)).toEqual([
+        'شرح',
+        'تعمیرات',
+        'تجهیزات',
+        'جمع',
+      ]);
+      expect(table.totals).toHaveLength(4);
+      expect(table.totals?.[1]?.raw).toBe(15_094_800n);
+      expect(table.totals?.[2]?.raw).toBe(2_114_220n);
+      expect(table.totals?.[3]?.raw).toBe(17_209_020n);
+      expect(table.totalsSpans).toHaveLength(4);
+    });
+
+    /*
+      فرمِ خالی، فرمِ دست‌نویس است.
+
+      جدولی که هیچ ردیفی ندارد چاپ می‌شود تا کسی با خودکار پرش کند؛ اگر ستونِ
+      صفر را آنجا هم حذف می‌کردیم، فرم بی‌ستون از چاپگر بیرون می‌آمد.
+    */
+    it('جدولِ بی‌ردیف، همهٔ ستون‌هایش را نگه می‌دارد', () => {
+      const table = droppedTableOf(CHAPTERS, []);
+      expect(table.columns.map((column) => column.titleFa)).toEqual([
+        'شرح',
+        'تعمیرات',
+        'تجهیزات',
+        'جمع',
+      ]);
+    });
+  });
+
+  /*
+    ───── علامتِ خاکستری ─────
+
+    گزارش مالیات صد ردیف دارد و کسی که امضایش می‌کند باید ردیف‌های بزرگ را در یک
+    نگاه ببیند. آستانه از تنظیم‌های سازمان می‌آید و نه از قالب.
+  */
+  describe('پس‌زمینهٔ مشروط سلول', () => {
+    /** همان قالب، با شرطِ «جمعِ ردیف از آستانهٔ تنظیم‌ها بیشتر است». */
+    const shading = (): TemplateV1 => {
+      const next = structuredClone(TEMPLATE) as TemplateV1;
+      const table = next.body[0];
+      if (table?.type !== 'table') throw new Error('جدول نیست');
+      const total = table.columns[2];
+      if (!total) throw new Error('ستون جمع نیست');
+      const threshold: Expression = { k: 'var', path: 'settings.taxHighlightAbove' };
+      (total as { shadeWhen: Condition }).shadeWhen = {
+        k: 'and',
+        args: [
+          { k: 'not', of: { k: 'empty', of: threshold } },
+          { k: 'cmp', op: 'gt', args: [{ k: 'var', path: 'row.total' }, threshold] },
+        ],
+      };
+      return next;
+    };
+
+    const shadedTableOf = (taxHighlightAbove: string) => {
+      const data = dataset();
+      const block = layoutReport(shading(), {
+        ...data,
+        values: { settings: { taxHighlightAbove } },
+      }).body[0];
+      if (block?.kind !== 'table') throw new Error('جدول ساخته نشد');
+      return block;
+    };
+
+    it('فقط ردیفِ بالاتر از آستانه علامت می‌خورد', () => {
+      // ردیف‌ها: ۱۴٬۰۹۴٬۸۰۰ و ۲٬۱۱۴٬۲۲۰ و ۱٬۰۰۰٬۰۰۰ — آستانه ۲ میلیون.
+      // ستونِ «جمع» شاخصِ ۳ است: ستون فصل به دو ستون باز شده.
+      const table = shadedTableOf('2000000');
+      expect(table.columns.map((column) => column.titleFa)).toEqual([
+        'شرح',
+        'تعمیرات',
+        'تجهیزات',
+        'جمع',
+      ]);
+      expect(table.rows.map((row) => row[3]?.shaded)).toEqual([true, true, false]);
+      // و ستون‌های دیگر دست‌نخورده‌اند: شرط روی ستون نشسته، نه روی ردیف.
+      expect(table.rows.flatMap((row) => row.slice(0, 3).map((cell) => cell.shaded))).not.toContain(
+        true,
+      );
+    });
+
+    it('مبلغِ برابر با آستانه علامت نمی‌خورد', () => {
+      // `gt` و نه `gte`: «بیشتر از» همان چیزی است که کاربر می‌گوید.
+      const table = shadedTableOf('14094800');
+      expect(table.rows[0]?.[3]?.shaded).toBe(false);
+    });
+
+    /*
+      آستانهٔ خالی یعنی خاموش — و نه خطا.
+
+      مقایسهٔ ترتیبی در موتور فقط روی عدد ممکن است و رشتهٔ خالی خطا می‌دهد؛ شرطِ
+      قالب با `not empty` جلوی آن را می‌گیرد و `and` کوتاه‌مدار است. اگر این
+      نگهبان نبود، **هر** اجرای گزارش مالیات در سازمانی که آستانه نگذاشته با خطا
+      می‌افتاد.
+    */
+    it('آستانهٔ خالی، گزارش را نمی‌شکند و هیچ سلولی علامت نمی‌خورد', () => {
+      const table = shadedTableOf('');
+      expect(table.rows.map((row) => row[3]?.shaded)).toEqual([false, false, false]);
+    });
+
+    it('ردیف جمع علامت نمی‌خورد، هرچند از آستانه بیشتر است', () => {
+      // جمعِ کل ۱۷٬۲۰۹٬۰۲۰ است؛ شرط برای **ردیف** معنا دارد و جمع، ردیف نیست.
+      expect(shadedTableOf('2000000').totals?.[3]?.shaded).toBe(false);
+    });
+
+    it('رندر HTML پس‌زمینه را می‌گذارد و رنگ متن را دست نمی‌زند', () => {
+      const data = dataset();
+      const html = renderReportHtml(
+        layoutReport(shading(), {
+          ...data,
+          values: { settings: { taxHighlightAbove: '2000000' } },
+        }),
+      );
+      expect(html).toContain('<td class="align-end shaded">');
+      expect(html).toContain('.report-table td.shaded');
+      // متن، همان رنگِ همیشگی؛ علامت نباید عدد را کم‌کنتراست کند.
+      expect(html).not.toMatch(/td\.shaded\s*\{[^}]*color:/u);
+    });
+
+    it('اعتبارسنجی، مسیرِ ناشناخته در شرطِ رنگ را رد می‌کند', () => {
+      const problems = validateTemplate(shading(), {
+        allowedValuePaths: new Set<string>(),
+        collections: new Map([
+          ['document.capitalChapters', new Set(['key', 'title', 'code'])],
+          ['document.capitalExpenses', new Set(['index', 'description', 'chapterKey', 'total'])],
+        ]),
+      });
+
+      expect(
+        problems.filter((problem) => problem.path === 'block.table.columns.total.shadeWhen'),
+      ).not.toHaveLength(0);
+      expect(problems.map((problem) => problem.message)).toContain(
+        'مسیر داده «settings.taxHighlightAbove» مجاز نیست',
+      );
+    });
+  });
+
+  /*
     سقف تکرار، بررسیِ «ستون‌ها از عرض صفحه بیرون نمی‌زنند» را معنادار نگه می‌دارد.
 
     خطا دادن از بریدنِ خاموشِ دو ستونِ آخر روی کاغذ بهتر است: کاربر می‌فهمد و
@@ -896,6 +1088,25 @@ describe('ستون تکرارشونده', () => {
       code: '',
     }));
     expect(() => tableOf(many)).toThrow(/سقف قالب/u);
+  });
+
+  /*
+    سلولِ ردیفِ داده، هیچ‌وقت `colspan` ندارد.
+
+    ادغام خانه فقط در ردیف جمع معنا دارد (جمعِ نوشته‌شده به حروف، و برچسب «جمع
+    کل»). این آزمون یک اشتباهِ واقعی را می‌گیرد: `row.map(renderCell)` شاخصِ آرایه
+    را به پارامتر `colspan` می‌داد و از سلول سوم به بعد، هر خانه چند ستون را
+    می‌پوشاند — جدول روی کاغذ به‌هم می‌ریخت و هیچ آزمونی نمی‌دید.
+  */
+  it('ردیف‌های داده هیچ سلولِ ادغام‌شده‌ای ندارند', () => {
+    const html = renderReportHtml(layoutReport(TEMPLATE, dataset()));
+    const body = html.slice(html.indexOf('</thead>'));
+    const dataRowCells = [...body.matchAll(/<tr>(?:(?!<\/tr>)[\s\S])*<\/tr>/gu)].flatMap((row) =>
+      [...row[0].matchAll(/<td [^>]*>/gu)].map((cell) => cell[0]),
+    );
+
+    expect(dataRowCells).not.toHaveLength(0);
+    expect(dataRowCells.filter((cell) => cell.includes('colspan'))).toEqual([]);
   });
 
   it('رندر HTML سرستون را دو ردیفه می‌کند و بی‌زیرعنوان‌ها را عمودی ادغام', () => {

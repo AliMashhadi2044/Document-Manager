@@ -388,6 +388,35 @@
             "thousandSeparator": true,
             "decimals": 0,
             "emptyText": "۰"
+          },
+          "shadeWhen": {
+            "k": "and",
+            "args": [
+              {
+                "k": "not",
+                "of": {
+                  "k": "empty",
+                  "of": {
+                    "k": "var",
+                    "path": "settings.taxHighlightAbove"
+                  }
+                }
+              },
+              {
+                "k": "cmp",
+                "op": "gt",
+                "args": [
+                  {
+                    "k": "var",
+                    "path": "row.total"
+                  },
+                  {
+                    "k": "var",
+                    "path": "settings.taxHighlightAbove"
+                  }
+                ]
+              }
+            ]
           }
         }
       ]

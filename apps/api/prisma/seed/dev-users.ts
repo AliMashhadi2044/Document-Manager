@@ -42,10 +42,33 @@ async function main(): Promise<void> {
     parallelism: 1,
   });
 
+  /*
+    بازگرداندن رمز، فقط وقتی صریح خواسته شود.
+
+    پیش‌فرض این اسکریپت دست نزدن به کاربر موجود است و همین ماند: کسی که رمز
+    توسعه‌اش را خودش عوض کرده، نباید با یک seed ساده آن را از دست بدهد. ولی
+    وقتی hash این کاربران دیگر با رمز توسعه نمی‌خواند، اجرای E2E از همان مرحلهٔ ورود
+    می‌شکند؛ این پرچم، راهِ تکرارشدنیِ برگرداندن است و نه یک اسکریپتِ دور‌ریختنی.
+  */
+  const reset = process.env.DEV_USER_PASSWORD_RESET === '1';
+
   for (const devUser of DEV_USERS) {
     const existing = await prisma.user.findUnique({ where: { username: devUser.username } });
     if (existing) {
-      console.log(`• کاربر ${devUser.username} از قبل وجود دارد؛ رمز عبور تغییر نکرد`);
+      if (!reset) {
+        console.log(
+          `• کاربر ${devUser.username} از قبل وجود دارد؛ رمز عبور تغییر نکرد (برای بازگرداندن: DEV_USER_PASSWORD_RESET=1)`,
+        );
+        continue;
+      }
+
+      await prisma.user.update({
+        where: { id: existing.id },
+        // نشست‌های باز با رمز قبلی نباید زنده بمانند.
+        data: { passwordHash, isActive: true, failedLoginCount: 0, lockedUntil: null },
+      });
+      await prisma.session.deleteMany({ where: { userId: existing.id } });
+      console.log(`↻ رمز ${devUser.username} بازگردانده شد و نشست‌هایش بسته شد`);
       continue;
     }
 

@@ -201,7 +201,8 @@
             "thousandSeparator": true,
             "decimals": 0,
             "emptyText": ""
-          }
+          },
+          "dropWhenAllZero": true
         },
         {
           "key": "total",

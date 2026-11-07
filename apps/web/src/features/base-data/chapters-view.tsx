@@ -13,7 +13,12 @@ import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
 import { formatServerMessage, toPersianDigits } from '../../shared/format/money';
 import { useQuery } from '@tanstack/react-query';
-import { parseInvoiceDefaults, type InvoiceDefaults } from '@dm/shared';
+import {
+  parseInvoiceDefaults,
+  parseReportSettings,
+  type InvoiceDefaults,
+  type ReportSettings,
+} from '@dm/shared';
 
 import { apiFetch } from '../../shared/api/client';
 import { useCurrentUser } from '../auth/auth.api';
@@ -31,6 +36,7 @@ import {
   type ChapterRow,
   type InvoiceTypeRef,
   useSetInvoiceDefaults,
+  useSetReportSettings,
 } from './base-data.api';
 
 /**
@@ -241,6 +247,9 @@ export function ChaptersView(): JSX.Element {
 
       <PaymentMethodsCard canWrite={canWrite} />
       <InvoiceDefaultsCard
+        canWrite={user?.permissions.includes('financial_settings:write') ?? false}
+      />
+      <ReportSettingsCard
         canWrite={user?.permissions.includes('financial_settings:write') ?? false}
       />
 
@@ -482,6 +491,99 @@ function InvoiceDefaultsCard({ canWrite }: { canWrite: boolean }): JSX.Element |
               setMessage(null);
               void save.mutateAsync(draft).then(
                 () => setMessage('پیش‌فرض مالیات ذخیره شد.'),
+                (failure: unknown) =>
+                  setError(
+                    failure instanceof ApiError
+                      ? formatServerMessage(failure.message)
+                      : 'ذخیره ناموفق بود',
+                  ),
+              );
+            }}
+          >
+            ذخیره
+          </Button>
+        </div>
+
+        {error ? (
+          <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * آستانهٔ علامت‌گذاری مبلغ در گزارش مالیات.
+ *
+ * عددی که اینجا نوشته می‌شود در هیچ محاسبه‌ای شرکت نمی‌کند؛ فقط به قالب می‌گوید
+ * کدام سلول‌ها را خاکستری کند — یک **کمکِ خواندن** روی گزارشی که ممکن است صد ردیف
+ * داشته باشد.
+ *
+ * چرا کنار پیش‌فرض‌های مالیات و با همان مجوز: هر دو دربارهٔ عددِ مالیات‌اند و
+ * اختیارشان یکی است. گذاشتنش در طراح قالب یعنی هر تغییرِ آستانه، انتشار نسخهٔ
+ * تازهٔ قالب — و قالبِ کپی‌شدهٔ هر کاربر عددِ خودش را نگه می‌داشت.
+ */
+function ReportSettingsCard({ canWrite }: { canWrite: boolean }): JSX.Element | null {
+  const bootstrap = useQuery({
+    queryKey: ['base-data', 'bootstrap'],
+    queryFn: () => apiFetch<{ reportSettings?: unknown }>('/base-data/bootstrap'),
+    staleTime: 5 * 60_000,
+  });
+  const save = useSetReportSettings();
+
+  const [draft, setDraft] = useState<ReportSettings | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // پاسخِ سرویسِ ارتقا‌نیافته این کلید را ندارد؛ `parseReportSettings` هر ورودی را
+  // به مقدار معتبر برمی‌گرداند و صفحه با یک کلیدِ نیامده از کار نمی‌افتد.
+  useEffect(() => {
+    if (bootstrap.data) setDraft(parseReportSettings(bootstrap.data.reportSettings));
+  }, [bootstrap.data]);
+
+  if (!canWrite || !draft) return null;
+
+  return (
+    <Card>
+      <CardHeader
+        icon="money"
+        title="علامت‌گذاری مبلغ در گزارش مالیات"
+        description="ردیفی که جمع کلش از این مبلغ بیشتر باشد، سلول مبلغش پس‌زمینهٔ خاکستری می‌گیرد؛ خودِ عدد با همان رنگ همیشگی خوانده می‌شود."
+      />
+      <CardBody className="space-y-4">
+        {message ? (
+          <p role="status" className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+            {message}
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-end gap-3">
+          <Input
+            label="آستانهٔ مبلغ (ریال)"
+            dir="ltr"
+            inputMode="numeric"
+            className="max-w-60"
+            value={draft.taxHighlightAbove}
+            onChange={(event) =>
+              setDraft({ taxHighlightAbove: event.target.value.replace(/\D/gu, '') })
+            }
+            hint="خالی یعنی خاموش؛ هیچ سلولی علامت نمی‌خورد."
+          />
+
+          <Button
+            loading={save.isPending}
+            onClick={() => {
+              setError(null);
+              setMessage(null);
+              void save.mutateAsync(draft).then(
+                () =>
+                  setMessage(
+                    draft.taxHighlightAbove === ''
+                      ? 'علامت‌گذاری خاموش شد.'
+                      : 'آستانهٔ علامت‌گذاری ذخیره شد.',
+                  ),
                 (failure: unknown) =>
                   setError(
                     failure instanceof ApiError

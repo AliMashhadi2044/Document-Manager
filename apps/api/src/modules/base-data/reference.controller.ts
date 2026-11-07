@@ -3,7 +3,10 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   invoiceDefaultsSchema,
   parseInvoiceDefaults,
+  parseReportSettings,
+  reportSettingsSchema,
   type InvoiceDefaults,
+  type ReportSettings,
 } from '@dm/shared';
 
 import {
@@ -17,6 +20,9 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 
 /** کلید تنظیمِ پیش‌فرض‌های فاکتور در `system_settings`. */
 const INVOICE_DEFAULTS_KEY = 'invoice_defaults';
+
+/** کلید تنظیم‌های گزارش در `system_settings`. */
+const REPORT_SETTINGS_KEY = 'report_settings';
 
 /**
  * داده‌های مرجع که فرم‌ها برای پر کردن فهرست‌هایشان لازم دارند.
@@ -48,6 +54,7 @@ export class ReferenceController {
       districts,
       vehicleTypes,
       invoiceDefaultsRow,
+      reportSettingsRow,
     ] = await Promise.all([
       this.prisma.organizationSettings.findUnique({ where: { id: 1 } }),
       this.prisma.paymentMethod.findMany({
@@ -77,6 +84,7 @@ export class ReferenceController {
         orderBy: { sortOrder: 'asc' },
       }),
       this.prisma.systemSetting.findUnique({ where: { key: INVOICE_DEFAULTS_KEY } }),
+      this.prisma.systemSetting.findUnique({ where: { key: REPORT_SETTINGS_KEY } }),
     ]);
 
     return {
@@ -98,7 +106,52 @@ export class ReferenceController {
         یک رفت‌وبرگشت اضافه در مسیری بود که کاربر منتظرش می‌ماند.
       */
       invoiceDefaults: parseInvoiceDefaults(invoiceDefaultsRow?.value),
+      /*
+        تنظیم‌های گزارش هم همین‌جا، به همان دلیل.
+
+        صفحهٔ تنظیمات این پاسخ را از قبل دارد؛ خواندنِ یک عدد با یک درخواست جدا
+        فقط یک رفت‌وبرگشت اضافه بود.
+      */
+      reportSettings: parseReportSettings(reportSettingsRow?.value),
     };
+  }
+
+  /**
+   * تنظیم‌های گزارش — فعلاً آستانهٔ علامت‌گذاری مبلغ در گزارش مالیات.
+   *
+   * همان مجوز `financial_settings:write`: این عدد دربارهٔ مبلغ تصمیم می‌گیرد و
+   * روی گزارشی می‌نشیند که به اداره می‌رود، پس اختیارش همان‌جایی است که اختیار
+   * پیش‌فرض‌های مالی هست — نه دست کسی که فهرست‌ها را نگه می‌دارد.
+   */
+  @RequirePermission('financial_settings:write')
+  @Put('report-settings')
+  @ApiOperation({ summary: 'ذخیرهٔ تنظیم‌های گزارش' })
+  async setReportSettings(
+    @Body(new ZodBody(reportSettingsSchema)) body: ReportSettings,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ReportSettings> {
+    const before = await this.prisma.systemSetting.findUnique({
+      where: { key: REPORT_SETTINGS_KEY },
+    });
+
+    await this.prisma.systemSetting.upsert({
+      where: { key: REPORT_SETTINGS_KEY },
+      create: { key: REPORT_SETTINGS_KEY, value: body, updatedBy: user.id },
+      update: { value: body, updatedBy: user.id },
+      select: { key: true },
+    });
+
+    await this.audit.record({
+      actorId: user.id,
+      action: 'REPORT_SETTINGS_SET',
+      // کلید در `entityType`؛ `entity_id` ستون UUID است و رشته را خاموشانه می‌انداخت.
+      entityType: `systemSetting.${REPORT_SETTINGS_KEY}`,
+      entityId: null,
+      before: parseReportSettings(before?.value),
+      after: body,
+    });
+
+    return body;
   }
 
   /**

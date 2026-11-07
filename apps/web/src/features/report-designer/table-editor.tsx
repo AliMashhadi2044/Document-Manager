@@ -461,6 +461,62 @@ export function TableEditor({
                       rowSourceKey={rowSourceKey}
                     />
 
+                    {/*
+                      حذف ستونِ صفر — تصمیمِ قالب، اجرای هر گزارش.
+
+                      قالب فقط اجازه می‌دهد؛ اینکه کدام ستون در یک سندِ مشخص صفر
+                      است، موقع اجرا معلوم می‌شود. برای ستون تکرارشونده (فصل‌های
+                      بودجه) معنای واقعی‌اش این است: فصلی که در این سند خرجی
+                      نداشته، عرضِ کاغذ را نخورد.
+                    */}
+                    <label className="flex items-start gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={column.dropWhenAllZero}
+                        onChange={(event) =>
+                          updateColumn(index, {
+                            ...column,
+                            dropWhenAllZero: event.target.checked,
+                          })
+                        }
+                      />
+                      <span>
+                        اگر در گزارش همه‌جا صفر بود، ستون حذف شود
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          روی ستون فصل‌های بودجه: فصلِ بی‌خرج در آن سند، در فرم نمی‌آید.
+                          جدولِ بی‌ردیف دست‌نخورده می‌ماند.
+                        </span>
+                      </span>
+                    </label>
+
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          checked={column.shadeWhen !== undefined}
+                          onChange={(event) =>
+                            updateColumn(index, {
+                              ...column,
+                              shadeWhen: event.target.checked
+                                ? emptyCondition('cmp')
+                                : undefined,
+                            })
+                          }
+                        />
+                        پس‌زمینهٔ خاکستری مشروط
+                      </label>
+                      {column.shadeWhen ? (
+                        <ConditionBuilder
+                          label="سلول وقتی خاکستری شود که"
+                          value={column.shadeWhen}
+                          onChange={(next) => updateColumn(index, { ...column, shadeWhen: next })}
+                          sources={sources}
+                          rowSourceKey={rowSourceKey}
+                        />
+                      ) : null}
+                    </div>
+
                     <div className="space-y-2">
                       <label className="flex items-center gap-2 text-sm font-medium">
                         <input

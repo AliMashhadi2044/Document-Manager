@@ -251,6 +251,7 @@ export function newBlock(type: Block['type'], id: string, firstCollection: strin
             rowNumber: true,
             // ستون تازه روی کاغذ هم می‌آید؛ «فقط صفحه» یک انتخاب صریح است.
             screenOnly: false,
+            dropWhenAllZero: false,
             value: { k: 'var', path: 'row.index' },
             format: INTEGER_FORMAT,
           },
@@ -294,6 +295,7 @@ export function newColumn(key: string): TableColumn {
     align: 'start',
     rowNumber: false,
     screenOnly: false,
+    dropWhenAllZero: false,
     value: { k: 'const', type: 'text', v: '' },
     format: TEXT_FORMAT,
   };

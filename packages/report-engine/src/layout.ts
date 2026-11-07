@@ -61,6 +61,13 @@ export interface LaidOutCell {
   readonly align: 'start' | 'center' | 'end';
   /** خطوط اضافی همان سلول. */
   readonly extraLines: readonly { readonly text: string; readonly muted: boolean }[];
+  /**
+   * این سلول پس‌زمینهٔ خاکستری می‌گیرد (`shadeWhen` ستون).
+   *
+   * فقط **نشان** است و نه رنگ: اینکه خاکستری چقدر روشن باشد، تصمیم خروجی‌گیر
+   * است — HTML و Excel دو رسانهٔ متفاوتند. رنگ متن در هیچ‌کدام عوض نمی‌شود.
+   */
+  readonly shaded: boolean;
 }
 
 export interface LaidOutTable {
@@ -400,15 +407,15 @@ function layoutTable(
     );
   }
 
-  const columns = block.columns
+  const allColumns = block.columns
     .filter((column) => !column.visibleWhen || evaluateCondition(column.visibleWhen, scope))
     .flatMap((column) => expandColumn(column, dataset));
 
   const ordered = sortRows(source, block.sortBy);
 
-  const rows = ordered.map((row, index) => {
+  const allRows = ordered.map((row, index) => {
     const rowScope = rowScopeFor(scope, row, index);
-    return columns.map((column): LaidOutCell => {
+    return allColumns.map((column): LaidOutCell => {
       const cellScope = columnScopeFor(rowScope, column);
       const raw = evaluateExpression(column.value, cellScope);
       return {
@@ -428,9 +435,35 @@ function layoutTable(
             muted: line.muted,
           }))
           .filter((line) => line.text !== ''),
+        shaded: column.shadeWhen ? evaluateCondition(column.shadeWhen, cellScope) : false,
       };
     });
   });
+
+  /*
+    ستون‌هایی که در این اجرا همه‌جا صفرند، حذف می‌شوند.
+
+    اینجا و نه پیش از ساختِ ردیف‌ها، چون «صفر بودن» را فقط مقدارِ محاسبه‌شدهٔ
+    سلول‌ها می‌گوید. پس از این نقطه، ردیف جمع، ادغام خانه‌ها و ردیف‌های پرکننده
+    همه با همان کدِ موجود و برای ستون‌هایی حساب می‌شوند که واقعاً مانده‌اند.
+
+    دو حالت دست نگه می‌دارد: جدولِ بی‌ردیف (فرمِ خالی برای پر کردن با دست، که
+    ستون‌هایش باید سر جایشان بمانند) و حالتی که حذف، جدول را **بی‌ستون** می‌کرد —
+    جدولِ بی‌ستون گزارش نیست.
+  */
+  const isZeroCell = (cell: LaidOutCell | undefined): boolean =>
+    cell === undefined || cell.raw === null || cell.raw === 0n || cell.raw === '';
+
+  const keep = allColumns.map((column, columnIndex) => {
+    if (!column.dropWhenAllZero || allRows.length === 0) return true;
+    return allRows.some((row) => !isZeroCell(row[columnIndex]));
+  });
+  const dropping = keep.includes(false) && keep.includes(true);
+
+  const columns = dropping ? allColumns.filter((_column, index) => keep[index]) : allColumns;
+  const rows = dropping
+    ? allRows.map((row) => row.filter((_cell, index) => keep[index]))
+    : allRows;
 
   /**
    * جمع خام یک ستون، از **مقادیر همان ستون** و نه از محاسبهٔ دوباره.
@@ -464,11 +497,14 @@ function layoutTable(
             raw: sum,
             align: 'center',
             extraLines: [],
+            // ردیف جمع، نشانِ سلولِ ردیف‌ها را به ارث نمی‌برد: شرط برای یک ردیف
+            // معنا دارد و جمع، ردیف نیست.
+            shaded: false,
           };
         }
 
         if (aggregate === 'none') {
-          return { text: '', raw: null, align: column.align, extraLines: [] };
+          return { text: '', raw: null, align: column.align, extraLines: [], shaded: false };
         }
         if (aggregate === 'count') {
           const count = BigInt(rows.length);
@@ -477,6 +513,7 @@ function layoutTable(
             raw: count,
             align: column.align,
             extraLines: [],
+            shaded: false,
           };
         }
 
@@ -497,6 +534,7 @@ function layoutTable(
           raw: sum,
           align: column.align,
           extraLines: [],
+          shaded: false,
         };
       })
     : null;
@@ -512,7 +550,7 @@ function layoutTable(
   const fillerRows = Array.from({ length: fillerCount }, (_unused, offset) =>
     columns.map((column): LaidOutCell => {
       if (!column.rowNumber) {
-        return { text: '', raw: null, align: column.align, extraLines: [] };
+        return { text: '', raw: null, align: column.align, extraLines: [], shaded: false };
       }
       const number = BigInt(rows.length + offset + 1);
       return {
@@ -520,6 +558,7 @@ function layoutTable(
         raw: number,
         align: column.align,
         extraLines: [],
+        shaded: false,
       };
     }),
   );
@@ -768,6 +807,7 @@ export function countTemplateNodes(template: TemplateV1): number {
         for (const column of block.columns) {
           count += 1 + expressionNodes(column.value);
           if (column.visibleWhen) count += conditionNodes(column.visibleWhen);
+          if (column.shadeWhen) count += conditionNodes(column.shadeWhen);
           for (const line of column.multiline?.lines ?? []) {
             count += expressionNodes(line.value);
           }
