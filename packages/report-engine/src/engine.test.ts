@@ -721,6 +721,153 @@ describe('جا شدن ستون‌ها در عرض صفحه', () => {
  * ستون‌های فصل از **داده مرجع** می‌آیند و نه از قالب: کاربر فصل اضافه و کم می‌کند و
  * قالب نباید با هر بار، عوض شود.
  */
+/**
+ * سلولِ دوبخشی و سرستونِ دوتکه‌ای — وقتی یکی از دو تکه نیست.
+ *
+ * گزارش مالیات سه ستون دوبخشی دارد («شماره صورت‌حساب — تاریخ»، «نام — کد ملی»،
+ * «تلفن — کد پستی»). قاعدهٔ تجمیع می‌گوید فروشنده‌ای که چند فاکتور دارد شمارهٔ
+ * صورت‌حساب نمی‌گیرد؛ پس نیمهٔ بالای آن سلول خالی می‌ماند، و اگر هیچ فروشنده‌ای
+ * شماره نداشته باشد، سرستون به ستونی اشاره می‌کند که در کل جدول خالی است.
+ */
+describe('سلول دوبخشی با تکهٔ غایب', () => {
+  const TEMPLATE: TemplateV1 = templateV1Schema.parse({
+    schemaVersion: 1,
+    reportTypeKey: 'TAX_REPORT',
+    titleFa: 'مالیات',
+    page: {
+      size: 'A4',
+      orientation: 'landscape',
+      margins: { top: 10, bottom: 10, inlineStart: 10, inlineEnd: 10 },
+      direction: 'rtl',
+    },
+    styles: {
+      fontFamily: 'Vazirmatn',
+      baseFontSizePt: 9,
+      headingFontSizePt: 12,
+      tableFontSizePt: 8,
+      borderWidthPx: 1,
+      borderColor: '#333333',
+      textColor: '#000000',
+      mutedTextColor: '#555555',
+    },
+    header: { repeatOnEveryPage: true, blocks: [] },
+    footer: { repeatOnEveryPage: false, blocks: [] },
+    body: [
+      {
+        id: 'table',
+        type: 'table',
+        dataSource: 'document.vendorAggregates',
+        minRows: 0,
+        pagination: { repeatHeaderOnNewPage: true, avoidRowBreak: true },
+        columns: [
+          {
+            key: 'vendor',
+            titleFa: 'فروشنده',
+            width: { unit: 'mm', value: 60 },
+            align: 'start',
+            value: { k: 'var', path: 'row.vendorName' },
+            format: { kind: 'text', persianDigits: false, emptyText: '' },
+          },
+          {
+            key: 'invoiceRef',
+            titleFa: 'شماره صورت حساب — تاریخ صورت حساب',
+            titleParts: { mainTitleFa: 'شماره صورت حساب', separator: ' — ' },
+            width: { unit: 'mm', value: 40 },
+            align: 'center',
+            value: { k: 'var', path: 'row.invoiceNumber' },
+            format: { kind: 'text', persianDigits: true, emptyText: '' },
+            multiline: {
+              lines: [
+                {
+                  value: { k: 'var', path: 'row.invoiceDate' },
+                  format: { kind: 'jalaliDate', persianDigits: true, emptyText: '' },
+                  muted: false,
+                  titleFa: 'تاریخ صورت حساب',
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const tableOf = (rows: Record<string, unknown>[]) => {
+    const block = layoutReport(TEMPLATE, {
+      values: {},
+      collections: { 'document.vendorAggregates': rows },
+      signatories: [],
+      roundingMode: 'HALF_UP',
+      generatedAt: '2026-10-27',
+    }).body[0];
+    if (block?.kind !== 'table') throw new Error('جدول ساخته نشد');
+    return block;
+  };
+
+  const WITH_NUMBER = { vendorName: 'الف', invoiceNumber: 'F-100', invoiceDate: '2026-09-22' };
+  const WITHOUT = { vendorName: 'ب', invoiceNumber: null, invoiceDate: '2026-09-23' };
+
+  /*
+    این همان اشکالی است که دیده شد: سلول با نیمهٔ بالای خالی، خطی افقی وسطش، و
+    تاریخ در نیمهٔ پایین — به‌جای یک سلولِ ساده با تاریخ.
+  */
+  it('ردیفِ بی‌شماره، سلولِ یک‌تکه با تاریخ می‌گیرد و نه نیمهٔ خالی', () => {
+    const table = tableOf([WITH_NUMBER, WITHOUT]);
+
+    // ارقام فارسی، چون `persianDigits` ستون روشن است.
+    expect(table.rows[0]?.[1]?.text).toBe('F-۱۰۰');
+    expect(table.rows[0]?.[1]?.extraLines.map((line) => line.text)).toEqual(['۱۴۰۵/۰۶/۳۱']);
+
+    expect(table.rows[1]?.[1]?.text).toBe('۱۴۰۵/۰۷/۰۱');
+    expect(table.rows[1]?.[1]?.extraLines).toEqual([]);
+  });
+
+  it('سلولِ یک‌تکه در HTML هم دوبخشی نیست', () => {
+    const html = renderReportHtml(layoutReport(TEMPLATE, {
+      values: {},
+      collections: { 'document.vendorAggregates': [WITHOUT] },
+      signatories: [],
+      roundingMode: 'HALF_UP',
+      generatedAt: '2026-10-27',
+    }));
+
+    expect(html).toContain(
+      '<td class="align-center"><span class="cell-line">۱۴۰۵/۰۷/۰۱</span></td>',
+    );
+    // فقط بدنهٔ جدول؛ خودِ شیوه‌نامه همیشه قاعدهٔ `split-cell` را دارد.
+    expect(html.slice(html.indexOf('</thead>'))).not.toContain('split-cell');
+  });
+
+  /*
+    سرستون دربارهٔ **ستون** است و نه یک ردیف: یک ردیفِ شماره‌دار کافی است تا
+    «شماره صورت حساب» سر جایش بماند.
+  */
+  it('تکه‌ای که در یک ردیف هم آمده باشد، در سرستون می‌ماند', () => {
+    expect(tableOf([WITH_NUMBER, WITHOUT]).columns[1]?.titleFa).toBe(
+      'شماره صورت حساب — تاریخ صورت حساب',
+    );
+  });
+
+  it('تکه‌ای که در هیچ ردیفی نیامده، از سرستون می‌افتد', () => {
+    expect(tableOf([WITHOUT, { ...WITHOUT, vendorName: 'ج' }]).columns[1]?.titleFa).toBe(
+      'تاریخ صورت حساب',
+    );
+  });
+
+  // سرستونِ خالی بدتر از سرستونِ کامل است؛ جدولِ بی‌ردیف هم همین حالت است.
+  it('وقتی هیچ تکه‌ای داده ندارد، عنوان ثابت می‌ماند', () => {
+    expect(tableOf([]).columns[1]?.titleFa).toBe('شماره صورت حساب — تاریخ صورت حساب');
+    expect(
+      tableOf([{ vendorName: 'د', invoiceNumber: null, invoiceDate: null }]).columns[1]?.titleFa,
+    ).toBe('شماره صورت حساب — تاریخ صورت حساب');
+  });
+
+  // ستونی که `titleParts` ندارد، دست‌نخورده می‌ماند.
+  it('ستون بدون titleParts عنوانش عوض نمی‌شود', () => {
+    expect(tableOf([WITHOUT]).columns[0]?.titleFa).toBe('فروشنده');
+  });
+});
+
 describe('ستون تکرارشونده', () => {
   const CHAPTERS = [
     { key: 'ch-1', title: 'تعمیرات', code: 'فصل ۱' },

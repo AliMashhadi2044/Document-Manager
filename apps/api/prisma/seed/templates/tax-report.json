@@ -149,9 +149,14 @@
                   "thousandSeparator": false,
                   "decimals": 0,
                   "emptyText": ""
-                }
+                },
+                "titleFa": "کد ملی / شماره اقتصادی"
               }
             ]
+          },
+          "titleParts": {
+            "mainTitleFa": "طرف قرارداد حقیقی / حقوقی",
+            "separator": " — "
           }
         },
         {
@@ -227,9 +232,14 @@
                   "thousandSeparator": false,
                   "decimals": 0,
                   "emptyText": ""
-                }
+                },
+                "titleFa": "کد پستی"
               }
             ]
+          },
+          "titleParts": {
+            "mainTitleFa": "تلفن",
+            "separator": " — "
           }
         },
         {
@@ -265,9 +275,14 @@
                   "thousandSeparator": false,
                   "decimals": 0,
                   "emptyText": ""
-                }
+                },
+                "titleFa": "تاریخ صورت حساب"
               }
             ]
+          },
+          "titleParts": {
+            "mainTitleFa": "شماره صورت حساب",
+            "separator": " — "
           }
         },
         {

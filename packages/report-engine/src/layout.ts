@@ -413,28 +413,57 @@ function layoutTable(
 
   const ordered = sortRows(source, block.sortBy);
 
+  /*
+    کدام تکهٔ هر ستون، در کلِ جدول دست‌کم یک بار مقدار داشته است.
+
+    `partSeen[columnIndex][partIndex]` — تکهٔ ۰ خودِ `value` ستون است و بقیه
+    خط‌های `multiline`. سرستونِ ساخته‌شده از تکه‌ها به همین نیاز دارد، و چون
+    دربارهٔ **ستون** است و نه یک ردیف، باید روی همهٔ ردیف‌ها دیده شود.
+  */
+  const partSeen = allColumns.map((column) =>
+    Array.from({ length: 1 + (column.multiline?.lines ?? []).length }, () => false),
+  );
+
   const allRows = ordered.map((row, index) => {
     const rowScope = rowScopeFor(scope, row, index);
-    return allColumns.map((column): LaidOutCell => {
+    return allColumns.map((column, columnIndex): LaidOutCell => {
       const cellScope = columnScopeFor(rowScope, column);
       const raw = evaluateExpression(column.value, cellScope);
+
+      const parts = [
+        { text: formatValue(raw, column.format), muted: false },
+        ...(column.multiline?.lines ?? []).map((line) => ({
+          text: formatValue(evaluateExpression(line.value, cellScope), line.format),
+          muted: line.muted,
+        })),
+      ];
+
+      const seen = partSeen[columnIndex] as boolean[];
+      for (const [partIndex, part] of parts.entries()) {
+        if (part.text !== '') seen[partIndex] = true;
+      }
+
+      /*
+        خط خالی، خط نیست — و این شاملِ **خط اول** هم می‌شود.
+
+        پیش از این فقط خط‌های اضافی فیلتر می‌شدند. نتیجه این بود که فروشنده‌ای
+        با چند فاکتور — که طبق قاعدهٔ تجمیع شمارهٔ صورت‌حساب نمی‌گیرد — سلولی
+        با نیمهٔ بالای **خالی** و تاریخ در نیمهٔ پایین می‌گرفت: یک خط افقیِ
+        بی‌دلیل وسط سلول، و تاریخی که در نیمهٔ پایین پنهان شده بود.
+
+        حالا تکه‌های بی‌متن از هر جای سلول می‌افتند و اولین تکهٔ مانده، خودِ
+        سلول می‌شود. تکه‌ای که تنها می‌ماند «کم‌رنگ» هم نمی‌ماند: کم‌رنگی برای
+        خطِ دومِ یک سلول دوبخشی است و این سلول دیگر دوبخشی نیست.
+      */
+      const shown = parts.filter((part) => part.text !== '');
+
       return {
-        text: formatValue(raw, column.format),
+        text: shown[0]?.text ?? '',
+        // مقدار خام همان تکهٔ اصلی می‌ماند، حتی اگر متنش چیز دیگری شده باشد:
+        // جمع ستون و سلول عددیِ Excel با همین کار می‌کنند.
         raw,
         align: column.align,
-        /*
-          خط خالی، خط نیست.
-
-          ستون «شماره صورت‌حساب — تاریخ» وقتی تاریخ ندارد نباید نیمهٔ خالی بسازد؛
-          سلول باید مثل یک سلول معمولی دیده شود. پس خط‌های بی‌متن حذف می‌شوند و
-          تصمیمِ «این سلول دوبخشی است یا نه» به خروجی‌گیر می‌رسد، نه به حدس او.
-        */
-        extraLines: (column.multiline?.lines ?? [])
-          .map((line) => ({
-            text: formatValue(evaluateExpression(line.value, cellScope), line.format),
-            muted: line.muted,
-          }))
-          .filter((line) => line.text !== ''),
+        extraLines: shown.slice(1).map((part) => ({ text: part.text, muted: part.muted })),
         shaded: column.shadeWhen ? evaluateCondition(column.shadeWhen, cellScope) : false,
       };
     });
@@ -464,6 +493,9 @@ function layoutTable(
   const rows = dropping
     ? allRows.map((row) => row.filter((_cell, index) => keep[index]))
     : allRows;
+  // دیده‌شدنِ تکه‌ها هم باید با ستون‌های مانده هم‌تراز بماند، وگرنه سرستونِ یک
+  // ستون از روی تکه‌های ستونِ دیگری ساخته می‌شد.
+  const seenOf = dropping ? partSeen.filter((_seen, index) => keep[index]) : partSeen;
 
   /**
    * جمع خام یک ستون، از **مقادیر همان ستون** و نه از محاسبهٔ دوباره.
@@ -608,9 +640,9 @@ function layoutTable(
   return {
     kind: 'table',
     id: block.id,
-    columns: columns.map((column) => ({
+    columns: columns.map((column, columnIndex) => ({
       key: column.resolvedKey,
-      titleFa: column.resolvedTitle,
+      titleFa: titleOf(column, seenOf[columnIndex] ?? []),
       subtitleFa: column.resolvedSubtitle,
       width: { unit: column.width.unit, value: column.width.value },
       align: column.align,
@@ -626,6 +658,25 @@ function layoutTable(
     repeatHeaderOnNewPage: block.pagination.repeatHeaderOnNewPage,
     avoidRowBreak: block.pagination.avoidRowBreak,
   };
+}
+
+/**
+ * سرستونِ نهایی: یا همان عنوان ثابت، یا ساخته‌شده از تکه‌هایی که داده داشته‌اند.
+ *
+ * ستون تکرارشونده کنار گذاشته می‌شود چون سرستونش از خودِ مجموعه می‌آید (عنوان
+ * فصل)، و چسباندن تکه‌ها به آن بی‌معنا بود.
+ */
+function titleOf(column: ExpandedColumn, seen: readonly boolean[]): string {
+  const spec = column.titleParts;
+  if (spec === undefined || column.repeatFor !== undefined) return column.resolvedTitle;
+
+  const titles = [spec.mainTitleFa, ...(column.multiline?.lines ?? []).map((line) => line.titleFa)];
+  const kept = titles.filter(
+    (title, index): title is string => title !== undefined && seen[index] === true,
+  );
+
+  // هیچ تکه‌ای داده ندارد ⇒ عنوان ثابت می‌ماند؛ سرستونِ خالی بدتر از سرستونِ کامل است.
+  return kept.length === 0 ? column.resolvedTitle : kept.join(spec.separator);
 }
 
 /**
