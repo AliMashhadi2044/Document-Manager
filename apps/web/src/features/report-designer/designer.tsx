@@ -138,6 +138,22 @@ export function Designer({
   const canPublish = user.permissions.includes('report_template:publish');
   const readOnly = !canWrite || isPublishedVersion;
   const blockers = [...schemaProblems, ...clientProblems, ...serverProblems];
+
+  /*
+    چرا آنچه روی صفحه می‌بینی هنوز در خروجی‌ها نیست.
+
+    سه فاصلهٔ ممکن، به ترتیبِ کاری که کاربر باید بکند. `null` یعنی هیچ فاصله‌ای
+    نیست و نواری هم نشان داده نمی‌شود — پیام همیشگی، دیگر پیام نیست.
+  */
+  const pendingReason: string | null = definition.isSystem
+    ? 'این قالب سیستمی است و ویرایش نمی‌شود. از فهرست قالب‌ها «ویرایش» را بزنید تا نسخهٔ سازمانیِ قابل ویرایش ساخته شود.'
+    : dirty
+      ? 'این تغییرها هنوز ذخیره نشده‌اند و در هیچ خروجی‌ای نیستند.'
+      : openedVersion?.status === 'DRAFT'
+        ? 'این نسخه پیش‌نویس است؛ خروجی‌ها هنوز با نسخهٔ قبلی ساخته می‌شوند. «انتشار و اعمال» را بزنید.'
+        : !definition.isActive
+          ? 'این قالب، قالب فعالِ این نوع گزارش نیست؛ خروجی‌ها با قالب دیگری ساخته می‌شوند.'
+          : null;
   const selectedBlock: Block | null =
     template && selected ? (bandBlocks(template, selected.band)[selected.index] ?? null) : null;
 
@@ -241,14 +257,18 @@ export function Designer({
                 onClick={() => {
                   setError(null);
                   setMessage(null);
+                  /*
+                    انتشار و اعمال، با هم.
+
+                    دو مفهوم جدا بودند و کاربر فرقشان را نمی‌دانست: نسخه را منتشر
+                    می‌کرد، پیام موفقیت می‌گرفت، و خروجی همان قبلی می‌ماند.
+                  */
                   publish.mutate(
-                    { versionId: openedVersion.id, definitionId },
+                    { versionId: openedVersion.id, definitionId, activate: true },
                     {
                       onSuccess: (result) => {
                         setMessage(
-                          result.becameActive
-                            ? `نسخه ${toPersianDigits(String(result.versionNo))} منتشر و به‌عنوان قالب فعال انتخاب شد`
-                            : `نسخه ${toPersianDigits(String(result.versionNo))} منتشر شد؛ برای اثرگذاری روی خروجی رسمی، قالب را فعال کنید`,
+                          `نسخه ${toPersianDigits(String(result.versionNo))} منتشر شد و از این پس خروجی‌ها با همین ساخته می‌شوند`,
                         );
                         void detail.refetch();
                       },
@@ -264,7 +284,7 @@ export function Designer({
                   );
                 }}
               >
-                انتشار نسخه
+                انتشار و اعمال
               </Button>
             ) : null}
 
@@ -346,6 +366,23 @@ export function Designer({
           checking={check.isPending}
         />
 
+        {/*
+          این نوار، همان چیزی است که نبودش باعث می‌شد کاربر فکر کند «کار نمی‌کند».
+
+          طراح تغییر را نشان می‌دهد، ولی خروجی رسمی از **نسخهٔ منتشرشدهٔ قالب
+          فعال** ساخته می‌شود. تا امروز هیچ‌جا نوشته نبود که فاصله‌ای هست؛ کسی که
+          حاشیهٔ صفحه را عوض می‌کرد و خروجی می‌گرفت، تغییرش را نمی‌دید و هیچ
+          توضیحی هم نداشت.
+        */}
+        {pendingReason === null ? null : (
+          <p
+            role="status"
+            className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs"
+          >
+            {pendingReason}
+          </p>
+        )}
+
         <nav className="flex gap-1 border-t border-border pt-2" aria-label="بخش‌های طراح">
           {(
             [
@@ -356,7 +393,21 @@ export function Designer({
             <button
               key={key}
               type="button"
-              onClick={() => setTab(key)}
+              onClick={() => {
+                /*
+                  رفتن به پیش‌نمایش، اول ذخیره می‌کند.
+
+                  پیش‌نمایش روی نسخهٔ **ذخیره‌شده** اجرا می‌شود و نه روی چیزی که
+                  در ویرایشگر است — این عمدی است و امنیتی: قالب هیچ‌وقت از بدنهٔ
+                  درخواست اجرا نمی‌شود. ولی نتیجه‌اش این بود که کاربر تغییر
+                  می‌داد، پیش‌نمایش می‌گرفت، و **نسخهٔ قبلی** را می‌دید؛ یعنی
+                  دقیقاً همان‌جا که می‌خواست کارش را بسنجد، گمراه می‌شد.
+                */
+                if (key === 'preview' && dirty && canWrite && blockers.length === 0) {
+                  saveDraft();
+                }
+                setTab(key);
+              }}
               aria-current={tab === key ? 'page' : undefined}
               className={
                 tab === key

@@ -113,6 +113,14 @@ const reportRunBodySchema = z.object({ textOverrides: textOverridesSchema });
  */
 const beneficiaryKeySchema = z.object({ key: z.string().min(1).max(200) });
 
+/**
+ * انتشار، با «اعمال» در همان گام.
+ *
+ * پیش‌فرض `false` است تا فراخوان‌های موجود رفتارشان عوض نشود؛ رابط تازه صریحاً
+ * `true` می‌فرستد، چون کاربری که «انتشار و اعمال» می‌زند هر دو را می‌خواهد.
+ */
+const publishTemplateSchema = z.object({ activate: z.boolean().default(false) });
+
 const copyTemplateSchema = z.object({
   name: z.string().trim().min(1, 'نام قالب الزامی است').max(200),
 });
@@ -445,6 +453,22 @@ export class ReportsController {
     return this.templates.version(versionId);
   }
 
+  /**
+   * «می‌خواهم این گزارش را عوض کنم» — بدون اینکه کاربر بداند کپی لازم است.
+   *
+   * قالب سیستمی هنوز ویرایش نمی‌شود؛ فقط تشخیص و ساختِ کپی از دوش کاربر
+   * برداشته شد. پاسخ می‌گوید روی کدام قالب باید رفت و آیا تازه ساخته شد.
+   */
+  @RequirePermission('report_template:write')
+  @Post('definitions/:definitionId/editable')
+  @ApiOperation({ summary: 'قالبی که همین حالا قابل ویرایش است (کپی، اگر لازم باشد)' })
+  async editableTemplate(
+    @Param('definitionId') definitionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.templates.editable(definitionId, user);
+  }
+
   @RequirePermission('report_template:write')
   @Post('definitions/:definitionId/copy')
   @ApiOperation({ summary: 'کپی یک قالب (قالب سیستمی فقط از این راه ویرایش می‌شود)' })
@@ -524,9 +548,10 @@ export class ReportsController {
   @ApiOperation({ summary: 'انتشار نسخه؛ پس از آن تغییرناپذیر است' })
   async publishVersion(
     @Param('versionId') versionId: string,
+    @Body(new ZodBody(publishTemplateSchema)) body: z.infer<typeof publishTemplateSchema>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.templates.publish(versionId, user);
+    return this.templates.publish(versionId, user, body.activate);
   }
 
   /** پیش‌نمایش طراح روی یک نسخه مشخص (پیش‌نویس یا منتشرشده) با داده واقعی. */

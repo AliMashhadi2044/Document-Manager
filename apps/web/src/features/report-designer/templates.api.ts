@@ -175,6 +175,25 @@ export function useCopyTemplate() {
   });
 }
 
+/**
+ * «این گزارش را ویرایش کن» — سرور خودش تصمیم می‌گیرد کپی لازم است یا نه.
+ *
+ * کاربر دیگر لازم نیست بداند «قالب سیستمی» یعنی چه و چرا باید ازش کپی بگیرد.
+ */
+export function useEditableTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (definitionId: string) =>
+      apiFetch<{ definitionId: string; created: boolean }>(
+        `/reports/definitions/${definitionId}/editable`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['report-templates', 'list'] });
+    },
+  });
+}
+
 export function useRenameTemplate() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -218,7 +237,15 @@ export function useSaveDraft() {
 export function usePublishVersion() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ versionId }: { versionId: string; definitionId: string }) =>
+    mutationFn: ({
+      versionId,
+      activate,
+    }: {
+      versionId: string;
+      definitionId: string;
+      /** همان‌جا قالب را قالبِ فعالِ این نوع گزارش هم بکن. */
+      activate: boolean;
+    }) =>
       apiFetch<{
         id: string;
         versionNo: number;
@@ -226,6 +253,7 @@ export function usePublishVersion() {
         becameActive: boolean;
       }>(`/reports/versions/${versionId}/publish`, {
         method: 'POST',
+        json: { activate },
         // انتشار دوباره با یک کلید، دو نسخه نمی‌سازد (ریسک R8).
         headers: { 'Idempotency-Key': crypto.randomUUID() },
       }),

@@ -11,6 +11,7 @@ import { Designer } from './designer';
 import {
   useArchiveTemplate,
   useCopyTemplate,
+  useEditableTemplate,
   useTemplateList,
   type TemplateListRow,
 } from './templates.api';
@@ -64,6 +65,8 @@ function TemplatesList({
   const [includeArchived, setIncludeArchived] = useState(false);
   const list = useTemplateList(includeArchived);
   const archive = useArchiveTemplate();
+  const editable = useEditableTemplate();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const canWrite = user.permissions.includes('report_template:write');
 
   if (list.isPending) return <LoadingState label="در حال خواندن قالب‌ها…" />;
@@ -86,8 +89,9 @@ function TemplatesList({
         <p className="mt-2 text-xs leading-6 text-muted-foreground">
           قالب گزارش یک سند داده است، نه کد: ستون‌ها، قالب اعداد، ردیف جمع و امضاها همه
           در همین طراح تنظیم می‌شوند و خروجی چاپ، Excel و PDF از همان ساخته می‌شود.
-          قالب سیستمی ویرایش نمی‌شود — از آن کپی بگیرید تا همیشه یک مرجع بازگشت سالم
-          بماند.
+          «ویرایش» را بزنید؛ اگر قالب سیستمی باشد، خودش یک نسخهٔ سازمانیِ قابل ویرایش
+          می‌سازد تا قالب سیستمی همیشه یک مرجع بازگشت سالم بماند. تغییرها با «انتشار و
+          اعمال» در خروجی‌ها می‌نشینند.
         </p>
 
         <label className="mt-3 flex items-center gap-2 text-xs">
@@ -158,12 +162,35 @@ function TemplatesList({
                 <td className="px-3 py-2 text-xs">{formatIsoAsJalali(row.updatedAt)}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1.5">
-                    <Button size="sm" variant="secondary" onClick={() => onOpen(row.id)}>
-                      {row.isSystem ? 'مشاهده' : 'طراحی'}
+                    {/*
+                      «ویرایش» یک دکمه است، نه یک رویه.
+
+                      قاعدهٔ «قالب سیستمی ویرایش نمی‌شود» سر جایش است؛ ولی تا
+                      امروز اجرایش به عهدهٔ کاربر بود: باید می‌فهمید کپی لازم
+                      است، کپی می‌گرفت، اسم می‌گذاشت، و بعد کپی را پیدا می‌کرد.
+                      حالا سرور تصمیم می‌گیرد و کاربر مستقیم در طراح می‌نشیند.
+                    */}
+                    {canWrite ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        loading={editable.isPending && editingId === row.id}
+                        onClick={() => {
+                          setEditingId(row.id);
+                          editable.mutate(row.id, {
+                            onSuccess: (result) => onOpen(result.definitionId),
+                          });
+                        }}
+                      >
+                        ویرایش
+                      </Button>
+                    ) : null}
+                    <Button size="sm" variant="ghost" onClick={() => onOpen(row.id)}>
+                      مشاهده
                     </Button>
                     {canWrite ? (
                       <Button size="sm" variant="ghost" onClick={() => onCopy(row)}>
-                        کپی
+                        کپی تازه
                       </Button>
                     ) : null}
                     {canWrite && !row.isSystem && !row.isActive && row.status !== 'ARCHIVED' ? (

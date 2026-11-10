@@ -160,6 +160,58 @@ export class TemplatesService {
   }
 
   /**
+   * قالبی که کاربر می‌تواند همین حالا ویرایشش کند.
+   *
+   * قاعدهٔ «قالب سیستمی ویرایش نمی‌شود» سر جایش است — همان است که همیشه یک مرجع
+   * بازگشت سالم نگه می‌دارد. ولی تا امروز اجرایش به عهدهٔ **کاربر** بود: باید
+   * می‌فهمید کپی لازم است، از فهرست کپی می‌گرفت، اسم می‌گذاشت، کپی را پیدا
+   * می‌کرد و بعد ویرایش می‌کرد. چهار گام پیش از اینکه حتی یک حاشیه را عوض کند.
+   *
+   * حالا همین‌جا انجام می‌شود:
+   *  - قالب غیرسیستمی ⇒ خودش.
+   *  - قالب سیستمی ⇒ اگر قالبِ **فعالِ** این نوع گزارش غیرسیستمی است، همان
+   *    (چون همان است که خروجی را می‌سازد و کاربر واقعاً می‌خواهد عوضش کند)؛
+   *    وگرنه یک کپی با نام قراردادی.
+   *
+   * و کپی **دوباره ساخته نمی‌شود**: اگر کپیِ هم‌نام از قبل هست، همان برمی‌گردد.
+   * زدن دوبارهٔ «ویرایش» نباید فهرست قالب‌ها را از کپی‌های تکراری پر کند.
+   */
+  async editable(definitionId: string, user: AuthenticatedUser) {
+    const source = await this.prisma.reportDefinition.findUnique({
+      where: { id: definitionId },
+      include: { reportType: { select: { id: true, activeDefinitionId: true } } },
+    });
+    if (!source) throw AppError.notFound('قالب گزارش یافت نشد');
+
+    if (!source.isSystem) return { definitionId: source.id, created: false };
+
+    if (source.reportType.activeDefinitionId !== null) {
+      const active = await this.prisma.reportDefinition.findUnique({
+        where: { id: source.reportType.activeDefinitionId },
+        select: { id: true, isSystem: true, status: true },
+      });
+      if (active && !active.isSystem && active.status !== 'ARCHIVED') {
+        return { definitionId: active.id, created: false };
+      }
+    }
+
+    const name = `${source.name} — نسخهٔ سازمانی`;
+    const existing = await this.prisma.reportDefinition.findFirst({
+      where: {
+        reportTypeId: source.reportTypeId,
+        name,
+        isSystem: false,
+        status: { not: 'ARCHIVED' },
+      },
+      select: { id: true },
+    });
+    if (existing) return { definitionId: existing.id, created: false };
+
+    const copy = await this.copy(definitionId, name, user);
+    return { definitionId: copy.id, created: true };
+  }
+
+  /**
    * کپی یک قالب.
    *
    * قالب سیستمی (گزارش مالیات) **ویرایش مستقیم نمی‌شود**؛ کپی می‌شود و کپی ویرایش
@@ -283,7 +335,7 @@ export class TemplatesService {
    * پس از انتشار، نسخه **تغییرناپذیر** است و `current_version_id` قالب به آن اشاره
    * می‌کند. خروجی‌های قبلی به نسخه خودشان بسته می‌مانند (معیار پذیرش ۵ فاز ۷).
    */
-  async publish(versionId: string, user: AuthenticatedUser) {
+  async publish(versionId: string, user: AuthenticatedUser, alsoActivate = false) {
     const version = await this.prisma.reportVersion.findUnique({
       where: { id: versionId },
       include: { definition: true },
@@ -320,7 +372,15 @@ export class TemplatesService {
        * ولی اگر قالب فعالی **هست**، انتشار آن را عوض نمی‌کند: جایگزینی قالبی که امروز
        * خروجی رسمی سازمان را می‌سازد، باید یک تصمیم آگاهانه و جداگانه باشد.
        */
-      const becameActive = reportType.activeDefinitionId === null;
+      /*
+        انتشار، وقتی خواسته شود، همان‌جا **اعمال** هم می‌کند.
+
+        دو مفهوم جدا بودند — «نسخه منتشر شده» و «قالب فعال است» — و کاربر
+        فرقشان را نمی‌دانست: نسخه را منتشر می‌کرد، پیام موفقیت می‌گرفت، و خروجی
+        همان قبلی می‌ماند. جدایی‌شان در داده لازم است (چند قالب برای یک نوع
+        گزارش)؛ جدایی‌شان در **کارِ روزمره** لازم نیست.
+      */
+      const becameActive = reportType.activeDefinitionId === null || alsoActivate;
       if (becameActive) {
         await tx.reportType.update({
           where: { id: reportType.id },
