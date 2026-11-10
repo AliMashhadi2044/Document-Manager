@@ -16,7 +16,6 @@
   "styles": {
     "fontFamily": "Vazirmatn, Tahoma, sans-serif",
     "baseFontSizePt": 9,
-    "headingFontSizePt": 13,
     "tableFontSizePt": 8,
     "borderWidthPx": 1,
     "borderColor": "#333333",

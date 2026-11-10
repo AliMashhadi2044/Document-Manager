@@ -49,12 +49,44 @@ export function renderReportHtml(
 <body>
 ${options.toolbarHtml ?? ''}
 <div class="sheet">
-  <header class="report-header">${renderBlocks(report.header)}</header>
-  <main class="report-body">${renderBlocks(report.body)}</main>
-  <footer class="report-footer">${renderBlocks(report.footer)}</footer>
+${frameHtml(report)}
 </div>
 </body>
 </html>`;
+}
+
+/**
+ * قابِ صفحه: سربرگ، بدنه، پابرگ — و تکرارِ سربرگ/پابرگ روی هر صفحهٔ چاپ.
+ *
+ * تکرار با `<thead>` و `<tfoot>` یک جدولِ پوشاننده انجام می‌شود و نه با
+ * `position: fixed`. دلیلش این است که موتور چاپ، `thead` را روی **هر** صفحه
+ * تکرار می‌کند و خودش جا برایش باز می‌کند؛ `position: fixed` جا باز نمی‌کند و
+ * سربرگ روی سطرهای اول صفحهٔ دوم می‌افتاد.
+ *
+ * وقتی هیچ‌کدام تکرارشونده نیستند، همان ساختار سادهٔ قبلی می‌ماند: جدولِ
+ * پوشاننده برای چیزی که تکرار نمی‌شود، فقط یک لایهٔ اضافه است.
+ */
+function frameHtml(report: LaidOutReport): string {
+  const header = `<header class="report-header">${renderBlocks(report.header)}</header>`;
+  const body = `<main class="report-body">${renderBlocks(report.body)}</main>`;
+  const footer = `<footer class="report-footer">${renderBlocks(report.footer)}</footer>`;
+
+  const repeatHeader = report.repeatHeader && report.header.length > 0;
+  const repeatFooter = report.repeatFooter && report.footer.length > 0;
+
+  if (!repeatHeader && !repeatFooter) {
+    return `  ${header}\n  ${body}\n  ${footer}`;
+  }
+
+  return [
+    '  <table class="page-frame">',
+    repeatHeader ? `    <thead><tr><td>${header}</td></tr></thead>` : '',
+    repeatFooter ? `    <tfoot><tr><td>${footer}</td></tr></tfoot>` : '',
+    `    <tbody><tr><td>${repeatHeader ? '' : header}${body}${repeatFooter ? '' : footer}</td></tr></tbody>`,
+    '  </table>',
+  ]
+    .filter((line) => line !== '')
+    .join('\n');
 }
 
 function renderBlocks(blocks: readonly LaidOutBlock[]): string {
@@ -90,7 +122,15 @@ function renderBlock(block: LaidOutBlock): string {
 
     case 'pageNumber':
       // شماره صفحه را موتور چاپ مرورگر پر می‌کند؛ اینجا فقط جایش نگه داشته می‌شود.
-      return `<p class="block-page-number">${escapeHtml(block.templateFa)}</p>`;
+      /*
+        شمارهٔ صفحه در HTML **رندر نمی‌شود**.
+
+        HTML نمی‌داند صفحهٔ چندم است — صفحه‌بندی کارِ چاپگر است. تا امروز همین
+        بلوک متنِ خام قالب را چاپ می‌کرد، یعنی روی کاغذ عیناً
+        «صفحه {{page}} از {{pages}}» می‌آمد. حالا تولیدکنندهٔ PDF آن را به پابرگِ
+        چاپ می‌دهد (جایی که شماره واقعاً معلوم است) و اینجا چیزی نمی‌نشیند.
+      */
+      return '';
   }
 }
 
@@ -199,10 +239,21 @@ function renderTable(table: LaidOutTable): string {
           })
           .join('')}</tr>`;
 
+  /*
+    سرستون در `thead` می‌نشیند یا در `tbody` — همین تفاوت، تکرار را تعیین می‌کند.
+
+    موتور چاپ `thead` را روی هر صفحه تکرار می‌کند. تا امروز سرستون همیشه
+    در `thead` بود، پس تیک «تکرار سرستون در صفحهٔ تازه» در طراح هیچ کاری
+    نمی‌کرد: روشن و خاموشش یک خروجی می‌داد.
+  */
+  const headMarkup = table.repeatHeaderOnNewPage
+    ? `<thead>${head}</thead>
+<tbody>`
+    : `<tbody>${head}`;
+
   return `<table class="report-table${table.avoidRowBreak ? ' avoid-row-break' : ''}">
 <colgroup>${colgroup}</colgroup>
-<thead>${head}</thead>
-<tbody>
+${headMarkup}
 ${body}
 ${fillers}
 ${totals}
@@ -269,6 +320,11 @@ html, body {
 .sheet { padding: ${page.margins.top}mm ${page.margins.inlineEnd}mm ${page.margins.bottom}mm ${page.margins.inlineStart}mm; }
 @media print { .sheet { padding: 0; } .no-print { display: none !important; } }
 
+/* جدولِ پوشانندهٔ تکرارِ سربرگ/پابرگ — خودش هیچ ظاهری ندارد. */
+.page-frame { width: 100%; border-collapse: collapse; }
+.page-frame > thead > tr > td,
+.page-frame > tbody > tr > td,
+.page-frame > tfoot > tr > td { padding: 0; border: 0; }
 .report-header { margin-bottom: 4mm; }
 .report-footer { margin-top: 8mm; }
 .block-text { margin: 0 0 1.5mm; line-height: 1.7; }

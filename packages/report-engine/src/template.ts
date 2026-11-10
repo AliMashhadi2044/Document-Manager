@@ -30,7 +30,15 @@ export const pageSchema = z.object({
 export const styleTokensSchema = z.object({
   fontFamily: z.string().max(100),
   baseFontSizePt: z.number().min(5).max(24),
-  headingFontSizePt: z.number().min(5).max(36),
+  /*
+    `headingFontSizePt` اینجا بود و **هیچ رندری نمی‌خواندش**.
+
+    دلیلش ساده است: این موتور بلوکی به نام «عنوان» ندارد. عنوان گزارش یک بلوک
+    متنی در سربرگ است و اندازهٔ قلمِ خودش را دارد (`fontSizePt` همان بلوک). پس
+    این توکن یک کنترل در طراح بود که هر عددی می‌گرفت و هیچ اثری نداشت — بدتر از
+    نبودنش. قالب‌های ذخیره‌شده‌ای که هنوز این کلید را دارند مشکلی ندارند: zod
+    کلید ناشناخته را کنار می‌گذارد.
+  */
   tableFontSizePt: z.number().min(5).max(20),
   borderWidthPx: z.number().min(0).max(5),
   /** پالت چاپ: سیاه‌وسفید، بدون پس‌زمینه کم‌کنتراست (docs/09 §۶). */

@@ -198,6 +198,22 @@ export interface LaidOutReport {
   readonly generatedAt: string;
 }
 
+/**
+ * متنِ بلوک «شماره صفحه»، اگر قالب چنین بلوکی داشته باشد.
+ *
+ * HTML شمارهٔ صفحه را نمی‌داند و این بلوک را رندر نمی‌کند؛ تولیدکنندهٔ PDF از
+ * همین تابع متنش را می‌گیرد و به پابرگِ چاپ می‌دهد. اولین بلوک برنده است —
+ * دو پابرگِ شماره‌دار روی یک صفحه معنا ندارد.
+ */
+export function pageNumberTemplateOf(report: LaidOutReport): string | null {
+  for (const band of [report.footer, report.header, report.body]) {
+    for (const block of band) {
+      if (block.kind === 'pageNumber') return block.templateFa;
+    }
+  }
+  return null;
+}
+
 export interface LayoutOptions {
   /**
    * جایگزینیِ متنِ بلوک‌های متنی، با کلید شناسهٔ بلوک.

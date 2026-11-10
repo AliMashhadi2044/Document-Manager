@@ -398,19 +398,7 @@ export function PageSettings({
               })
             }
           />
-          <Input
-            label="اندازه قلم سرصفحه (pt)"
-            type="number"
-            min={5}
-            max={36}
-            value={template.styles.headingFontSizePt}
-            onChange={(event) =>
-              onChange({
-                ...template,
-                styles: { ...template.styles, headingFontSizePt: Number(event.target.value) },
-              })
-            }
-          />
+          
           <Input
             label="اندازه قلم جدول (pt)"
             type="number"

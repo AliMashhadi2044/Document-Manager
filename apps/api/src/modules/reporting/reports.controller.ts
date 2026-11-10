@@ -13,7 +13,17 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { z } from 'zod';
-import type { LaidOutBlock, LaidOutReport } from '@dm/report-engine';
+import { pageNumberTemplateOf, type LaidOutBlock, type LaidOutReport } from '@dm/report-engine';
+
+import type { PdfPaperSize } from './pdf.renderer';
+
+/** نام کاغذ در قالب ← نامی که چاپگر بی‌سر می‌فهمد. */
+const PDF_PAPER_SIZE: Record<'A3' | 'A4' | 'A5' | 'LETTER', PdfPaperSize> = {
+  A3: 'A3',
+  A4: 'A4',
+  A5: 'A5',
+  LETTER: 'Letter',
+};
 
 import {
   CurrentUser,
@@ -274,6 +284,8 @@ export class ReportsController {
     const margins = result.report.page.margins;
 
     const buffer = await this.pdf.render(html, {
+      // اندازهٔ کاغذِ قالب، نه یک A4 ثابت.
+      pageSize: PDF_PAPER_SIZE[result.report.page.size],
       landscape: result.report.page.orientation === 'landscape',
       marginsMm: {
         top: margins.top,
@@ -281,6 +293,8 @@ export class ReportsController {
         left: margins.inlineEnd,
         right: margins.inlineStart,
       },
+      // شمارهٔ صفحه را فقط چاپگر می‌داند؛ HTML این بلوک را رندر نمی‌کند.
+      pageNumberTemplate: pageNumberTemplateOf(result.report),
     });
 
     response.setHeader('Content-Type', 'application/pdf');

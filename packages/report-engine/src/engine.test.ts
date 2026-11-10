@@ -12,6 +12,7 @@ import {
   evaluateExpression,
   formatValue,
   layoutReport,
+  pageNumberTemplateOf,
   toValue,
   printableWidthMm,
   readPath,
@@ -865,6 +866,174 @@ describe('سلول دوبخشی با تکهٔ غایب', () => {
   // ستونی که `titleParts` ندارد، دست‌نخورده می‌ماند.
   it('ستون بدون titleParts عنوانش عوض نمی‌شود', () => {
     expect(tableOf([WITHOUT]).columns[0]?.titleFa).toBe('فروشنده');
+  });
+});
+
+/**
+ * تنظیم‌هایی که در طراح بودند و در خروجی هیچ اثری نداشتند.
+ *
+ * هر سه مورد یک شکل داشتند: کنترل در فرم هست، مقدارش ذخیره می‌شود، `layout`
+ * حسابش می‌کند — و رندر هیچ‌وقت نمی‌خواندش. کاربر تیک را عوض می‌کرد و خروجی
+ * عوض نمی‌شد، بی‌آنکه خطایی ببیند.
+ */
+describe('تنظیم‌های صفحه که باید اثر داشته باشند', () => {
+  const base = {
+    schemaVersion: 1,
+    reportTypeKey: 'X',
+    titleFa: 'آزمون',
+    page: {
+      size: 'A4',
+      orientation: 'portrait',
+      margins: { top: 10, bottom: 10, inlineStart: 10, inlineEnd: 10 },
+      direction: 'rtl',
+    },
+    styles: {
+      fontFamily: 'Vazirmatn',
+      baseFontSizePt: 9,
+      tableFontSizePt: 8,
+      borderWidthPx: 1,
+      borderColor: '#333333',
+      textColor: '#000000',
+      mutedTextColor: '#555555',
+    },
+  } as const;
+
+  const textBlock = (id: string, text: string) => ({
+    id,
+    type: 'text',
+    text,
+    align: 'center',
+    bold: false,
+  });
+
+  const tableBlock = (repeatHeaderOnNewPage: boolean) => ({
+    id: 'tbl',
+    type: 'table',
+    dataSource: 'rows',
+    minRows: 0,
+    pagination: { repeatHeaderOnNewPage, avoidRowBreak: false },
+    columns: [
+      {
+        key: 'a',
+        titleFa: 'ستون الف',
+        width: { unit: 'mm', value: 30 },
+        align: 'start',
+        value: { k: 'var', path: 'row.a' },
+        format: { kind: 'text', persianDigits: false, emptyText: '' },
+      },
+    ],
+  });
+
+  const htmlOf = (template: unknown) =>
+    renderReportHtml(
+      layoutReport(templateV1Schema.parse(template), {
+        values: {},
+        collections: { rows: [{ a: 'یک' }] },
+        signatories: [],
+        roundingMode: 'HALF_UP',
+        generatedAt: '2026-10-27',
+      }),
+    );
+
+  it('سربرگِ تکرارشونده در قاب تکرار می‌نشیند و بدون آن نمی‌نشیند', () => {
+    const withRepeat = htmlOf({
+      ...base,
+      header: { repeatOnEveryPage: true, blocks: [textBlock('h', 'سربرگ')] },
+      body: [tableBlock(true)],
+      footer: { repeatOnEveryPage: false, blocks: [] },
+    });
+    expect(withRepeat).toContain('<table class="page-frame">');
+    expect(withRepeat).toContain('<thead><tr><td><header class="report-header">');
+
+    const without = htmlOf({
+      ...base,
+      header: { repeatOnEveryPage: false, blocks: [textBlock('h', 'سربرگ')] },
+      body: [tableBlock(true)],
+      footer: { repeatOnEveryPage: false, blocks: [] },
+    });
+    // فقط بدنه؛ قاعدهٔ `page-frame` همیشه در شیوه‌نامه هست.
+    expect(without.slice(without.indexOf('</style>'))).not.toContain('page-frame');
+    expect(without).toContain('<header class="report-header">');
+  });
+
+  it('پابرگِ تکرارشونده هم همین‌طور', () => {
+    const html = htmlOf({
+      ...base,
+      header: { repeatOnEveryPage: false, blocks: [] },
+      body: [tableBlock(true)],
+      footer: { repeatOnEveryPage: true, blocks: [textBlock('f', 'پابرگ')] },
+    });
+    expect(html).toContain('<tfoot><tr><td><footer class="report-footer">');
+  });
+
+  /*
+    سرستونِ جدول: در `thead` تکرار می‌شود، در `tbody` نه. تا امروز همیشه در
+    `thead` بود و تیکِ طراح هیچ فرقی نمی‌ساخت.
+  */
+  it('تیک تکرار سرستون، جای سرستون را عوض می‌کند', () => {
+    const repeating = htmlOf({
+      ...base,
+      header: { repeatOnEveryPage: false, blocks: [] },
+      body: [tableBlock(true)],
+      footer: { repeatOnEveryPage: false, blocks: [] },
+    });
+    expect(repeating).toContain('<thead><tr><th');
+
+    const plain = htmlOf({
+      ...base,
+      header: { repeatOnEveryPage: false, blocks: [] },
+      body: [tableBlock(false)],
+      footer: { repeatOnEveryPage: false, blocks: [] },
+    });
+    expect(plain).not.toContain('<thead>');
+    expect(plain).toContain('<tbody><tr><th');
+  });
+
+  /*
+    شمارهٔ صفحه: HTML نمی‌داند صفحهٔ چندم است، پس بلوک را رندر نمی‌کند و متنِ
+    خامش را هم چاپ نمی‌کند. تا امروز عیناً «صفحه {{page}} از {{pages}}» روی
+    کاغذ می‌آمد.
+  */
+  it('بلوک شمارهٔ صفحه، جای‌گذارها را روی کاغذ نمی‌نویسد', () => {
+    const template = templateV1Schema.parse({
+      ...base,
+      header: { repeatOnEveryPage: false, blocks: [] },
+      body: [tableBlock(true)],
+      footer: {
+        repeatOnEveryPage: false,
+        blocks: [{ id: 'pn', type: 'pageNumber', templateFa: 'صفحه {{page}} از {{pages}}' }],
+      },
+    });
+    const report = layoutReport(template, {
+      values: {},
+      collections: { rows: [{ a: 'یک' }] },
+      signatories: [],
+      roundingMode: 'HALF_UP',
+      generatedAt: '2026-10-27',
+    });
+
+    expect(renderReportHtml(report)).not.toContain('{{page}}');
+    // ولی متنش گم نمی‌شود: تولیدکنندهٔ PDF از همین‌جا برش می‌دارد.
+    expect(pageNumberTemplateOf(report)).toBe('صفحه {{page}} از {{pages}}');
+  });
+
+  it('قالبِ بدون بلوک شمارهٔ صفحه، پابرگ چاپ نمی‌خواهد', () => {
+    const report = layoutReport(
+      templateV1Schema.parse({
+        ...base,
+        header: { repeatOnEveryPage: false, blocks: [] },
+        body: [tableBlock(true)],
+        footer: { repeatOnEveryPage: false, blocks: [] },
+      }),
+      {
+        values: {},
+        collections: { rows: [{ a: 'یک' }] },
+        signatories: [],
+        roundingMode: 'HALF_UP',
+        generatedAt: '2026-10-27',
+      },
+    );
+    expect(pageNumberTemplateOf(report)).toBeNull();
   });
 });
 

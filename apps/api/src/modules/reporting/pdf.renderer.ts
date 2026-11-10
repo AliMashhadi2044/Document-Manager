@@ -20,6 +20,54 @@ import { AppError } from '../../common/errors/app-error';
  *  - مرورگر **یک‌بار** باز می‌شود و بین درخواست‌ها می‌ماند؛ هر درخواست فقط یک context
  *    جدا می‌گیرد، چون راه‌اندازی مرورگر چند ثانیه طول می‌کشد.
  */
+/** کاغذهایی که موتور می‌شناسد، به همان نامی که چاپگر بی‌سر می‌فهمد. */
+export type PdfPaperSize = 'A3' | 'A4' | 'A5' | 'Letter';
+
+export interface PdfRenderOptions {
+  readonly pageSize: PdfPaperSize;
+  readonly landscape: boolean;
+  readonly marginsMm: {
+    readonly top: number;
+    readonly bottom: number;
+    readonly left: number;
+    readonly right: number;
+  };
+  /**
+   * متن شمارهٔ صفحه، با جای‌گذارهای `{{page}}` و `{{pages}}`؛ `null` یعنی
+   * قالب بلوک «شماره صفحه» ندارد و پابرگ چاپ اصلاً روشن نمی‌شود.
+   */
+  readonly pageNumberTemplate: string | null;
+}
+
+/**
+ * پابرگِ چاپ: متن قالب، با شمارهٔ صفحهٔ خودِ چاپگر.
+ *
+ * `pageNumber` و `totalPages` دو کلاسِ شناخته‌شدهٔ موتور چاپ‌اند و محتوایشان را
+ * خودش پر می‌کند. متن کاربر **escape** می‌شود؛ این رشته از قالبی می‌آید که کاربر
+ * ویرایشش می‌کند و نباید به HTML پابرگ تزریق شود.
+ *
+ * پابرگ ارث‌بری سبک از صفحه ندارد و قلمش پیش‌فرضِ خیلی ریزِ موتور است، پس اندازه
+ * و چینش صریح نوشته می‌شوند. فضای پایین هم باید دست‌کم به اندازهٔ حاشیهٔ پایین
+ * باشد وگرنه پابرگ بیرون از ناحیهٔ چاپ می‌افتد و دیده نمی‌شود.
+ */
+function pageFooterHtml(template: string, bottomMarginMm: number): string {
+  const safe = template
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;');
+
+  const body = safe
+    .replace(/\{\{\s*page\s*\}\}/gu, '<span class="pageNumber"></span>')
+    .replace(/\{\{\s*pages\s*\}\}/gu, '<span class="totalPages"></span>');
+
+  return (
+    `<div style="width:100%;font-size:8pt;font-family:sans-serif;direction:rtl;` +
+    `text-align:center;padding:0 10mm ${Math.max(bottomMarginMm - 6, 2)}mm;color:#555">` +
+    `${body}</div>`
+  );
+}
+
 @Injectable()
 export class PdfRenderer implements OnModuleDestroy {
   private readonly logger = new Logger(PdfRenderer.name);
@@ -31,10 +79,7 @@ export class PdfRenderer implements OnModuleDestroy {
   private static readonly MAX_CONCURRENT = 2;
   private static readonly TIMEOUT_MS = 60_000;
 
-  async render(
-    html: string,
-    options: { landscape: boolean; marginsMm: { top: number; bottom: number; left: number; right: number } },
-  ): Promise<Buffer> {
+  async render(html: string, options: PdfRenderOptions): Promise<Buffer> {
     if (this.active >= PdfRenderer.MAX_CONCURRENT) {
       throw new AppError(
         'REPORT_RENDER_BUSY',
@@ -64,15 +109,42 @@ export class PdfRenderer implements OnModuleDestroy {
         await page.setContent(html, { waitUntil: 'load', timeout: PdfRenderer.TIMEOUT_MS });
 
         const pdf = await page.pdf({
-          format: 'A4',
+          /*
+            اندازهٔ کاغذ از **قالب** می‌آید.
+
+            پیش از این `'A4'` ثابت بود: کسی که در طراح A3 را انتخاب می‌کرد، در
+            HTML کاغذ بزرگ می‌گرفت و در PDF همان A4 — یعنی ستون‌های یک فرم
+            عریض روی کاغذ بریده می‌شدند، بی‌آنکه هیچ خطایی بدهد.
+          */
+          format: options.pageSize,
           landscape: options.landscape,
-          printBackground: false,
+          /*
+            پس‌زمینه چاپ می‌شود.
+
+            شیوه‌نامهٔ گزارش عمداً سیاه‌وسفید است و پس‌زمینه‌ای ندارد، جز
+            سلول‌هایی که از آستانهٔ تنظیم‌ها گذشته‌اند و باید خاکستری دیده شوند.
+            با `false`، آن علامت در PDF **ناپدید** می‌شد در حالی که در HTML بود.
+          */
+          printBackground: true,
           margin: {
             top: `${options.marginsMm.top}mm`,
             bottom: `${options.marginsMm.bottom}mm`,
             left: `${options.marginsMm.left}mm`,
             right: `${options.marginsMm.right}mm`,
           },
+          /*
+            شمارهٔ صفحه، تنها جایی که می‌شود ساختش.
+
+            HTML شمارهٔ صفحه را نمی‌داند — صفحه‌بندی کارِ چاپگر است. پس بلوک
+            «شماره صفحه» در خودِ HTML رندر نمی‌شود و اینجا به پابرگِ چاپ تبدیل
+            می‌شود. قالب فقط می‌گوید چه بنویسد.
+          */
+          displayHeaderFooter: options.pageNumberTemplate !== null,
+          headerTemplate: '<span></span>',
+          footerTemplate:
+            options.pageNumberTemplate === null
+              ? '<span></span>'
+              : pageFooterHtml(options.pageNumberTemplate, options.marginsMm.bottom),
         });
 
         return Buffer.from(pdf);
