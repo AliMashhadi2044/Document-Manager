@@ -5,6 +5,7 @@ import { Button } from '../../shared/ui/button';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/ui/states';
 import { ApiError } from '../../shared/api/client';
 import { formatIsoAsJalali, formatServerMessage, toPersianDigits } from '../../shared/format/money';
+import { formatFileSize } from '../../shared/format/bytes';
 import {
   attachmentContentUrl,
   useAttachments,
@@ -14,6 +15,7 @@ import {
 } from './files.api';
 import { AttachmentPreview } from './attachment-preview';
 import { AttachmentHistory } from './attachment-history';
+import { DeletedAttachments } from './deleted-attachments';
 
 /**
  * پیوست‌های سند — فهرست، آپلود، پیش‌نمایش، حذف و تاریخچه.
@@ -32,10 +34,16 @@ export function AttachmentsPanel({
   documentId,
   canUpload,
   canDelete,
+  canRestore = false,
+  canPurge = false,
 }: {
   documentId: string;
   canUpload: boolean;
   canDelete: boolean;
+  /** بازگرداندن فایل حذف‌شده — نزد همان نقشی که حذف می‌کند. */
+  canRestore?: boolean;
+  /** حذف دائمی — نزد مدیر سامانه، مثل حذف دائمی سند. */
+  canPurge?: boolean;
 }): JSX.Element {
   const attachments = useAttachments(documentId);
   const upload = useUploadAttachments();
@@ -127,8 +135,8 @@ export function AttachmentsPanel({
           <h3 className="text-sm font-semibold">فایل‌های اسکن سند</h3>
           <p className="mt-1 text-xs text-muted-foreground">
             {toPersianDigits(String(items.length))} فایل ·{' '}
-            {formatSize(String(totalBytes))} از حجم مجاز{' '}
-            {formatSize(String(limits.maxTotalBytesPerDocument))}
+            {formatFileSize(String(totalBytes))} از حجم مجاز{' '}
+            {formatFileSize(String(limits.maxTotalBytesPerDocument))}
           </p>
         </div>
 
@@ -157,7 +165,7 @@ export function AttachmentsPanel({
               {Object.values(UPLOAD_TYPES)
                 .map((type) => type.titleFa)
                 .join('، ')}{' '}
-              · حداکثر {formatSize(String(limits.maxFileBytes))} برای هر فایل
+              · حداکثر {formatFileSize(String(limits.maxFileBytes))} برای هر فایل
             </p>
           </div>
         ) : null}
@@ -210,7 +218,7 @@ export function AttachmentsPanel({
                 <p className="truncate text-sm font-medium">{item.originalFilename}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {UPLOAD_TYPES[item.typeKey]?.titleFa ?? item.typeKey} ·{' '}
-                  {formatSize(item.sizeBytes)} · {formatIsoAsJalali(item.createdAt)}
+                  {formatFileSize(item.sizeBytes)} · {formatIsoAsJalali(item.createdAt)}
                   {item.uploadedBy ? ` · ${item.uploadedBy.fullName}` : ''}
                 </p>
               </div>
@@ -238,7 +246,10 @@ export function AttachmentsPanel({
                       setError(null);
                       setNotice(null);
                       remove.mutate(item.id, {
-                        onSuccess: () => setNotice('فایل حذف شد؛ رکورد آن برای حسابرسی می‌ماند.'),
+                        onSuccess: () =>
+                          setNotice(
+                            'فایل حذف شد. تا پاک نشود، از بخش «فایل‌های حذف‌شدهٔ این سند» قابل بازگرداندن است.',
+                          ),
                         onError: (caught) =>
                           setError(
                             caught instanceof ApiError
@@ -257,6 +268,12 @@ export function AttachmentsPanel({
         </ul>
       )}
 
+      <DeletedAttachments
+        documentId={documentId}
+        canRestore={canRestore}
+        canPurge={canPurge}
+      />
+
       {previewOf ? (
         <AttachmentPreview attachment={previewOf} onClose={() => setPreviewOf(null)} />
       ) : null}
@@ -268,10 +285,3 @@ export function AttachmentsPanel({
   );
 }
 
-/** اندازه فایل از رشته عددی؛ تقسیم روی مبلغ ممنوع است ولی این بایت است، نه ریال. */
-function formatSize(bytes: string): string {
-  const value = Number(bytes);
-  if (value < 1024) return `${toPersianDigits(String(value))} بایت`;
-  if (value < 1024 * 1024) return `${toPersianDigits((value / 1024).toFixed(1))} کیلوبایت`;
-  return `${toPersianDigits((value / (1024 * 1024)).toFixed(1))} مگابایت`;
-}

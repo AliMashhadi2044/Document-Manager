@@ -35,8 +35,22 @@ export interface AttachmentHistoryRow {
   readonly actor: { readonly id: string; readonly fullName: string } | null;
 }
 
+export interface DeletedAttachmentRow {
+  readonly id: string;
+  readonly kind: 'SCAN' | 'OTHER';
+  readonly originalFilename: string;
+  readonly typeKey: UploadTypeKey;
+  readonly sizeBytes: string;
+  readonly status: 'PENDING' | 'READY' | 'FAILED';
+  readonly createdAt: string;
+  readonly deletedAt: string;
+  readonly uploadedBy: { readonly id: string; readonly fullName: string } | null;
+  readonly deletedBy: { readonly id: string; readonly fullName: string } | null;
+}
+
 export const attachmentKeys = {
   list: (documentId: string) => ['attachments', 'list', documentId] as const,
+  deleted: (documentId: string) => ['attachments', 'deleted', documentId] as const,
   history: (attachmentId: string) => ['attachments', 'history', attachmentId] as const,
   rotations: (attachmentId: string) => ['attachments', 'rotations', attachmentId] as const,
 };
@@ -153,6 +167,51 @@ export function useDeleteAttachment(documentId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: attachmentKeys.list(documentId) });
       void queryClient.invalidateQueries({ queryKey: ['archive'] });
+    },
+  });
+}
+
+/**
+ * فایل‌های حذف‌شدهٔ سند.
+ *
+ * کوئری جدا از فهرست عادی و با کلید جدا: فهرست عادی جایی است که سقف‌ها و دروازهٔ
+ * بایگانی از آن می‌خوانند و حذف‌شده نباید در آن بنشیند. `enabled` هم لازم است،
+ * وگرنه هر کاربری که سند را باز می‌کند یک ۴۰۳ بی‌مصرف می‌گیرد.
+ */
+export function useDeletedAttachments(documentId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: attachmentKeys.deleted(documentId),
+    queryFn: () =>
+      apiFetch<{ items: readonly DeletedAttachmentRow[] }>(
+        `/documents/${documentId}/attachments/deleted`,
+      ),
+    enabled,
+  });
+}
+
+export function useRestoreAttachment(documentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      apiFetch<{ id: string; originalFilename: string }>(`/attachments/${attachmentId}/restore`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: attachmentKeys.list(documentId) });
+      void queryClient.invalidateQueries({ queryKey: attachmentKeys.deleted(documentId) });
+      void queryClient.invalidateQueries({ queryKey: ['archive'] });
+    },
+  });
+}
+
+/** حذف دائمی — مسیر و کلید جدا از حذف نرم، چون کار جداست. */
+export function usePurgeAttachment(documentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      apiFetch<void>(`/attachments/${attachmentId}/purge`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: attachmentKeys.deleted(documentId) });
     },
   });
 }

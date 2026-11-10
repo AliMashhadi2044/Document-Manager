@@ -39,6 +39,7 @@ import { DocumentEditDialog } from './document-edit-dialog';
 import { DocumentDeleteDialog } from './document-delete-dialog';
 import { useDeleteInvoice } from '../invoices/invoices.api';
 import { AttachmentsPanel } from '../files/attachments-panel';
+import { DeletedAttachments } from '../files/deleted-attachments';
 import { FeedbackPanel } from '../feedback/feedback-panel';
 import { useCurrentUser } from '../auth/auth.api';
 import { ReportPreview } from '../reports/report-preview';
@@ -687,7 +688,16 @@ export function DocumentDetailView({
           documentId={documentId}
           canUpload={permissions.includes('attachment:upload') && data.status !== 'ARCHIVED'}
           canDelete={permissions.includes('attachment:delete') && data.status !== 'ARCHIVED'}
+          canRestore={permissions.includes('attachment:restore') && data.status !== 'ARCHIVED'}
+          canPurge={permissions.includes('attachment:purge')}
         />
+      ) : permissions.includes('attachment:purge') ? (
+        /*
+          مدیر سامانه پنل پیوست‌ها را نمی‌بیند (`attachment:read` ندارد و این
+          عمدی است: حق پاک کردن، حق دیدن محتوا نیست)، ولی حذف دائمی کار اوست.
+          پس همان بخش، این‌بار روی پای خودش.
+        */
+        <DeletedAttachments documentId={documentId} canRestore={false} canPurge standalone />
       ) : null}
 
       {user && permissions.includes('feedback:read') && data.status !== 'DRAFT' ? (

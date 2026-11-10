@@ -180,6 +180,8 @@ export function ArchiveWorkspace({
         documentId={documentId}
         canUpload={user.permissions.includes('attachment:upload') && !isCompleted}
         canDelete={user.permissions.includes('attachment:delete') && !isCompleted}
+        canRestore={user.permissions.includes('attachment:restore') && !isCompleted}
+        canPurge={user.permissions.includes('attachment:purge')}
       />
 
       <FeedbackPanel documentId={documentId} user={user} />

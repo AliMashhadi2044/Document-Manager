@@ -29,6 +29,7 @@ import type { Response } from 'express';
 
 import {
   CurrentUser,
+  RequireAnyPermission,
   RequirePermission,
   type AuthenticatedUser,
 } from '../../common/auth/auth.decorators';
@@ -207,5 +208,66 @@ export class AttachmentsController {
   @ApiOperation({ summary: 'حذف نرم فایل — رکورد برای حسابرسی باقی می‌ماند' })
   async remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
     await this.attachments.softDelete(id, user);
+  }
+
+  /**
+   * فهرست فایل‌های حذف‌شدهٔ سند.
+   *
+   * با **هر یک** از دو مجوز باز است، چون دو نقش از دو زاویه به یک فهرست نگاه
+   * می‌کنند: بایگانی می‌خواهد برگرداند، مدیر سامانه می‌خواهد پاک کند. و این فهرست
+   * `attachment:read` **نمی‌خواهد**: نام و اندازه و ردپای حذف می‌دهد، نه محتوا — پس
+   * مدیر سامانه که حق دیدن محتوای اسناد را ندارد، می‌تواند کارش را بکند بی‌آنکه
+   * دسترسی‌اش به فایل‌ها باز شود.
+   */
+  @RequireAnyPermission('attachment:restore', 'attachment:purge')
+  @Get('documents/:documentId/attachments/deleted')
+  @ApiOperation({ summary: 'فایل‌های حذف‌شدهٔ یک سند — برای بازگرداندن یا حذف دائمی' })
+  async listDeleted(
+    @Param('documentId') documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const items = await this.attachments.listDeleted(documentId, user);
+    return {
+      items: items.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        originalFilename: item.originalFilename,
+        typeKey: item.typeKey,
+        sizeBytes: item.sizeBytes.toString(),
+        status: item.status,
+        createdAt: item.createdAt,
+        deletedAt: item.deletedAt,
+        uploadedBy: item.uploadedBy,
+        deletedBy: item.deletedBy,
+      })),
+    };
+  }
+
+  @RequirePermission('attachment:restore')
+  @Post('attachments/:id/restore')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'بازگرداندن فایل حذف‌شده به سند' })
+  async restore(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    const restored = await this.attachments.restore(id, user);
+    return {
+      id: restored.id,
+      originalFilename: restored.originalFilename,
+      sizeBytes: restored.sizeBytes.toString(),
+    };
+  }
+
+  /**
+   * حذف دائمی.
+   *
+   * مسیر جدا از حذف نرم و با مجوز جدا؛ `DELETE` روی مسیری دیگر و نه یک پرچم در
+   * بدنهٔ همان درخواست: پرچمی که «برای همیشه» معنا می‌دهد، نباید یک خط دورتر از
+   * پرچمی باشد که «موقت» معنا می‌دهد.
+   */
+  @RequirePermission('attachment:purge')
+  @Delete('attachments/:id/purge')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'حذف دائمی فایل — شیء و رکورد می‌روند، ردیف حسابرسی می‌ماند' })
+  async purge(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.attachments.purge(id, user);
   }
 }

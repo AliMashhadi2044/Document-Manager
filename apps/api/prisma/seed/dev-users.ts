@@ -25,6 +25,15 @@ const DEV_USERS: readonly DevUser[] = [
   { username: 'bayegan', fullName: 'کاربر بایگانی', roles: ['ARCHIVIST'] },
   { username: 'nazer', fullName: 'کاربر ناظر', roles: ['SUPERVISOR'] },
   { username: 'karpardaz', fullName: 'کاربر کارپردازی', roles: ['PROCUREMENT'] },
+  /*
+    مدیر سامانهٔ توسعه.
+
+    بی این کاربر، مسیرهای مدیر سامانه در محیط توسعه **اصلاً دیده نمی‌شدند**: تنها
+    کاربرِ این نقش، `admin` است که رمزش از env می‌آید و در آزمون خودکار دست کسی
+    نیست. حذف دائمی سند، حذف دائمی فایل و پاک‌سازی فایل‌های بی‌سند، همه نزد همین
+    نقش‌اند و هیچ‌کدام تا امروز با کاربر واقعی آزموده نمی‌شدند.
+  */
+  { username: 'modir', fullName: 'کاربر مدیر سامانه', roles: ['SYSTEM_ADMIN'] },
 ];
 
 async function main(): Promise<void> {

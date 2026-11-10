@@ -360,7 +360,14 @@ export class AttachmentsService {
     return rotations.map((entry) => ({ page: entry.page, rotation: entry.rotation }));
   }
 
-  /** حذف نرم؛ شیء ذخیره‌سازی طبق سیاست retention بعداً پاک می‌شود. */
+  /**
+   * حذف نرم: فایل از همهٔ نماها بیرون می‌رود، ردیف و شیء ذخیره‌سازی می‌مانند.
+   *
+   * هیچ job ای این شیء را بعداً پاک نمی‌کند — این عمدی است و باید صریح گفته شود،
+   * چون پیش از این همین‌جا نوشته بود «طبق سیاست retention بعداً پاک می‌شود» و چنین
+   * سیاستی وجود نداشت. پاک شدنِ خودکارِ سندِ اسکن‌شده، تصمیمی نیست که یک تایمر
+   * بگیرد. راه برگشت `restore` است و راه پاک شدن، `purge` با مجوز جدا.
+   */
   async softDelete(attachmentId: string, user: AuthenticatedUser): Promise<void> {
     const attachment = await this.prisma.attachment.findFirst({
       where: { id: attachmentId, deletedAt: null },
@@ -395,6 +402,205 @@ export class AttachmentsService {
         tx,
       );
     });
+  }
+
+  /**
+   * فهرست فایل‌های حذف‌شدهٔ یک سند.
+   *
+   * جدا از `list` و عمداً: فهرست عادی باید **فقط** فایل‌های زندهٔ سند را بدهد، وگرنه
+   * اولین جایی که کسی `items` را می‌شمارد (سقف تعداد، دروازهٔ بایگانی) حذف‌شده‌ها را
+   * هم می‌شمارد.
+   */
+  async listDeleted(documentId: string, user: AuthenticatedUser) {
+    await this.access.assertDocumentVisible(documentId, user);
+
+    return this.prisma.attachment.findMany({
+      where: { documentId, deletedAt: { not: null } },
+      orderBy: { deletedAt: 'desc' },
+      include: {
+        uploadedBy: { select: { id: true, fullName: true } },
+        deletedBy: { select: { id: true, fullName: true } },
+      },
+    });
+  }
+
+  /**
+   * بازگرداندن یک فایل حذف‌شده.
+   *
+   * سه چیز سر راهش است و هر سه دلیل دارند:
+   *  - **سقف‌ها** دوباره سنجیده می‌شوند. سندی که پس از حذفِ این فایل تا سقف پر شده،
+   *    با بازگرداندن از سقف رد می‌شود؛ خطای روشن بهتر از سندی است که قاعده را
+   *    نقض می‌کند.
+   *  - **فایل تکراری**: اگر در این فاصله همان محتوا دوباره آپلود شده باشد، دو ردیفِ
+   *    زنده با یک checksum می‌ماند — همان چیزی که آپلود جلویش را می‌گیرد.
+   *  - **سند بایگانی‌شده** نمی‌پذیرد، به همان دلیلی که حذف را نمی‌پذیرد.
+   *
+   * و شیء ذخیره‌سازی بررسی می‌شود: ردیفی که فایلش آنجا نیست، بازگرداندنش دروغ است.
+   */
+  async restore(attachmentId: string, user: AuthenticatedUser): Promise<Attachment> {
+    const attachment = await this.prisma.attachment.findFirst({
+      where: { id: attachmentId, deletedAt: { not: null } },
+      include: { document: { select: { status: true } } },
+    });
+    if (!attachment) throw AppError.notFound('فایل حذف‌شده یافت نشد');
+
+    await this.access.assertDocumentVisible(attachment.documentId, user);
+
+    if (attachment.document.status === 'ARCHIVED') {
+      throw AppError.conflict(
+        'DOCUMENT_ARCHIVED',
+        'بایگانی این سند نهایی شده است؛ بازگرداندن فایل پس از آن مجاز نیست.',
+      );
+    }
+
+    if (attachment.status !== 'READY') {
+      throw AppError.conflict(
+        'ATTACHMENT_NOT_READY',
+        'این ردیف هرگز کامل آپلود نشده است و فایلی برای بازگرداندن ندارد.',
+      );
+    }
+
+    const live = await this.prisma.attachment.aggregate({
+      where: { documentId: attachment.documentId, deletedAt: null },
+      _count: { _all: true },
+      _sum: { sizeBytes: true },
+    });
+
+    if (live._count._all >= this.limits.maxFilesPerDocument) {
+      throw AppError.conflict(
+        'ATTACHMENT_LIMIT',
+        `این سند تا سقف ${this.limits.maxFilesPerDocument} فایل پر است؛ برای بازگرداندن، ابتدا فایل دیگری را حذف کنید.`,
+      );
+    }
+    if (
+      (live._sum.sizeBytes ?? 0n) + attachment.sizeBytes >
+      BigInt(this.limits.maxTotalBytesPerDocument)
+    ) {
+      throw AppError.conflict(
+        'ATTACHMENT_LIMIT',
+        'با بازگرداندن این فایل، مجموع حجم فایل‌های سند از حد مجاز بیشتر می‌شود.',
+      );
+    }
+
+    const duplicate = await this.prisma.attachment.findFirst({
+      where: {
+        documentId: attachment.documentId,
+        checksumSha256: attachment.checksumSha256,
+        deletedAt: null,
+      },
+      select: { originalFilename: true },
+    });
+    if (duplicate) {
+      throw AppError.conflict(
+        'ATTACHMENT_DUPLICATE',
+        `همین محتوا اکنون با نام «${duplicate.originalFilename}» در سند هست؛ بازگرداندن، فایل تکراری می‌سازد.`,
+      );
+    }
+
+    await this.assertObjectExists(attachment.storageKey);
+
+    return this.prisma.$transaction(async (tx) => {
+      const restored = await tx.attachment.update({
+        where: { id: attachmentId },
+        data: { deletedAt: null, deletedById: null },
+      });
+
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'ATTACHMENT_RESTORE',
+          entityType: 'attachment',
+          entityId: attachmentId,
+          documentId: attachment.documentId,
+          before: { deletedAt: attachment.deletedAt?.toISOString() ?? null },
+          after: { originalFilename: restored.originalFilename },
+        },
+        tx,
+      );
+
+      return restored;
+    });
+  }
+
+  /**
+   * حذف **دائمی** یک فایل: شیء از ذخیره‌سازی و ردیف از پایگاه داده.
+   *
+   * سه قاعده:
+   *
+   *  ۱. **تنها فایلی که از قبل حذف نرم شده.** حذف دائمی یک مرحله نیست، دو مرحله
+   *     است: کسی که فایل را برمی‌دارد و کسی که پاکش می‌کند، لازم نیست یکی باشند و
+   *     در نقش‌های پیش‌فرض یکی هم نیستند (بایگانی حذف می‌کند، مدیر سامانه پاک).
+   *
+   *  ۲. **ردیف حسابرسی، پیش از پاک کردن.** `before` عکس کامل فراداده است — نام،
+   *     اندازه، checksum، کلید شیء، چه کسی آپلود کرد و چه کسی حذف. پس از این، تنها
+   *     چیزی که از فایل می‌ماند همین است؛ اگر فردا کسی بپرسد «آن اسکن کجا رفت؟»،
+   *     جوابی وجود دارد. (`audit_logs.document_id` کلید خارجی نیست، پس این ردیف از
+   *     پاک شدن سند هم جان سالم به در می‌برد.)
+   *
+   *  ۳. **شیء، پیش از ردیف.** اگر ترتیب برعکس بود و پاک کردن شیء شکست می‌خورد،
+   *     فایلی در ذخیره‌سازی می‌ماند که هیچ ردیفی نمی‌شناسدش — یعنی یک یتیم که
+   *     دیگر از این مسیر پیدا نمی‌شود. این ترتیب، بدترین حالت را «ردیف ماند، شیء
+   *     رفت» می‌کند که با یک تلاش دوباره تمام می‌شود.
+   */
+  async purge(attachmentId: string, user: AuthenticatedUser): Promise<void> {
+    const attachment = await this.prisma.attachment.findFirst({
+      where: { id: attachmentId },
+      include: {
+        uploadedBy: { select: { fullName: true } },
+        deletedBy: { select: { fullName: true } },
+      },
+    });
+    if (!attachment) throw AppError.notFound('فایل یافت نشد');
+
+    if (attachment.deletedAt === null) {
+      throw AppError.conflict(
+        'ATTACHMENT_NOT_DELETED',
+        'حذف دائمی تنها برای فایلی است که پیش از آن حذف شده باشد؛ ابتدا فایل را حذف کنید.',
+      );
+    }
+
+    await this.audit.record({
+      actorId: user.id,
+      action: 'ATTACHMENT_PURGE',
+      entityType: 'attachment',
+      entityId: attachmentId,
+      documentId: attachment.documentId,
+      before: {
+        originalFilename: attachment.originalFilename,
+        typeKey: attachment.typeKey,
+        sizeBytes: attachment.sizeBytes.toString(),
+        checksumSha256: attachment.checksumSha256,
+        storageKey: attachment.storageKey,
+        uploadedBy: attachment.uploadedBy.fullName,
+        uploadedAt: attachment.createdAt.toISOString(),
+        deletedBy: attachment.deletedBy?.fullName ?? null,
+        deletedAt: attachment.deletedAt.toISOString(),
+      },
+    });
+
+    if (!attachment.storageKey.startsWith('pending:')) {
+      await this.storage.remove(attachment.storageKey);
+    }
+
+    // چرخش‌های برگه با cascade می‌روند؛ ردیف حسابرسی بالا، نمی‌رود.
+    await this.prisma.attachment.delete({ where: { id: attachmentId } });
+  }
+
+  /** شیء واقعاً آنجاست؟ — پیش از ادعای «فایل برگشت». */
+  private async assertObjectExists(storageKey: string): Promise<void> {
+    if (storageKey.startsWith('pending:')) {
+      throw AppError.conflict('ATTACHMENT_MISSING_OBJECT', 'فایل این ردیف در ذخیره‌سازی نیست.');
+    }
+    try {
+      const stream = await this.storage.getStream(storageKey);
+      stream.destroy();
+    } catch (error) {
+      this.logger.warn({ err: error, storageKey }, 'شیء فایل برای بازگرداندن پیدا نشد');
+      throw AppError.conflict(
+        'ATTACHMENT_MISSING_OBJECT',
+        'فایل این ردیف در فضای ذخیره‌سازی پیدا نشد؛ بازگرداندنش ردیفی بی‌فایل می‌ساخت.',
+      );
+    }
   }
 
   /** تاریخچه عملیات فایل — از audit log، که منبع واحد رویدادهاست. */

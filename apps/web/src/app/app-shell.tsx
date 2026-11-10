@@ -25,6 +25,7 @@ import { ReportTemplatesPage } from '../features/report-designer/templates-page'
 import { ReportsPage } from '../features/analytics/reports-page';
 import { ReportGallery } from '../features/analytics/report-gallery';
 import { UsersPage } from '../features/users/users-page';
+import { StorageCleanupPage } from '../features/files/storage-cleanup-page';
 import { DashboardPage } from '../features/analytics/dashboard-page';
 import { NotificationBell } from '../features/notifications/notification-bell';
 import { NotificationsPage } from '../features/notifications/notifications-page';
@@ -47,6 +48,7 @@ type SectionKey =
   | 'buyers'
   | 'schools'
   | 'trash'
+  | 'storage-cleanup'
   | 'vehicles'
   | 'signatories'
   | 'petty-cash'
@@ -219,6 +221,20 @@ const GROUPS: readonly SectionGroup[] = [
         titleFa: 'حساب من',
         icon: 'settings',
         description: 'تغییر رمز، ظاهر و شخصی‌سازی، و خروج از دستگاه‌های دیگر',
+      },
+      {
+        /*
+          پاک‌سازی فایل‌ها، کنار «مدیریت کاربران» و نه کنار اسناد.
+
+          این صفحه با سند کار نمی‌کند؛ با فضای ذخیره‌سازی کار می‌کند و مجوزش
+          `attachment:purge` است که فقط مدیر سامانه دارد. جایش هر جای دیگری
+          می‌بود، کاربری را که کارش نیست به آن نگاه می‌انداخت.
+        */
+        key: 'storage-cleanup',
+        titleFa: 'پاک‌سازی فایل‌ها',
+        icon: 'trash',
+        description: 'فایل‌هایی که در ذخیره‌سازی مانده‌اند و به هیچ سندی وصل نیستند',
+        permission: 'attachment:purge',
       },
       {
         key: 'overview',
@@ -598,6 +614,7 @@ export function AppShell({ user }: { user: CurrentUser }): JSX.Element {
             {section === 'buyers' ? <BuyersPage /> : null}
             {section === 'schools' ? <SchoolsPage /> : null}
             {section === 'trash' ? <TrashPage /> : null}
+            {section === 'storage-cleanup' ? <StorageCleanupPage /> : null}
             {section === 'vehicles' ? <VehiclesPage /> : null}
             {section === 'signatories' ? <SignatoriesPage /> : null}
             {section === 'petty-cash' ? <PettyCashPage /> : null}

@@ -234,6 +234,15 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       'ArchiveController.saveInfo',
       'AttachmentsController.remove',
       /*
+        بازگرداندن فایل حذف‌شده: دکمهٔ لغوِ همان حذف، و نزد همان نقش.
+
+        اینکه حذف نزد بایگانی باشد و برگرداندن نزد کس دیگر، تفکیک وظایف نیست —
+        بایگان را برای فایلی که خودش اشتباهی برداشته معطل کس دیگری می‌کند. آنچه
+        **نزد او نیست** حذف دائمی است (`attachment:purge`، مدیر سامانه): همان
+        مرزی که برای سند هم کشیده شده است.
+      */
+      'AttachmentsController.restore',
+      /*
         چرخش برگه‌های اسکن: مسیری نوشتنی که بایگانی **باید** داشته باشد.
 
         صاف کردن اسکن کج، کارِ همان کسی است که اسکن در دستش است. آنچه می‌نویسد نه
@@ -260,6 +269,10 @@ describe('تفکیک وظایف نقش‌ها روی مسیرهای واقعی',
       'ReportsController.pdfExport',
       'ReportsController.preview',
     ]);
+
+    // حذف دائمی فایل نزد او نیست؛ همان‌جایی است که حذف دائمی سند هست.
+    expect(archivist).not.toContain('attachment:purge');
+    expect(DEFAULT_ROLE_PERMISSIONS.SYSTEM_ADMIN).toContain('attachment:purge');
 
     // و صریحاً: هیچ‌کدام از مجوزهای مالی را ندارد.
     for (const financial of [

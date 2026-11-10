@@ -15,6 +15,8 @@ const ACTION_LABELS: Record<string, string> = {
   ATTACHMENT_DOWNLOAD: 'دانلود',
   ATTACHMENT_PREVIEW: 'پیش‌نمایش',
   ATTACHMENT_DELETE: 'حذف',
+  ATTACHMENT_RESTORE: 'بازگرداندن',
+  ATTACHMENT_PURGE: 'حذف دائمی',
 };
 
 export function AttachmentHistory({

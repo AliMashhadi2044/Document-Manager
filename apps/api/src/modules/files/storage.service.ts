@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -21,6 +22,13 @@ import { AppError } from '../../common/errors/app-error';
  *  - تعویض endpoint (MinIO، SeaweedFS، S3 سازمان) فقط پیکربندی است، نه تغییر کد.
  *  - خطای خام SDK هرگز به کاربر نمی‌رسد؛ اینجا به خطای فارسی ترجمه می‌شود.
  */
+/** یک شیء در ذخیره‌سازی، همان‌طور که ذخیره‌سازی می‌شناسدش — بی‌خبر از پایگاه داده. */
+export interface StoredObject {
+  readonly key: string;
+  readonly sizeBytes: number;
+  readonly lastModified: Date;
+}
+
 @Injectable()
 export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
@@ -116,6 +124,52 @@ export class StorageService implements OnModuleInit {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
     }
     return Buffer.concat(chunks);
+  }
+
+  /**
+   * فهرست اشیاء bucket.
+   *
+   * تنها مصرف‌کننده‌اش پاک‌سازی فایل‌های بی‌سند است: برای فهمیدن اینکه چه چیزی در
+   * ذخیره‌سازی هست که پایگاه داده نمی‌شناسد، راهی جز خواندن از خودِ ذخیره‌سازی
+   * نیست.
+   *
+   * `limit` سقف سخت دارد و `truncated` صادقانه برمی‌گردد: bucket یک سازمان پس از
+   * چند سال می‌تواند صدها هزار شیء داشته باشد و خواندن همه‌شان در حافظه، سرویس را
+   * می‌خواباند. فراخوان باید بداند آنچه می‌بیند کل ماجرا نیست.
+   */
+  async listObjects(
+    limit: number,
+    prefix?: string,
+  ): Promise<{ objects: StoredObject[]; truncated: boolean }> {
+    const client = this.requireClient();
+    await this.ensureBucket();
+
+    const objects: StoredObject[] = [];
+    let token: string | undefined;
+
+    do {
+      const page = await client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          ...(prefix ? { Prefix: prefix } : {}),
+          ContinuationToken: token,
+          MaxKeys: Math.min(1000, limit - objects.length),
+        }),
+      );
+
+      for (const item of page.Contents ?? []) {
+        if (item.Key === undefined) continue;
+        objects.push({
+          key: item.Key,
+          sizeBytes: item.Size ?? 0,
+          lastModified: item.LastModified ?? new Date(0),
+        });
+      }
+
+      token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
+    } while (token !== undefined && objects.length < limit);
+
+    return { objects, truncated: token !== undefined };
   }
 
   async remove(key: string): Promise<void> {

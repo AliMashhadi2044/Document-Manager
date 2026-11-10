@@ -41,6 +41,8 @@ export const PERMISSIONS = [
   'attachment:read',
   'attachment:upload',
   'attachment:delete',
+  'attachment:restore',
+  'attachment:purge',
 
   'feedback:read',
   'feedback:create',
@@ -102,6 +104,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'attachment:read': 'مشاهده فایل‌ها',
   'attachment:upload': 'بارگذاری فایل',
   'attachment:delete': 'حذف فایل',
+  'attachment:restore': 'بازگرداندن فایل حذف‌شده',
+  'attachment:purge': 'حذف دائمی فایل و پاک‌سازی فایل‌های بی‌سند',
 
   'feedback:read': 'مشاهده بازخوردها',
   'feedback:create': 'ثبت بازخورد',
@@ -209,6 +213,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'attachment:read',
     'attachment:upload',
     'attachment:delete',
+    /*
+      بازگرداندن نزد همان کسی است که حذف می‌کند.
+
+      حذف پیوست «نرم» است و این مجوز، دکمهٔ لغوِ همان کار است — نه اختیاری تازه.
+      اگر نزد نقش دیگری می‌نشست، بایگان برای برگرداندن فایلی که خودش دو دقیقه
+      پیش اشتباهی حذف کرده، باید منتظر کس دیگری می‌ماند.
+    */
+    'attachment:restore',
     'feedback:read',
     'report:run',
     'report:export',
@@ -252,6 +264,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'document:read',
     'document:read_draft',
     'document:purge',
+    /*
+      حذف دائمی فایل، و پاک‌سازی فایل‌های بی‌سند.
+
+      همان‌جایی که حذف دائمی سند نشسته است، و به همان دلیل: برگشت‌پذیر نیست. توجه
+      کنید که این مجوز **اجازهٔ دیدن محتوای فایل نمی‌دهد** — مدیر سامانه
+      `attachment:read` ندارد، پس فهرست حذف‌شده‌ها را با نام و اندازه و حسابرسی‌اش
+      می‌بیند و می‌تواند پاکش کند، ولی دانلودش نمی‌کند.
+    */
+    'attachment:purge',
   ],
 };
 
