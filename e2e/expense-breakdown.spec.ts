@@ -10,7 +10,7 @@ import { gotoSection, login, pickOption, toAsciiDigits, unique } from './helpers
  *  ۱. ستون‌های فصل از **اطلاعات پایه** می‌آیند، با سرستون دوطبقه: عنوان بالا، کد پایین.
  *  ۲. مبلغ هر فاکتور فقط زیر فصلِ خودش می‌نشیند و خانهٔ فصل دیگر خالی می‌ماند.
  *  ۳. شرح هر ردیف ویرایش‌شدنی است و شرح خودِ فاکتور را عوض نمی‌کند.
- *  ۴. ستون «پرداخت به» فقط در فرم جاری است و مقصد پرداخت را **با واژه** می‌نویسد.
+ *  ۴. ستون «پرداخت به» در **هر دو فرم** است و مقصد پرداخت را **با واژه** می‌نویسد.
  *  ۵. تاریخ صورت‌حساب روی صفحه هست و روی کاغذ نه.
  *
  * دو سند لازم است و نه یکی: یک سند فقط فاکتورهای **یک گروه بودجه** را می‌پذیرد، پس
@@ -162,8 +162,18 @@ test.describe('فرم ریزهزینه', () => {
     expect(amount(await paintRow.locator('td').nth(repairIndex).innerText())).toBe('3300000');
     expect(amount(await paintRow.locator('td').nth(equipmentIndex).innerText())).toBe('');
 
-    // ستون تیکِ ذی‌نفع فقط در فرم جاری است.
-    expect(headers.join('|')).not.toContain('ذی‌نفع');
+    /*
+      مقصد پرداخت در فرم عمرانی هم هست — همان ستونِ فرم جاری.
+
+      خانهٔ تیکِ قدیمی برنمی‌گردد: واژه جایش را گرفته است، و این ردیف — که از
+      تنخواهِ کارپرداز پرداخت شده — «کارپرداز» می‌نویسد و نه خانهٔ خالی.
+    */
+    expect(headers.join('|')).toContain('پرداخت به');
+    expect(headers.join('|')).not.toContain('پرداخت ذی‌نفع');
+    const capitalPayeeIndex = headers.indexOf('پرداخت به');
+    expect((await paintRow.locator('td').nth(capitalPayeeIndex).innerText()).trim()).toBe(
+      'کارپرداز',
+    );
 
     // ───────────────── شرح ردیف ─────────────────
     await paintRow.getByRole('button', { name: 'شرح' }).click();

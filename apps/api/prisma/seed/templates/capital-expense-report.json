@@ -117,7 +117,7 @@
           "titleFa": "شرح",
           "width": {
             "unit": "mm",
-            "value": 56
+            "value": 36
           },
           "align": "start",
           "value": {
@@ -219,6 +219,26 @@
             "kind": "currency",
             "persianDigits": true,
             "thousandSeparator": true,
+            "decimals": 0,
+            "emptyText": ""
+          }
+        },
+        {
+          "key": "payee",
+          "titleFa": "پرداخت به",
+          "width": {
+            "unit": "mm",
+            "value": 20
+          },
+          "align": "center",
+          "value": {
+            "k": "var",
+            "path": "row.payeeTitle"
+          },
+          "format": {
+            "kind": "text",
+            "persianDigits": false,
+            "thousandSeparator": false,
             "decimals": 0,
             "emptyText": ""
           }
