@@ -120,20 +120,26 @@ async function seedSettings(): Promise<void> {
  * رمز عبور از متغیر محیطی خوانده می‌شود. اگر تعیین نشده باشد، در محیط توسعه یک مقدار
  * شناخته‌شده استفاده می‌شود و هشدار صریح چاپ می‌گردد؛ در production **خطا** می‌دهد تا
  * هرگز حساب با رمز قابل حدس ساخته نشود.
+ *
+ * ترتیب دو بررسی زیر مهم است و یک‌بار اشتباه بود: بررسیِ رمز **پس از** بررسیِ وجودِ
+ * کاربر می‌آید. وقتی حساب از قبل هست، هیچ رمزی ساخته نمی‌شود، پس خواستنِ
+ * `SEED_ADMIN_PASSWORD` بی‌معناست — و با ترتیب برعکس، seedِ یک استقرارِ جاافتاده در
+ * production همیشه خطا می‌داد و (با `RUN_SEED=true`) کانتینر را در حلقهٔ restart
+ * می‌انداخت، درست در میانهٔ ارتقا.
  */
 async function seedInitialUser(roleIds: Map<RoleKey, string>): Promise<void> {
   const username = process.env.SEED_ADMIN_USERNAME ?? 'admin';
   const isProduction = process.env.NODE_ENV === 'production';
   const password = process.env.SEED_ADMIN_PASSWORD;
 
-  if (!password && isProduction) {
-    throw new Error('SEED_ADMIN_PASSWORD در محیط production الزامی است');
-  }
-
   const existing = await prisma.user.findUnique({ where: { username } });
   if (existing) {
     console.log(`• کاربر ${username} از قبل وجود دارد؛ رمز عبور تغییر نکرد`);
     return;
+  }
+
+  if (!password && isProduction) {
+    throw new Error('SEED_ADMIN_PASSWORD در محیط production الزامی است');
   }
 
   const effectivePassword = password ?? 'Admin!2345';
