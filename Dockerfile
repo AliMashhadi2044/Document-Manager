@@ -80,6 +80,10 @@ RUN npx --yes playwright@1.64.1 install --with-deps chromium \
 
 COPY --from=prod-deps /app/node_modules node_modules
 COPY --from=prod-deps /app/packages packages
+# بسته‌هایی که npm نتوانسته به ریشه hoist کند (از ارتقای NestJS 12 به بعد، ۲۶ بسته)
+# اینجا زندگی می‌کنند. بدون این خط، `@nestjs/common` در ایمیج نیست و سرویس
+# با MODULE_NOT_FOUND بالا نمی‌آید — و build بی‌هیچ خطایی موفق می‌شود.
+COPY --from=prod-deps /app/apps/api/node_modules apps/api/node_modules
 COPY --from=build /app/apps/api/dist apps/api/dist
 # نسخه کامپایل‌شده اسکریپت‌های seed؛ بدون داده مرجع سامانه قابل استفاده نیست.
 COPY --from=build /app/apps/api/dist-seed apps/api/dist-seed
